@@ -1,0 +1,720 @@
+[1773056635.455] <001> trace started.
+[1773056636.196] <001> [13972] <03/09 07:43:56.196> C:\Program Files (x86)\Rithmic\Rithmic Trader Pro\Rithmic Trader Pro.exe
+
+Rithmic Trader Pro 17.85.0.0, 32-bit
+.NET CLR 4.0.30319.42000
+OmneVerse 19.12.0.0
+OmneExceptions 19.12.0.0
+OmneChannel 19.12.0.0
+OmneStreamEngine 19.12.0.0
+OmneCache 19.12.0.0
+OmneBook 19.1.0.0
+OmnePriceFormatLib 18.1.0.0
+RithmicPlugin 1.6.0.0
+
+Microsoft Windows 11 Home, 6.2.9200.0, Version 23H2 (OS Build 22631.6199), 64-bit
+Machine (LAPTOP-CPS9B13O) has been on for 5 days 11:48:08
+Current Time is 09-Mar-2026 07:43:56.154737 am, es-ES (pi=3.14159, c=299792458), Hora de verano del Este UTC-04.00
+
+11th Gen Intel(R) Core(TM) i3-1115G4 @ 3.00GHz, 2-core (4-logical)
+System Disk: NVMe WDC PC SN530 SDBPNPZ-256G-1006 (114.60 GB available on system drive)
+MAC Addresses: AE:50:DE:3D:DC:DB, A2:50:DE:3D:DC:DB, AC:50:DE:3D:DC:DB, AC:50:DE:3D:DC:DC
+IP Address: 10.255.243.83
+RAM: 7.65 GB, 87% used
+
+[1773056636.196] <001> [13972] <03/09 07:43:56.196> Reading Configuration Settings...
+[1773056636.196] <001> [13972] <03/09 07:43:56.196> Initializing Connection Listeners...
+[1773056636.196] <001> [13972] <03/09 07:43:56.196> Instantiating Heartbeat Listeners...
+[1773056636.196] <001> [13972] <03/09 07:43:56.196> Intantiating Notification Handlers...
+[1773056636.196] <001> [13972] <03/09 07:43:56.196> Contacting License Server...
+[1773056636.996] <001> [13972] <03/09 07:43:56.996> Instantiating Local Storage Devices...
+[1773056637.032] <001> [13972] <03/09 07:43:57.032> Initializing Controls...
+[1773056637.837] <001> [13972] <03/09 07:43:57.837> Initialization Successful. Starting Up...
+[1773056638.301] <001> [13972] <03/09 07:43:58.301> Showing login screen...
+[1773058491.591] <001> [13972] <03/09 08:14:51.591> Login button pressed by: 
+[Orders] APEX-468557 (Rithmic 01, Chicago Area)
+[Market Data] APEX-468557 (Rithmic 01, Chicago Area)
+[1773058491.596] <001> [13972] <03/09 08:14:51.596> Starting pre-init clock at: Mon, Mar 09, 2026 08:14:51.591 AM
+[1773058491.599] <001> [13972] <03/09 08:14:51.599> Reading Configuration Settings...
+[1773058491.652] <001> [13972] <03/09 08:14:51.652> 
+
+[Orders]
+User: APEX-468557
+System: Rithmic 01
+Gateway: Chicago Area
+
+[Market Data]
+User: APEX-468557
+System: Rithmic 01
+Gateway: Chicago Area
+
+[Orders] 
+Order: login_agent_prodc
+Price: login_agent_tp_r01c
+RMS: login_agent_pnl_sslc
+History: login_agent_historyc
+Indicator: login_agent_indicatorc
+Repository: login_agent_repositoryc
+Admin: dd_admin_sslc
+Device Timeout: default
+LBI Timeout: default
+Domain: rithmic_prod_01_dmz_domain
+Domain Server: ritpz01001.01.rithmic.com:65000~ritpz01000.01.rithmic.com:65000~ritpz01001.01.rithmic.net:65000~ritpz01000.01.rithmic.net:65000~ritpz01001.01.theomne.net:65000~ritpz01000.01.theomne.net:65000~ritpz01001.01.theomne.com:65000~ritpz01000.01.theomne.com:65000
+License Server: ritpz01000.01.rithmic.com:56000~ritpz01001.01.rithmic.com:56000~ritpz01000.01.rithmic.net:56000~ritpz01001.01.rithmic.net:56000~ritpz01000.01.theomne.net:56000~ritpz01001.01.theomne.net:56000~ritpz01000.01.theomne.com:56000~ritpz01001.01.theomne.com:56000~ritpz24050.rithmic.com:56000~ritpz24050.rithmic.net:56000~ritpz24050.theomne.net:56000~ritpz24050.theomne.com:56000~ritpz23010.rithmic.com:56000~ritpz23010.rithmic.net:56000~ritpz23010.theomne.net:56000~ritpz23010.theomne.com:56000~ritpz23011.rithmic.com:56000~ritpz23011.rithmic.net:56000~ritpz23011.theomne.net:56000~ritpz23011.theomne.com:56000~ritpz24013.rithmic.com:56000~ritpz24013.rithmic.net:56000~ritpz24013.theomne.net:56000~ritpz24013.theomne.com:56000
+Location Broker: ritpz01000.01.rithmic.com:64100
+Logger: ritpz01000.01.rithmic.com:45454~ritpz01000.01.rithmic.net:45454~ritpz01000.01.theomne.net:45454~ritpz01000.01.theomne.com:45454
+Log Type: log_net
+
+[Market Data] 
+Order: login_agent_prodc
+Price: login_agent_tp_r01c
+RMS: login_agent_pnl_sslc
+History: login_agent_historyc
+Indicator: login_agent_indicatorc
+Repository: login_agent_repositoryc
+Admin: dd_admin_sslc
+Device Timeout: default
+LBI Timeout: default
+Domain: rithmic_prod_01_dmz_domain
+Domain Server: ritpz01001.01.rithmic.com:65000~ritpz01000.01.rithmic.com:65000~ritpz01001.01.rithmic.net:65000~ritpz01000.01.rithmic.net:65000~ritpz01001.01.theomne.net:65000~ritpz01000.01.theomne.net:65000~ritpz01001.01.theomne.com:65000~ritpz01000.01.theomne.com:65000
+License Server: ritpz01000.01.rithmic.com:56000~ritpz01001.01.rithmic.com:56000~ritpz01000.01.rithmic.net:56000~ritpz01001.01.rithmic.net:56000~ritpz01000.01.theomne.net:56000~ritpz01001.01.theomne.net:56000~ritpz01000.01.theomne.com:56000~ritpz01001.01.theomne.com:56000~ritpz24050.rithmic.com:56000~ritpz24050.rithmic.net:56000~ritpz24050.theomne.net:56000~ritpz24050.theomne.com:56000~ritpz23010.rithmic.com:56000~ritpz23010.rithmic.net:56000~ritpz23010.theomne.net:56000~ritpz23010.theomne.com:56000~ritpz23011.rithmic.com:56000~ritpz23011.rithmic.net:56000~ritpz23011.theomne.net:56000~ritpz23011.theomne.com:56000~ritpz24013.rithmic.com:56000~ritpz24013.rithmic.net:56000~ritpz24013.theomne.net:56000~ritpz24013.theomne.com:56000
+Location Broker: ritpz01000.01.rithmic.com:64100
+Logger: ritpz01000.01.rithmic.com:45454~ritpz01000.01.rithmic.net:45454~ritpz01000.01.theomne.net:45454~ritpz01000.01.theomne.com:45454
+Log Type: log_net
+
+Admin Socket: RithmicTraderPro-Rgale-APEX-468557-login_agent_tp_r01c@rithmic_prod_01_dmz_domain
+User Msg: RithmicTraderPro-17.85.0.0-LAPTOP-CPS9B13O[10.255.243.83]-Rgale-APEX-468557
+Auto Log File: C:\Users\Rgale\Documents\Rithmic\Rithmic Trader Pro.cur.txt
+
+
+[1773058491.655] <001> [13972] <03/09 08:14:51.654> Applying Configuration Settings...
+[1773058491.657] <001> [13972] <03/09 08:14:51.657> Environment Variables:
+FPS_BROWSER_USER_PROFILE_STRING = Default
+PROCESSOR_IDENTIFIER = Intel64 Family 6 Model 140 Stepping 2, GenuineIntel
+NUMBER_OF_PROCESSORS = 4
+EFC_3644 = 1
+HOMEPATH = \Users\Rgale
+APPDATA = C:\Users\Rgale\AppData\Roaming
+MML_TRACE_TIMED_DEVICE_OPENING = yes
+TMP = C:\Users\Rgale\AppData\Local\Temp
+windir = C:\WINDOWS
+USERDOMAIN = LAPTOP-CPS9B13O
+ProgramFiles(x86) = C:\Program Files (x86)
+SESSIONNAME = Console
+PROCESSOR_ARCHITEW6432 = AMD64
+COMPUTERNAME = LAPTOP-CPS9B13O
+Path = C:\Program Files (x86)\Common Files\Oracle\Java\java8path;C:\Program Files (x86)\Common Files\Oracle\Java\javapath;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Users\Rgale\AppData\Local\Programs\Python\Launcher\;C:\Users\Rgale\AppData\Local\Microsoft\WindowsApps;
+ALLUSERSPROFILE = C:\ProgramData
+MML_LOG_TYPE = log_net
+OS = Windows_NT
+MML_SSL_IGNORE_REVOCATION_CHECK = yes
+USERNAME = Rgale
+PROCESSOR_REVISION = 8c02
+PROCESSOR_LEVEL = 6
+MML_SSL_CLNT_CERT_FILE = C:\Program Files (x86)\Rithmic\Rithmic Trader Pro\RithmicCertificate.pk12
+MML_SSL_CERT_NAME = rithmic.com
+MML_TRACE_CERT_VALIDATION = yes
+ProgramFiles = C:\Program Files (x86)
+MML_DMN_SRVR_ADDR = ritpz01001.01.rithmic.com:65000~ritpz01000.01.rithmic.com:65000~ritpz01001.01.rithmic.net:65000~ritpz01000.01.rithmic.net:65000~ritpz01001.01.theomne.net:65000~ritpz01000.01.theomne.net:65000~ritpz01001.01.theomne.com:65000~ritpz01000.01.theomne.com:65000
+SystemDrive = C:
+PROCESSOR_ARCHITECTURE = x86
+PSModulePath = C:\Program Files\WindowsPowerShell\Modules;C:\WINDOWS\system32\WindowsPowerShell\v1.0\Modules
+TEMP = C:\Users\Rgale\AppData\Local\Temp
+CommonProgramW6432 = C:\Program Files\Common Files
+asl.log = Destination=file
+CommonProgramFiles(x86) = C:\Program Files (x86)\Common Files
+ComSpec = C:\WINDOWS\system32\cmd.exe
+CommonProgramFiles = C:\Program Files (x86)\Common Files
+MML_TRACE_RESOLVER = yes
+MML_TRACE_BLACK_LISTING = yes
+RegionCode = NA
+USER = Rgale
+PUBLIC = C:\Users\Public
+ProgramData = C:\ProgramData
+MML_LOC_BROK_ADDR = ritpz01000.01.rithmic.com:64100
+MML_LOGGER_ADDR = ritpz01000.01.rithmic.com:45454~ritpz01000.01.rithmic.net:45454~ritpz01000.01.theomne.net:45454~ritpz01000.01.theomne.com:45454
+USERDOMAIN_ROAMINGPROFILE = LAPTOP-CPS9B13O
+LOGONSERVER = \\LAPTOP-CPS9B13O
+MML_LIC_SRVR_ADDR = ritpz01000.01.rithmic.com:56000~ritpz01001.01.rithmic.com:56000~ritpz01000.01.rithmic.net:56000~ritpz01001.01.rithmic.net:56000~ritpz01000.01.theomne.net:56000~ritpz01001.01.theomne.net:56000~ritpz01000.01.theomne.com:56000~ritpz01001.01.theomne.com:56000~ritpz24050.rithmic.com:56000~ritpz24050.rithmic.net:56000~ritpz24050.theomne.net:56000~ritpz24050.theomne.com:56000~ritpz23010.rithmic.com:56000~ritpz23010.rithmic.net:56000~ritpz23010.theomne.net:56000~ritpz23010.theomne.com:56000~ritpz23011.rithmic.com:56000~ritpz23011.rithmic.net:56000~ritpz23011.theomne.net:56000~ritpz23011.theomne.com:56000~ritpz24013.rithmic.com:56000~ritpz24013.rithmic.net:56000~ritpz24013.theomne.net:56000~ritpz24013.theomne.com:56000
+ZES_ENABLE_SYSMAN = 1
+USERPROFILE = C:\Users\Rgale
+MML_TRACE_LOGGER = yes
+MML_DOMAIN_NAME = rithmic_prod_01_dmz_domain
+FPS_BROWSER_APP_PROFILE_STRING = Internet Explorer
+LOCALAPPDATA = C:\Users\Rgale\AppData\Local
+SystemRoot = C:\WINDOWS
+platformcode = KV
+OnlineServices = Online Services
+DriverData = C:\Windows\System32\Drivers\DriverData
+HOMEDRIVE = C:
+OneDrive = C:\Users\Rgale\OneDrive
+PATHEXT = .COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC
+ProgramW6432 = C:\Program Files
+
+[1773058491.657] <001> [13972] <03/09 08:14:51.657> Starting Stream Engines...
+[1773058491.669] <003> [13972] <03/09 08:14:51.669> ADMIN connection started...
+[1773058491.669] <003> [13972] <03/09 08:14:51.669> Starting Performance Counters...
+[1773058491.669] <001> [13972] <03/09 08:14:51.669> Starting ADMIN Connection..
+[1773058491.669] <003> [13972] <03/09 08:14:51.669> Pre-init completed in 0.78 seconds.
+[1773058491.669] <003> [13972] <03/09 08:14:51.669> 0. Creating Connection...
+
+[1773058491.669] <003> [13972] <03/09 08:14:51.669> Starting connect clock at: Mon, Mar 09, 2026 08:14:51.669 AM
+[1773058491.691] <010> logger task ritpz01000.01.rithmic.com:45454
+[1773058491.691] <008> logger task ritpz01000.01.rithmic.net:45454
+[1773058491.691] <007> logger task ritpz01000.01.theomne.net:45454
+[1773058491.699] <005> logger task ritpz01000.01.theomne.com:45454
+[1773058491.747] <010> logger address ritpz01000.01.rithmic.com:45454 : success
+[1773058491.747] <003> logger signalled
+[1773058491.747] <003> logger tasks : left=0, found=True
+[1773058491.780] <015> running lb task 0
+[1773058491.780] <015> lb task 0 connecting to ritpz01000.01.rithmic.com:64100
+[1773058491.785] <016> running connect task for ritpz01000.01.rithmic.com:64100
+[1773058491.825] <016> connect task for ritpz01000.01.rithmic.com:64100 complete
+[1773058491.825] <016> finished connect task for ritpz01000.01.rithmic.com:64100
+
+[1773058491.843] <005> logger address ritpz01000.01.theomne.com:45454 : success
+[1773058491.852] <008> logger address ritpz01000.01.rithmic.net:45454 : success
+[1773058491.872] <007> logger address ritpz01000.01.theomne.net:45454 : success
+[1773058497.208] <015>  32766 1 14 32766 1 unknown request 32767 1 ping
+
+[1773058497.399] <015>  10046 1 38.98.144.230:40908 21000 1 110247 21001 1 219609 10616 1 05:02:47 21010 1 20251123 10615 1 2025-11-23 10123 0  30003 1 dd_admin_r01_ritpz04067@rithmic_prod_01_dmz_domain 10609 1 dd_admin_sslc 32748 1 1773058497 32764 0  32767 1 mrv_lb 10000 1 dd_admin_sslc 50100 1 1773058497 50101 1 243850 32752 1 1773058497 32752 1 210000
+
+[1773058497.414] <015> lb task to ritpz01000.01.rithmic.com:64100 completed by 0
+[1773058497.415] <003> resolved dd_admin_sslc as name=<dd_admin_sslc> host=<> domain=<> address=<38.98.144.230> port=<40908> type=<4>
+[1773058497.415] <015> finished lb task 0
+[1773058497.416] <005> running connect task for 38.98.144.230:40908
+[1773058500.243] <005> finished connect task for 38.98.144.230:40908
+
+Raised in : com.omnesys.omne.om.OMSslClientStream
+Method    : initClientStream
+Error     : os error
+
+[1773058500.258] <003> Device dd_admin_sslc has notified an error.
+[1773058500.258] <003> [13972] <03/09 08:15:00.258> OmneVerse up in 8.589 seconds.
+[1773058500.258] <003> [13972] <03/09 08:15:00.258> *** 0. Connection created
+
+[1773058500.269] <003> [13972] <03/09 08:15:00.269> 
+[1773058500.269] <001> [13972] <03/09 08:15:00.269> 1. Reading Request Table...
+[1773058500.269] <011> A timer device dd_admin_sslc:recover has been established to attempt recovery every 1800000 milliseconds.
+[1773058500.288] <003> [13972] <03/09 08:15:00.288> *** 1. Loaded all requests
+
+[1773058500.288] <001> [13972] <03/09 08:15:00.288> Prev Count: 0
+[1773058500.288] <001> [13972] <03/09 08:15:00.288> Finished 1 of 6 (Login_ReadTbl)
+[1773058500.288] <001> [13972] <03/09 08:15:00.288> Waiting for Repository, Order, Price, RMS, History...
+[1773058500.288] <016> [13972] <03/09 08:15:00.288> Waiting for Repository, Order, Price, RMS, History...
+[1773058500.288] <008> [13972] <03/09 08:15:00.288> Waiting for Repository, Order, Price, RMS, History...
+[1773058500.288] <010> [13972] <03/09 08:15:00.288> Waiting for Repository, Order, Price, RMS, History...
+[1773058500.288] <017> [13972] <03/09 08:15:00.288> Waiting for Repository, Order, Price, RMS, History...
+[1773058500.288] <001> [13972] <03/09 08:15:00.288> 5. Starting RMS connection...
+[1773058500.288] <001> [13972] <03/09 08:15:00.288> 2. Starting Repository connection...
+[1773058500.288] <001> [13972] <03/09 08:15:00.288> 6. Starting Price connection...
+[1773058500.288] <001> [13972] <03/09 08:15:00.288> 3. Starting Order connection...
+[1773058500.304] <018> [13972] <03/09 08:15:00.304> Waiting for Repository, Order, Price, RMS, History...
+[1773058500.304] <001> [13972] <03/09 08:15:00.304> 4. Starting History connection...
+[1773058500.337] <016> [13972] <03/09 08:15:00.337> Created OmneStreamEngine[RMS] (0 watches) <initialized>
+[1773058500.337] <008> [13972] <03/09 08:15:00.337> Created OmneStreamEngine[Repository] (0 watches) <initialized>
+[1773058500.346] <017> [13972] <03/09 08:15:00.346> Created OmneStreamEngine[Price] (0 watches) <initialized>
+[1773058500.351] <010> [13972] <03/09 08:15:00.351> Created OmneStreamEngine[Order] (0 watches) <initialized>
+[1773058500.351] <018> [13972] <03/09 08:15:00.351> Created OmneStreamEngine[History] (0 watches) <initialized>
+[1773058500.353] <016> [13972] <03/09 08:15:00.353> Login_RMS: iKeys items 11
+[1773058500.353] <017> [13972] <03/09 08:15:00.353> Login_Price: iKeys items 11
+[1773058500.353] <008> [13972] <03/09 08:15:00.353> Login_Repository: iKeys items 11
+[1773058500.353] <018> [13972] <03/09 08:15:00.353> Login_History: iKeys items 11
+[1773058500.367] <010> [13972] <03/09 08:15:00.367> Login_Order: iKeys items 11
+[1773058500.367] <044> running lb task 0
+[1773058500.367] <044> lb task 0 connecting to ritpz01000.01.rithmic.com:64100
+[1773058500.367] <045> running lb task 0
+[1773058500.367] <045> lb task 0 connecting to ritpz01000.01.rithmic.com:64100
+[1773058500.367] <046> running lb task 0
+[1773058500.367] <046> lb task 0 connecting to ritpz01000.01.rithmic.com:64100
+[1773058500.367] <047> running lb task 0
+[1773058500.367] <047> lb task 0 connecting to ritpz01000.01.rithmic.com:64100
+[1773058500.367] <048> running lb task 0
+[1773058500.367] <048> lb task 0 connecting to ritpz01000.01.rithmic.com:64100
+[1773058500.367] <049> running connect task for ritpz01000.01.rithmic.com:64100
+[1773058500.367] <050> running connect task for ritpz01000.01.rithmic.com:64100
+[1773058500.367] <051> running connect task for ritpz01000.01.rithmic.com:64100
+[1773058500.367] <052> running connect task for ritpz01000.01.rithmic.com:64100
+[1773058500.367] <053> running connect task for ritpz01000.01.rithmic.com:64100
+[1773058500.590] <050> connect task for ritpz01000.01.rithmic.com:64100 complete
+[1773058500.590] <050> finished connect task for ritpz01000.01.rithmic.com:64100
+
+[1773058500.590] <053> connect task for ritpz01000.01.rithmic.com:64100 complete
+[1773058500.590] <052> connect task for ritpz01000.01.rithmic.com:64100 complete
+[1773058500.590] <053> finished connect task for ritpz01000.01.rithmic.com:64100
+
+[1773058500.590] <052> finished connect task for ritpz01000.01.rithmic.com:64100
+
+[1773058500.590] <051> connect task for ritpz01000.01.rithmic.com:64100 complete
+[1773058500.590] <049> connect task for ritpz01000.01.rithmic.com:64100 complete
+[1773058500.590] <051> finished connect task for ritpz01000.01.rithmic.com:64100
+
+[1773058500.590] <049> finished connect task for ritpz01000.01.rithmic.com:64100
+
+[1773058505.763] <048>  32766 1 14 32766 1 unknown request 32767 1 ping
+
+[1773058505.763] <047>  32766 1 14 32766 1 unknown request 32767 1 ping
+
+[1773058505.763] <046>  32766 1 14 32766 1 unknown request 32767 1 ping
+
+[1773058505.763] <045>  32766 1 14 32766 1 unknown request 32767 1 ping
+
+[1773058505.763] <044>  32766 1 14 32766 1 unknown request 32767 1 ping
+
+[1773058505.829] <046>  10046 1 216.57.156.165:40320 21000 1 100041 21001 1 380181 10616 1 05:00:41 21010 1 20260308 10615 1 2026-03-08 10123 0  30003 1 login_agent_op_ritpz04040-40320_r01@rithmic_prod_01_dmz_domain 10609 1 login_agent_prodc 32748 1 1773058505 32764 0  32767 1 mrv_lb 10000 1 login_agent_prodc 50100 1 1773058505 50101 1 809610 32752 1 1773058505 32752 1 763000
+
+[1773058505.829] <046> lb task to ritpz01000.01.rithmic.com:64100 completed by 0
+[1773058505.829] <048>  10046 1 184.105.22.231:40689 21000 1 104756 21001 1 591178 10616 1 05:47:56 21010 1 20260308 10615 1 2026-03-08 10123 0  30003 1 login_agent_tp_ritpz02013-40689_tp_r01@rithmic_prod_01_dmz_domain 10609 1 login_agent_tp_r01c 32748 1 1773058505 32764 0  32767 1 mrv_lb 10000 1 login_agent_tp_r01c 50100 1 1773058505 50101 1 809779 32752 1 1773058505 32752 1 763000
+
+[1773058505.829] <048> lb task to ritpz01000.01.rithmic.com:64100 completed by 0
+[1773058505.829] <048> finished lb task 0
+[1773058505.829] <017> resolved login_agent_tp_r01c as name=<login_agent_tp_r01c> host=<> domain=<> address=<184.105.22.231> port=<40689> type=<4>
+[1773058505.829] <010> resolved login_agent_prodc as name=<login_agent_prodc> host=<> domain=<> address=<216.57.156.165> port=<40320> type=<4>
+[1773058505.829] <046> finished lb task 0
+[1773058505.833] <054> running connect task for 184.105.22.231:40689
+[1773058505.833] <045>  10046 1 208.97.247.103:40086 21000 1 111025 21001 1 829009 10616 1 06:10:25 21010 1 20260308 10615 1 2026-03-08 10123 0  30003 1 login_agent_repo_op01_ritpz08016_40086@rithmic_prod_01_dmz_domain 10609 1 login_agent_repositoryc 32748 1 1773058505 32764 0  32767 1 mrv_lb 10000 1 login_agent_repositoryc 50100 1 1773058505 50101 1 809735 32752 1 1773058505 32752 1 763000
+
+[1773058505.833] <045> lb task to ritpz01000.01.rithmic.com:64100 completed by 0
+[1773058505.833] <055> running connect task for 216.57.156.165:40320
+[1773058505.833] <008> resolved login_agent_repositoryc as name=<login_agent_repositoryc> host=<> domain=<> address=<208.97.247.103> port=<40086> type=<4>
+[1773058505.833] <045> finished lb task 0
+[1773058505.835] <056> running connect task for 208.97.247.103:40086
+[1773058505.837] <044>  10046 1 128.177.47.170:40067 21000 1 111016 21001 1 761507 10616 1 06:10:16 21010 1 20260308 10615 1 2026-03-08 10123 0  30003 1 login_agent_history_ritpz08021-40067@rithmic_prod_01_dmz_domain 10609 1 login_agent_historyc 32748 1 1773058505 32764 0  32767 1 mrv_lb 10000 1 login_agent_historyc 50100 1 1773058505 50101 1 809444 32752 1 1773058505 32752 1 763000
+
+[1773058505.837] <044> lb task to ritpz01000.01.rithmic.com:64100 completed by 0
+[1773058505.837] <018> resolved login_agent_historyc as name=<login_agent_historyc> host=<> domain=<> address=<128.177.47.170> port=<40067> type=<4>
+[1773058505.837] <047>  10046 1 38.98.144.228:40418 21000 1 095643 21001 1 944196 10616 1 04:56:43 21010 1 20260308 10615 1 2026-03-08 10123 0  30003 1 login_agent_pnl_ritpz04042-40418_r01@rithmic_prod_01_dmz_domain 10609 1 login_agent_pnl_sslc 32748 1 1773058505 32764 0  32767 1 mrv_lb 10000 1 login_agent_pnl_sslc 50100 1 1773058505 50101 1 809821 32752 1 1773058505 32752 1 763000
+
+[1773058505.837] <044> finished lb task 0
+[1773058505.837] <047> lb task to ritpz01000.01.rithmic.com:64100 completed by 0
+[1773058505.840] <016> resolved login_agent_pnl_sslc as name=<login_agent_pnl_sslc> host=<> domain=<> address=<38.98.144.228> port=<40418> type=<4>
+[1773058505.840] <047> finished lb task 0
+[1773058505.840] <058> running connect task for 38.98.144.228:40418
+[1773058505.840] <057> running connect task for 128.177.47.170:40067
+[1773058506.033] <058> connect task for 38.98.144.228:40418 complete
+[1773058506.033] <058> finished connect task for 38.98.144.228:40418
+
+[1773058506.033] <057> connect task for 128.177.47.170:40067 complete
+[1773058506.033] <057> finished connect task for 128.177.47.170:40067
+
+[1773058506.049] <056> connect task for 208.97.247.103:40086 complete
+[1773058506.049] <056> finished connect task for 208.97.247.103:40086
+
+[1773058506.049] <055> connect task for 216.57.156.165:40320 complete
+[1773058506.049] <055> finished connect task for 216.57.156.165:40320
+
+[1773058506.051] <054> connect task for 184.105.22.231:40689 complete
+[1773058506.051] <054> finished connect task for 184.105.22.231:40689
+
+[1773058506.558] <017> 
+<Certificate>
+[Subject]
+  CN=rithmic.com
+
+[Issuer]
+  CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+
+[Serial Number]
+  0CA8613AC8BB489CA2C97F2A890F8022
+
+[Not Before]
+  6/11/2025 8:00:00 PM
+
+[Not After]
+  7/13/2026 7:59:59 PM
+
+[Thumbprint]
+  0EF7B9123FB532169D9A13612A75A99C8538C3F5
+
+[1773058506.558] <017> 
+Cert chain
+
+[1773058506.558] <010> 
+<Certificate>
+[Subject]
+  CN=rithmic.com
+
+[Issuer]
+  CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+
+[Serial Number]
+  0CA8613AC8BB489CA2C97F2A890F8022
+
+[Not Before]
+  6/11/2025 8:00:00 PM
+
+[Not After]
+  7/13/2026 7:59:59 PM
+
+[Thumbprint]
+  0EF7B9123FB532169D9A13612A75A99C8538C3F5
+
+[1773058506.558] <010> 
+Cert chain
+
+[1773058506.558] <016> 
+<Certificate>
+[Subject]
+  CN=rithmic.com
+
+[Issuer]
+  CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+
+[Serial Number]
+  0CA8613AC8BB489CA2C97F2A890F8022
+
+[Not Before]
+  6/11/2025 8:00:00 PM
+
+[Not After]
+  7/13/2026 7:59:59 PM
+
+[Thumbprint]
+  0EF7B9123FB532169D9A13612A75A99C8538C3F5
+
+[1773058506.558] <016> 
+Cert chain
+
+[1773058506.558] <018> 
+<Certificate>
+[Subject]
+  CN=rithmic.com
+
+[Issuer]
+  CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+
+[Serial Number]
+  0CA8613AC8BB489CA2C97F2A890F8022
+
+[Not Before]
+  6/11/2025 8:00:00 PM
+
+[Not After]
+  7/13/2026 7:59:59 PM
+
+[Thumbprint]
+  0EF7B9123FB532169D9A13612A75A99C8538C3F5
+
+[1773058506.558] <018> 
+Cert chain
+
+[1773058506.558] <008> 
+<Certificate>
+[Subject]
+  CN=rithmic.com
+
+[Issuer]
+  CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+
+[Serial Number]
+  0CA8613AC8BB489CA2C97F2A890F8022
+
+[Not Before]
+  6/11/2025 8:00:00 PM
+
+[Not After]
+  7/13/2026 7:59:59 PM
+
+[Thumbprint]
+  0EF7B9123FB532169D9A13612A75A99C8538C3F5
+
+[1773058506.567] <008> 
+Cert chain
+
+[1773058506.567] <017>          Chain revocation flag : ExcludeRoot
+[1773058506.567] <017>          Chain revocation mode : Online
+[1773058506.567] <008>          Chain revocation flag : ExcludeRoot
+[1773058506.567] <008>          Chain revocation mode : Online
+[1773058506.567] <017>        Chain verification flag : NoFlag
+[1773058506.567] <017>        Chain verification time : 3/9/2026 8:15:06 AM
+[1773058506.567] <017>            Chain status length : 0
+[1773058506.567] <017> Chain application policy count : 1
+[1773058506.567] <017> Chain certificate policy count : 0
+[1773058506.567] <017> Chain Element Information
+[1773058506.567] <017>       Number of chain elements : 4
+[1773058506.567] <017>             Element issuer name : CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+[1773058506.567] <017> Element certificate valid until : 7/13/2026 7:59:59 PM
+[1773058506.567] <017>    Element certificate is valid : True
+[1773058506.567] <017>     Element error status length : 0
+[1773058506.567] <017>             Element information : 
+[1773058506.567] <017>    Number of element extensions : 9
+[1773058506.567] <017>             Element issuer name : CN=Sectigo Public Server Authentication Root R46, O=Sectigo Limited, C=GB
+[1773058506.567] <017> Element certificate valid until : 3/21/2036 7:59:59 PM
+[1773058506.567] <008>        Chain verification flag : NoFlag
+[1773058506.567] <008>        Chain verification time : 3/9/2026 8:15:06 AM
+[1773058506.567] <008>            Chain status length : 0
+[1773058506.567] <008> Chain application policy count : 1
+[1773058506.567] <008> Chain certificate policy count : 0
+[1773058506.567] <008> Chain Element Information
+[1773058506.567] <008>       Number of chain elements : 4
+[1773058506.567] <008>             Element issuer name : CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+[1773058506.567] <008> Element certificate valid until : 7/13/2026 7:59:59 PM
+[1773058506.567] <010>          Chain revocation flag : ExcludeRoot
+[1773058506.567] <010>          Chain revocation mode : Online
+[1773058506.574] <010>        Chain verification flag : NoFlag
+[1773058506.574] <010>        Chain verification time : 3/9/2026 8:15:06 AM
+[1773058506.574] <010>            Chain status length : 0
+[1773058506.574] <010> Chain application policy count : 1
+[1773058506.574] <010> Chain certificate policy count : 0
+[1773058506.574] <010> Chain Element Information
+[1773058506.574] <010>       Number of chain elements : 4
+[1773058506.574] <010>             Element issuer name : CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+[1773058506.574] <010> Element certificate valid until : 7/13/2026 7:59:59 PM
+[1773058506.574] <010>    Element certificate is valid : True
+[1773058506.574] <008>    Element certificate is valid : True
+[1773058506.574] <008>     Element error status length : 0
+[1773058506.574] <010>     Element error status length : 0
+[1773058506.574] <008>             Element information : 
+[1773058506.574] <010>             Element information : 
+[1773058506.574] <010>    Number of element extensions : 9
+[1773058506.574] <016>          Chain revocation flag : ExcludeRoot
+[1773058506.574] <016>          Chain revocation mode : Online
+[1773058506.574] <016>        Chain verification flag : NoFlag
+[1773058506.574] <010>             Element issuer name : CN=Sectigo Public Server Authentication Root R46, O=Sectigo Limited, C=GB
+[1773058506.574] <016>        Chain verification time : 3/9/2026 8:15:06 AM
+[1773058506.574] <008>    Number of element extensions : 9
+[1773058506.574] <010> Element certificate valid until : 3/21/2036 7:59:59 PM
+[1773058506.574] <016>            Chain status length : 0
+[1773058506.574] <016> Chain application policy count : 1
+[1773058506.574] <018>          Chain revocation flag : ExcludeRoot
+[1773058506.574] <016> Chain certificate policy count : 0
+[1773058506.574] <018>          Chain revocation mode : Online
+[1773058506.574] <016> Chain Element Information
+[1773058506.574] <018>        Chain verification flag : NoFlag
+[1773058506.574] <018>        Chain verification time : 3/9/2026 8:15:06 AM
+[1773058506.574] <018>            Chain status length : 0
+[1773058506.574] <018> Chain application policy count : 1
+[1773058506.574] <018> Chain certificate policy count : 0
+[1773058506.574] <018> Chain Element Information
+[1773058506.574] <018>       Number of chain elements : 4
+[1773058506.574] <008>             Element issuer name : CN=Sectigo Public Server Authentication Root R46, O=Sectigo Limited, C=GB
+[1773058506.574] <018>             Element issuer name : CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+[1773058506.574] <008> Element certificate valid until : 3/21/2036 7:59:59 PM
+[1773058506.574] <018> Element certificate valid until : 7/13/2026 7:59:59 PM
+[1773058506.574] <018>    Element certificate is valid : True
+[1773058506.574] <018>     Element error status length : 0
+[1773058506.574] <018>             Element information : 
+[1773058506.574] <018>    Number of element extensions : 9
+[1773058506.574] <016>       Number of chain elements : 4
+[1773058506.574] <018>             Element issuer name : CN=Sectigo Public Server Authentication Root R46, O=Sectigo Limited, C=GB
+[1773058506.574] <016>             Element issuer name : CN=Sectigo Public Server Authentication CA DV R36, O=Sectigo Limited, C=GB
+[1773058506.574] <018> Element certificate valid until : 3/21/2036 7:59:59 PM
+[1773058506.574] <016> Element certificate valid until : 7/13/2026 7:59:59 PM
+[1773058506.574] <016>    Element certificate is valid : True
+[1773058506.574] <016>     Element error status length : 0
+[1773058506.574] <016>             Element information : 
+[1773058506.574] <016>    Number of element extensions : 9
+[1773058506.574] <016>             Element issuer name : CN=Sectigo Public Server Authentication Root R46, O=Sectigo Limited, C=GB
+[1773058506.574] <016> Element certificate valid until : 3/21/2036 7:59:59 PM
+[1773058506.897] <008>    Element certificate is valid : True
+[1773058506.897] <008>     Element error status length : 0
+[1773058506.897] <008>             Element information : 
+[1773058506.897] <017>    Element certificate is valid : True
+[1773058506.897] <017>     Element error status length : 0
+[1773058506.897] <016>    Element certificate is valid : True
+[1773058506.897] <016>     Element error status length : 0
+[1773058506.897] <016>             Element information : 
+[1773058506.897] <017>             Element information : 
+[1773058506.897] <008>    Number of element extensions : 8
+[1773058506.897] <017>    Number of element extensions : 8
+[1773058506.897] <016>    Number of element extensions : 8
+[1773058506.897] <008>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058506.897] <017>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058506.897] <008> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058506.897] <017> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058506.897] <016>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058506.897] <016> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058506.908] <016>    Element certificate is valid : True
+[1773058506.908] <016>     Element error status length : 0
+[1773058506.908] <016>             Element information : 
+[1773058506.908] <016>    Number of element extensions : 8
+[1773058506.908] <016>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058506.908] <016> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058506.908] <016>    Element certificate is valid : True
+[1773058506.908] <016>     Element error status length : 0
+[1773058506.908] <016>             Element information : 
+[1773058506.908] <016>    Number of element extensions : 3
+[1773058506.908] <017>    Element certificate is valid : True
+[1773058506.908] <017>     Element error status length : 0
+[1773058506.908] <017>             Element information : 
+[1773058506.908] <017>    Number of element extensions : 8
+[1773058506.908] <017>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058506.908] <017> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058506.908] <017>    Element certificate is valid : True
+[1773058506.908] <017>     Element error status length : 0
+[1773058506.908] <017>             Element information : 
+[1773058506.908] <018>    Element certificate is valid : True
+[1773058506.908] <018>     Element error status length : 0
+[1773058506.908] <018>             Element information : 
+[1773058506.908] <017>    Number of element extensions : 3
+[1773058506.908] <018>    Number of element extensions : 8
+[1773058506.908] <018>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058506.908] <018> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058506.908] <008>    Element certificate is valid : True
+[1773058506.908] <008>     Element error status length : 0
+[1773058506.908] <008>             Element information : 
+[1773058506.908] <017> 
+Policy errors -> None
+[1773058506.908] <008>    Number of element extensions : 8
+[1773058506.908] <008>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058506.908] <008> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058506.908] <008>    Element certificate is valid : True
+[1773058506.908] <008>     Element error status length : 0
+[1773058506.908] <008>             Element information : 
+[1773058506.908] <008>    Number of element extensions : 3
+[1773058506.908] <008> 
+Policy errors -> None
+[1773058506.908] <017> certificate component CN=rithmic.com
+[1773058506.908] <017> subject rithmic.com matches
+[1773058506.908] <018>    Element certificate is valid : True
+[1773058506.908] <018>     Element error status length : 0
+[1773058506.908] <018>             Element information : 
+[1773058506.908] <018>    Number of element extensions : 8
+[1773058506.908] <018>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058506.908] <018> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058506.908] <018>    Element certificate is valid : True
+[1773058506.908] <018>     Element error status length : 0
+[1773058506.908] <018>             Element information : 
+[1773058506.908] <018>    Number of element extensions : 3
+[1773058506.908] <018> 
+Policy errors -> None
+[1773058506.908] <018> certificate component CN=rithmic.com
+[1773058506.908] <018> subject rithmic.com matches
+[1773058506.908] <008> certificate component CN=rithmic.com
+[1773058506.908] <008> subject rithmic.com matches
+[1773058506.908] <016> 
+Policy errors -> None
+[1773058506.908] <016> certificate component CN=rithmic.com
+[1773058506.908] <016> subject rithmic.com matches
+[1773058507.008] <016> [13972] <03/09 08:15:07.008> Connection OPENED on RMS=>login_agent_pnl_sslc
+[1773058507.008] <018> [13972] <03/09 08:15:07.008> Connection OPENED on History=>login_agent_historyc
+[1773058507.008] <017> [13972] <03/09 08:15:07.008> Connection OPENED on Price=>login_agent_tp_r01c
+[1773058507.016] <016> [13972] <03/09 08:15:07.016> *** 5. Started OmneStreamEngine[RMS] (1 watches) <running>
+
+[1773058507.016] <016> [13972] <03/09 08:15:07.016> Waiting for Repository*, Order*, Price*, RMS*, History*...
+[1773058507.016] <017> [13972] <03/09 08:15:07.016> *** 6. Started OmneStreamEngine[Price] (1 watches) <running>
+
+[1773058507.016] <017> [13972] <03/09 08:15:07.016> Waiting for Repository*, Order*, Price*, RMS*, History*...
+[1773058507.016] <018> [13972] <03/09 08:15:07.016> *** 4. Started OmneStreamEngine[History] (1 watches) <running>
+
+[1773058507.016] <018> [13972] <03/09 08:15:07.016> Waiting for Repository*, Order*, Price*, RMS*, History*...
+[1773058507.031] <008> [13972] <03/09 08:15:07.031> Connection OPENED on Repository=>login_agent_repositoryc
+[1773058507.031] <008> [13972] <03/09 08:15:07.031> *** 2. Started OmneStreamEngine[Repository] (1 watches) <running>
+
+[1773058507.031] <008> [13972] <03/09 08:15:07.031> Waiting for Repository*, Order*, Price*, RMS*, History*...
+[1773058507.080] <041> [13972] <03/09 08:15:07.080> 
+
+ 32767 1 rithmic_login 32760 1 55250856_3 32747 1 omd_history_tp01@rithmic_04_prod_domain 32747 1 60054 32766 1 13 32766 1 permission denied
+
+
+[1773058507.080] <041> [13972] <03/09 08:15:07.080> 
+
+ 32767 1 rithmic_login 32760 1 55250856_3 32747 1 omd_history_tp01@rithmic_04_prod_domain 32747 1 60054 32766 1 13 32766 1 permission denied
+
+
+[1773058507.080] <043> [13972] <03/09 08:15:07.080> 
+
+ 32767 1 rithmic_login 32760 1 12046005_2 32747 1 omd_Repo_repo01@rithmic_04_prod_domain 32747 1 216595 32766 1 13 32766 1 permission denied
+
+
+[1773058507.080] <043> [13972] <03/09 08:15:07.080> 
+
+ 32767 1 rithmic_login 32760 1 12046005_2 32747 1 omd_Repo_repo01@rithmic_04_prod_domain 32747 1 216595 32766 1 13 32766 1 permission denied
+
+
+[1773058507.080] <043> [13972] <03/09 08:15:07.080> Resetting OMNE Environment...
+[1773058507.080] <043> [13972] <03/09 08:15:07.080> Removing watches for: OmneStreamEngine[Order] (1 watches) <running>
+[1773058507.094] <042> [13972] <03/09 08:15:07.094> 
+
+ 32767 1 rithmic_login 32760 1 34732923_1 32747 1 omd_tp_tp01@rithmic_04_prod_domain 32747 1 272595 32766 1 13 32766 1 permission denied
+
+
+[1773058507.094] <042> [13972] <03/09 08:15:07.094> 
+
+ 32767 1 rithmic_login 32760 1 34732923_1 32747 1 omd_tp_tp01@rithmic_04_prod_domain 32747 1 272595 32766 1 13 32766 1 permission denied
+
+
+[1773058507.101] <039> [13972] <03/09 08:15:07.101> 
+
+ 32767 1 rithmic_login 32760 1 3455658_0 32747 1 omd_pnl_op01@rithmic_04_prod_domain 32747 1 97351 32766 1 13 32766 1 permission denied
+
+
+[1773058507.101] <039> [13972] <03/09 08:15:07.101> 
+
+ 32767 1 rithmic_login 32760 1 3455658_0 32747 1 omd_pnl_op01@rithmic_04_prod_domain 32747 1 97351 32766 1 13 32766 1 permission denied
+
+
+[1773058507.353] <010>    Element certificate is valid : True
+[1773058507.353] <010>     Element error status length : 0
+[1773058507.353] <010>             Element information : 
+[1773058507.353] <010>    Number of element extensions : 8
+[1773058507.353] <010>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058507.353] <010> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058507.369] <010>    Element certificate is valid : True
+[1773058507.369] <010>     Element error status length : 0
+[1773058507.369] <010>             Element information : 
+[1773058507.369] <010>    Number of element extensions : 8
+[1773058507.369] <010>             Element issuer name : CN=USERTrust RSA Certification Authority, O=The USERTRUST Network, L=Jersey City, S=New Jersey, C=US
+[1773058507.369] <010> Element certificate valid until : 1/18/2038 6:59:59 PM
+[1773058507.369] <010>    Element certificate is valid : True
+[1773058507.369] <010>     Element error status length : 0
+[1773058507.369] <010>             Element information : 
+[1773058507.369] <010>    Number of element extensions : 3
+[1773058507.369] <010> 
+Policy errors -> None
+[1773058507.369] <010> certificate component CN=rithmic.com
+[1773058507.369] <010> subject rithmic.com matches
+[1773058507.451] <010> [13972] <03/09 08:15:07.451> Connection OPENED on Order=>login_agent_prodc
+[1773058507.451] <010> [13972] <03/09 08:15:07.451> *** 3. Started OmneStreamEngine[Order] (1 watches) <running>
+
+[1773058507.451] <010> [13972] <03/09 08:15:07.451> Waiting for Repository*, Order*, Price*, RMS*, History*...
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Removing watches succeeded.
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Removing watches for: OmneStreamEngine[RMS] (1 watches) <running>
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Removing watches succeeded.
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Removing watches for: OmneStreamEngine[Price] (1 watches) <running>
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Removing watches succeeded.
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Removing watches for: OmneStreamEngine[History] (1 watches) <running>
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Removing watches succeeded.
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Removing watches for: OmneStreamEngine[Repository] (1 watches) <running>
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Removing watches succeeded.
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Stopping Tty Timer...
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Stopping BRD Timer...
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Stopping BRD Timer...
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Stopping CHT Timer...
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Stopping GEN Timer...
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Stopping Data Rates...
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Stopping ELP Timer...
+[1773058507.454] <043> [13972] <03/09 08:15:07.454> Reset OMNE Environment succeeded.
+[1773058507.481] <001> [13972] <03/09 08:15:07.481> Closing all windows...
+[1773058507.481] <001> [13972] <03/09 08:15:07.481> Close all windows succeeded.
+[1773058507.497] <001> [13972] <03/09 08:15:07.497> Ready...
+[1773058507.497] <001> [13972] <03/09 08:15:07.497> User needs to relogin. Showing the login screen...
+[1773058507.501] <047> [13972] <03/09 08:15:07.501> stopping OmneStreamEngine[Repository] (0 watches) <running>
+[1773058507.546] <001> [13972] <03/09 08:15:07.546> Shutting down OmneVerse...
+[1773058507.546] <001> [13972] <03/09 08:15:07.546> Stopping Repository connection...
+[1773058509.081] <052> Device History=>login_agent_historyc has notified an error.
+[1773058509.081] <011> A timer device History=>login_agent_historyc:recover has been established to attempt recovery every 1 milliseconds.
+[1773058509.087] <047> [13972] <03/09 08:15:09.087> stopped OmneStreamEngine[Repository] (0 watches) <stopped>
+[1773058509.087] <047> [13972] <03/09 08:15:09.087> stopping OmneStreamEngine[Price] (0 watches) <running>
+[1773058509.087] <001> [13972] <03/09 08:15:09.087> Stopping Price connection...
+[1773058509.098] <047> [13972] <03/09 08:15:09.098> stopped OmneStreamEngine[Price] (0 watches) <stopped>
+[1773058509.098] <047> [13972] <03/09 08:15:09.098> stopping OmneStreamEngine[History] (0 watches) <running>
+[1773058509.098] <001> [13972] <03/09 08:15:09.098> Stopping History connection...
+[1773058509.102] <047> [13972] <03/09 08:15:09.102> stopped OmneStreamEngine[History] (0 watches) <stopped>
+[1773058509.102] <047> [13972] <03/09 08:15:09.102> stopping OmneStreamEngine[Order] (0 watches) <running>
+[1773058509.102] <001> [13972] <03/09 08:15:09.102> Stopping Order connection...
+[1773058509.116] <056> Device RMS=>login_agent_pnl_sslc has notified an error.
+[1773058509.118] <011> A timer device RMS=>login_agent_pnl_sslc:recover has been established to attempt recovery every 1 milliseconds.
+[1773058509.133] <024> [13972] <03/09 08:15:09.133> Connection BROKEN on RMS=>login_agent_pnl_sslc
+[1773058509.133] <001> [13972] <03/09 08:15:09.133> 
+[1773058509.136] <024> Attempting to recover RMS by opening RMS=>login_agent_pnl_sslc (recovery attempt 1).
+[1773058509.500] <047> [13972] <03/09 08:15:09.500> stopped OmneStreamEngine[Order] (0 watches) <stopped>
+[1773058509.500] <047> [13972] <03/09 08:15:09.500> stopping OmneStreamEngine[RMS] (0 watches) <running>
+[1773058509.500] <001> [13972] <03/09 08:15:09.500> Stopping RMS connection...
+[1773058509.505] <047> [13972] <03/09 08:15:09.505> stopped OmneStreamEngine[RMS] (0 watches) <stopped>
+[1773058509.505] <047> [13972] <03/09 08:15:09.505> 4 Engines Down.
+[1773058509.515] <047> com.omnesys.omne.om.OMNEVerse(System.Threading.Thread) in shutdown of device dd_admin_sslc : 
+Raised in : com.omnesys.omne.om.OMSslDeviceInfo
+Method    : OMgetIODevice
+Error     : no handle
+[1773058509.519] <047> trace finished.
