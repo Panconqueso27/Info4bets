@@ -17,6 +17,10 @@ export interface Effects {
   flags?: Record<string, number | boolean>;
   /** Suma 1 a estos contadores en flags. */
   counters?: string[];
+  /** Desbloquea estos logros. */
+  unlock?: string[];
+  /** Termina la partida con este final. */
+  endGame?: { title: string; text: string };
 }
 
 export type ResultKind = 'bueno' | 'malo';
@@ -35,13 +39,31 @@ export interface ChoiceDef {
   id: string;
   label: string;
   hint?: string;
+  /** Dinero que se paga al elegir, salga bien o mal. */
+  cost?: number;
+  /** Condición para poder elegir esta opción. */
+  requires?: { check: (s: GameState) => boolean; label: string };
   outcomes: OutcomeDef[];
+}
+
+export interface ResolveContext {
+  outcome: OutcomeDef;
+  deltas: Bars;
+  /** Suceso aleatorio anterior a este (para logros de "dos seguidos"). */
+  previous: string | undefined;
+  unlock: (id: string) => void;
 }
 
 export interface EventDef {
   id: string;
   role: Role;
-  kind: 'aleatorio' | 'personal' | 'diario';
+  /**
+   * aleatorio: aparece durante la jornada.
+   * personal: mini-evento ocasional durante la jornada.
+   * diario: se revisa una vez al día al abrir el juego.
+   * accion: decisión que el jugador toma desde la agenda.
+   */
+  kind: 'aleatorio' | 'personal' | 'diario' | 'accion';
   title: string;
   /** Texto de la notificación push. */
   notification: string;
@@ -49,9 +71,17 @@ export interface EventDef {
   intro: string;
   /** Peso al sortear qué suceso aparece en un hueco de la jornada. */
   weight: number;
-  /** Variables de texto que se sortean al crear la instancia, p. ej. el servicio en huelga. */
+  /** Solo puede aparecer (o elegirse) si se cumple. */
+  condition?: (s: GameState, day: number) => boolean;
+  /** Días mínimos entre dos apariciones / usos. */
+  cooldownDays?: number;
+  /** Resumen corto para la agenda de acciones. */
+  summary?: string;
+  /** Variables de texto que se sortean al crear la instancia. */
   variants?: Record<string, string[]>;
   /** Ajusta pesos de resultados según el estado (protección legal, etc.). */
   adjustWeight?: (outcome: OutcomeDef, state: GameState) => number;
+  /** Lógica extra al resolverse (logros que dependen del contexto). */
+  onResolve?: (state: GameState, ctx: ResolveContext) => void;
   choices: ChoiceDef[];
 }

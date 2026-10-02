@@ -37,7 +37,7 @@ export function now(): number {
 }
 
 export function isDevEnabled(): boolean {
-  return import.meta.env.DEV || new URLSearchParams(location.search).has('dev');
+  return import.meta.env.DEV || new URLSearchParams(location.search).has('dev') || devFlag();
 }
 
 export function getSpeed(): number {
@@ -63,4 +63,25 @@ export function skip(ms: number) {
 export function resetClock() {
   dev = null;
   save();
+}
+
+const DEV_KEY = 'laciudad.dev';
+
+/** Modo pruebas activado desde el menú (persiste entre sesiones). */
+export function setDevEnabled(on: boolean) {
+  try {
+    if (on) localStorage.setItem(DEV_KEY, '1');
+    else localStorage.removeItem(DEV_KEY);
+  } catch {
+    /* sin almacenamiento */
+  }
+  if (!on) resetClock();
+}
+
+export function devFlag(): boolean {
+  try {
+    return localStorage.getItem(DEV_KEY) === '1';
+  } catch {
+    return false;
+  }
 }

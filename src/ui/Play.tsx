@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { EVENTS } from '../core/events/catalog';
-import { canRetire, canStartShift, dayNumber, viewEvent, type ResolvedOutcome } from '../core/game';
+import { canRetire, canStartShift, dayNumber, marketSession, viewEvent, type ResolvedOutcome } from '../core/game';
+import { TERM_DAYS } from '../core/events/alcalde';
 import { ROLES, type BarDef } from '../core/roles';
 import { formatDuration } from '../core/time';
-import type { BarId, Bars, GameState, PendingEvent } from '../core/types';
+import type { BarId, Bars, GameState, PendingEvent, Role } from '../core/types';
 import { lightAt } from '../art/daynight';
 
 /** La fuente de píxeles no tiene mayúsculas con tilde. */
@@ -55,6 +56,7 @@ export function Hud({ state, now }: { state: GameState; now: number }) {
           <b>{state.character.name}</b>
           <small>
             {role.title.replace(/^El /, '')} · {state.character.age} años
+            {state.character.role === 'alcalde' && ` · mandato ${state.term} (${TERM_DAYS - ((dayNumber(state, now) - 1) % TERM_DAYS)}d)`}
           </small>
         </div>
         <div class="badge day">DIA {dayNumber(state, now)}</div>
@@ -81,16 +83,14 @@ export function Dock({
   onStart,
   onRetire,
   onOpenEvent,
-  onLog,
-  onMenu,
+  onPanel,
 }: {
   state: GameState;
   now: number;
   onStart: () => void;
   onRetire: () => void;
   onOpenEvent: () => void;
-  onLog: () => void;
-  onMenu: () => void;
+  onPanel: (p: Panel) => void;
 }) {
   const role = ROLES[state.character.role];
   const shift = state.shift;
@@ -164,25 +164,33 @@ export function Dock({
   return (
     <div class="dock">
       {body}
+      {state.pending.length > 0 && (
+        <button class="btn pending-alert" style={{ marginTop: 8 }} onClick={onOpenEvent}>
+          ⚠ Tienes {state.pending.length === 1 ? 'un suceso pendiente' : `${state.pending.length} sucesos pendientes`}
+        </button>
+      )}
       <div class="dock-tools">
-        {state.pending.length > 0 && (
-          <button class="btn pending-alert" onClick={onOpenEvent}>
-            ⚠ Suceso ({state.pending.length})
+        {TOOLS.map((t) => (
+          <button key={t.id} class={`tool ${t.id === 'bolsa' && marketSession(state, now) ? 'live' : ''}`} onClick={() => onPanel(t.id)}>
+            <span class="tool-ic">{t.icon}</span>
+            {t.label}
           </button>
-        )}
-        <button class="btn secondary" onClick={onLog}>
-          Diario
-        </button>
-        <button class="btn secondary" disabled title="Llega en la fase 2">
-          Bolsa · pronto
-        </button>
-        <button class="btn secondary" onClick={onMenu} aria-label="Menú">
-          ☰
-        </button>
+        ))}
       </div>
     </div>
   );
 }
+
+export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu';
+
+const TOOLS: { id: Panel; icon: string; label: string }[] = [
+  { id: 'bolsa', icon: '📈', label: 'Bolsa' },
+  { id: 'agenda', icon: '📋', label: 'Agenda' },
+  { id: 'mejora', icon: '⬆', label: 'Mejora' },
+  { id: 'logros', icon: '🏆', label: 'Logros' },
+  { id: 'diario', icon: '📖', label: 'Diario' },
+  { id: 'menu', icon: '☰', label: 'Menú' },
+];
 
 function Deltas({ deltas, state }: { deltas: Bars; state: GameState }) {
   const role = ROLES[state.character.role];
@@ -219,23 +227,28 @@ export function EventModal({
   return (
     <div class="modal-wrap">
       <div class="modal">
-        <div class="kicker">SUCESO · {time}</div>
+        <div class="kicker">{KIND_LABEL[view.def.kind]} · {time}</div>
         <h3>{view.def.title}</h3>
         <p>{view.intro}</p>
         <div class="stack">
-          {view.def.choices.map((c) => (
-            <div key={c.id}>
-              <button class="btn" onClick={() => onChoose(c.id)}>
-                {c.label}
-              </button>
-              {c.hint && <div class="choice-hint">{c.hint}</div>}
-            </div>
-          ))}
+          {view.def.choices.map((c) => {
+            const blocked = c.requires && !c.requires.check(state);
+            return (
+              <div key={c.id}>
+                <button class="btn" disabled={blocked} onClick={() => onChoose(c.id)}>
+                  {c.label}
+                </button>
+                {(blocked || c.hint) && <div class="choice-hint">{blocked ? `🔒 ${c.requires!.label}` : c.hint}</div>}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
+
+const KIND_LABEL = { aleatorio: 'SUCESO', personal: 'SUCESO PERSONAL', diario: 'HOY', accion: 'DECISION' } as const;
 
 export function OutcomeModal({ state, outcome, onClose }: { state: GameState; outcome: ResolvedOutcome; onClose: () => void }) {
   const kind = outcome.outcome.result;
@@ -280,13 +293,36 @@ export function LogModal({ state, onClose }: { state: GameState; onClose: () => 
   );
 }
 
-export function MenuModal({ onClose, onQuit }: { onClose: () => void; onQuit: () => void }) {
+export function MenuModal({
+  role,
+  devEnabled,
+  onToggleDev,
+  onClose,
+  onQuit,
+}: {
+  role: Role;
+  devEnabled: boolean;
+  onToggleDev: () => void;
+  onClose: () => void;
+  onQuit: () => void;
+}) {
   const [confirm, setConfirm] = useState(false);
+  const r = ROLES[role];
   return (
     <div class="modal-wrap" onClick={onClose}>
       <div class="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Menú</h3>
+        <h3>Cómo se juega</h3>
+        <ul class="help">
+          <li>Cada día manda a tu personaje {r.toWorkplace}: son 8 horas reales. Al terminar, sácalo para cobrar.</li>
+          <li>Si un día no vas, pierdes la racha 🔥 y el sueldo. Los gastos se cobran igual.</li>
+          <li>Durante la jornada llegan sucesos (te avisa una notificación) y puedes apostar en la 📈 Bolsa.</li>
+          <li>En la 📋 Agenda tomas decisiones personales; con ⬆ Mejora inviertes tus ahorros.</li>
+          <li>☠ {r.loseConditions}</li>
+        </ul>
         <div class="stack">
+          <button class="btn secondary" onClick={onToggleDev}>
+            {devEnabled ? '✔ Modo pruebas activado' : 'Activar modo pruebas (acelerar el tiempo)'}
+          </button>
           {confirm ? (
             <>
               <p>¿Seguro? Se borrará esta partida para siempre.</p>

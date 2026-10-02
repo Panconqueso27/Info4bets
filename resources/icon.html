@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8" />
+<canvas id="c" width="32" height="32"></canvas>
+<script>
+  // Icono de La Ciudad (32x32, pixel art). Se escala sin suavizado a cada tamaño.
+  const ctx = document.getElementById('c').getContext('2d');
+  const r = (x, y, w, h, c) => ((ctx.fillStyle = c), ctx.fillRect(x, y, w, h));
+  const sky = ['#0b0824', '#120c3a', '#1d1452', '#2d1f6e', '#4a2477', '#7a2c7c'];
+  for (let i = 0; i < 6; i++) r(0, i * 5, 32, 6, sky[i]);
+  for (const [x, y] of [[3, 3], [9, 6], [14, 2], [20, 8], [28, 13], [5, 11]]) r(x, y, 1, 1, '#fff');
+  r(22, 3, 5, 5, '#f2f0e6'); r(22, 3, 1, 1, sky[0]); r(26, 3, 1, 1, sky[0]); r(22, 7, 1, 1, sky[1]); r(26, 7, 1, 1, sky[1]); r(24, 5, 1, 1, '#d8d4c6');
+  const bld = [[0, 17, 6, '#2a2346'], [5, 12, 5, '#332a55'], [10, 8, 3, '#3a3060'], [13, 8, 3, '#3a3060'], [16, 15, 6, '#2a2346'], [21, 11, 5, '#332a55'], [26, 18, 6, '#2a2346']];
+  for (const [x, y, w, c] of bld) {
+    r(x, y, w, 32 - y, c);
+    for (let yy = y + 2; yy < 27; yy += 3) for (let xx = x + 1; xx < x + w - 1; xx += 2) if ((xx * 7 + yy * 13) % 5 < 3) r(xx, yy, 1, 1, (xx + yy) % 4 ? '#ffd27a' : '#8fc8ff');
+  }
+  r(11, 5, 1, 3, '#3a3060'); r(14, 5, 1, 3, '#3a3060'); r(11, 4, 1, 1, '#ff4040');
+  r(0, 27, 32, 5, '#151022'); r(0, 27, 32, 1, '#ff4f9a'); r(0, 28, 32, 1, '#ff4f9a55');
+  for (let x = 2; x < 32; x += 6) r(x, 30, 3, 1, '#ffcc33');
+  function render(size, pad) {
+    const out = document.createElement('canvas');
+    out.width = out.height = size;
+    const o = out.getContext('2d');
+    o.imageSmoothingEnabled = false;
+    if (pad) { o.fillStyle = '#120c24'; o.fillRect(0, 0, size, size); }
+    const inner = Math.round(size * (1 - 2 * pad));
+    const off = Math.round((size - inner) / 2);
+    o.drawImage(document.getElementById('c'), off, off, inner, inner);
+    return out.toDataURL('image/png');
+  }
+  window.render = render;
+</script>

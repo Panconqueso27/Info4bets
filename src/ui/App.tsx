@@ -1,14 +1,31 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { advance, canStartShift, forceEvent, newGame, resolveEvent, retire, startShift, type ResolvedOutcome } from '../core/game';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import {
+  advance,
+  buyUpgrade,
+  canStartShift,
+  forceEvent,
+  markNewsSeen,
+  newGame,
+  placeBet,
+  resolveEvent,
+  retire,
+  startAction,
+  startShift,
+  takeNotice,
+  type ResolvedOutcome,
+} from '../core/game';
 import { EVENTS } from '../core/events/catalog';
 import { ROLES } from '../core/roles';
+import { addDays, startOfDay } from '../core/time';
 import type { Character, GameState, Role } from '../core/types';
 import * as clock from '../platform/clock';
 import * as notify from '../platform/notify';
 import { deleteGame, loadGame, saveGame } from '../platform/save';
 import { bridge, type Spot } from '../scene/bridge';
 import { DevPanel } from './DevPanel';
-import { Dock, EventModal, GameOverModal, Hud, LogModal, MenuModal, OutcomeModal, Toast, eventNotification } from './Play';
+import { MarketTerminal } from './Market';
+import { AchievementsModal, AgendaModal, EndingModal, NewsModal, UpgradeModal } from './Panels';
+import { Dock, EventModal, GameOverModal, Hud, LogModal, MenuModal, OutcomeModal, Toast, eventNotification, type Panel } from './Play';
 import { Customizer, IdentityForm, RoleSelect, TitleScreen } from './Setup';
 
 type Screen =
@@ -25,6 +42,9 @@ function spotFor(s: GameState, now: number): Spot {
   return 'home';
 }
 
+/** Recordatorio para el día siguiente a las 10:00 si aún no se ha trabajado. */
+const REMINDER_HOUR = 10;
+
 export function App() {
   const game = useRef<GameState | null>(loadGame());
   const [screen, setScreen] = useState<Screen>({ id: 'title' });
@@ -32,9 +52,10 @@ export function App() {
   const [, setVersion] = useState(0);
   const [outcome, setOutcome] = useState<ResolvedOutcome | null>(null);
   const [showEvent, setShowEvent] = useState(false);
-  const [modal, setModal] = useState<'log' | 'menu' | null>(null);
+  const [panel, setPanel] = useState<Panel | null>(null);
   const [toast, setToast] = useState<{ title: string; text: string } | null>(null);
-  const devEnabled = useMemo(() => clock.isDevEnabled(), []);
+  const [devEnabled, setDevEnabled] = useState(() => clock.isDevEnabled());
+  const [endingSeen, setEndingSeen] = useState(false);
   const seenPending = useRef(new Set<string>());
 
   const state = game.current;
@@ -69,44 +90,50 @@ export function App() {
     else bridge.set({ role: null, look: null, spot: 'home' });
   });
 
-  // Aviso en pantalla cuando aparece un suceso nuevo.
+  // Avisos: sucesos nuevos y logros/bolsa.
   useEffect(() => {
     if (!state || !playing) return;
     for (const p of state.pending) {
       if (seenPending.current.has(p.instanceId)) continue;
       seenPending.current.add(p.instanceId);
+      if (EVENTS[p.eventId].kind === 'accion') continue;
       setToast({ title: 'NOTIFICACION', text: eventNotification(p.eventId) });
-      setShowEvent(true);
+      if (!panel) setShowEvent(true);
+    }
+    if (!toast && state.notices.length) {
+      const n = takeNotice(state)!;
+      setToast({ title: n.title, text: n.text });
+      commit();
     }
   });
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4500);
+    const t = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Notificaciones programadas de la jornada (sucesos y fin de las 8 horas).
+  // Notificaciones programadas: sucesos, fin de jornada y recordatorio diario.
   useEffect(() => {
     const s = game.current;
-    if (!s?.shift || s.gameOver || s.shift.cancelled) return notify.scheduleAll([], clock.now(), clock.getSpeed());
+    if (!s || s.gameOver) return notify.scheduleAll([], clock.now(), clock.getSpeed());
     const role = ROLES[s.character.role];
-    notify.scheduleAll(
-      [
-        ...s.shift.slots
-          .filter((sl) => !sl.fired)
-          .map((sl) => ({ id: `ev-${sl.at}`, at: sl.at, title: EVENTS[sl.eventId].title, body: EVENTS[sl.eventId].notification })),
-        { id: `end-${s.shift.endsAt}`, at: s.shift.endsAt, title: 'Jornada terminada', body: `${s.character.name} ya puede ${role.retire.toLowerCase()}.` },
-      ],
-      clock.now(),
-      clock.getSpeed(),
-    );
-  }, [state?.shift?.startedAt, state?.shift?.cancelled, state?.gameOver, clock.getSpeed()]);
+    const list = [];
+    if (s.shift && !s.shift.cancelled) {
+      for (const sl of s.shift.slots)
+        if (!sl.fired) list.push({ id: `ev-${sl.at}`, at: sl.at, title: EVENTS[sl.eventId].title, body: EVENTS[sl.eventId].notification });
+      list.push({ id: `end-${s.shift.endsAt}`, at: s.shift.endsAt, title: 'Jornada terminada', body: `${s.character.name} ya puede ${role.retire.toLowerCase()} y cobrar.` });
+    }
+    const tomorrow = startOfDay(addDays(s.today.date, 1)) + REMINDER_HOUR * 3_600_000;
+    list.push({ id: `rem-${tomorrow}`, at: tomorrow, title: `🔥 Racha de ${s.streak} días`, body: `No olvides ir ${role.toWorkplace} hoy o perderás la racha.` });
+    notify.scheduleAll(list, clock.now(), clock.getSpeed());
+  }, [state?.shift?.startedAt, state?.shift?.cancelled, state?.gameOver, state?.today.date, state?.streak, clock.getSpeed()]);
 
   const begin = (c: Character) => {
     deleteGame();
     seenPending.current.clear();
     game.current = newGame(c, clock.now());
+    setEndingSeen(false);
     commit();
     setScreen({ id: 'play' });
   };
@@ -115,7 +142,7 @@ export function App() {
     deleteGame();
     game.current = null;
     notify.clearAll();
-    setModal(null);
+    setPanel(null);
     setOutcome(null);
     setShowEvent(false);
     setScreen({ id: 'role' });
@@ -135,14 +162,6 @@ export function App() {
 
   if (!playing) {
     switch (screen.id) {
-      case 'title':
-        return (
-          <TitleScreen
-            hasSave={!!state}
-            onContinue={() => setScreen({ id: 'play' })}
-            onNew={() => setScreen({ id: 'role' })}
-          />
-        );
       case 'role':
         return <RoleSelect onPick={(role) => setScreen({ id: 'identity', role })} onBack={() => setScreen({ id: 'title' })} />;
       case 'identity':
@@ -164,11 +183,79 @@ export function App() {
           />
         );
       default:
-        return <TitleScreen hasSave={false} onContinue={() => {}} onNew={() => setScreen({ id: 'role' })} />;
+        return <TitleScreen hasSave={!!state} onContinue={() => setScreen({ id: 'play' })} onNew={() => setScreen({ id: 'role' })} />;
     }
   }
 
   const pending = state.pending[0];
+  const showNews = !state.gameOver && state.newsSeenDate !== state.today.date;
+  const closePanel = () => setPanel(null);
+
+  // Un solo panel a la vez, por orden de prioridad.
+  let overlay = null;
+  if (state.gameOver && !outcome) overlay = <GameOverModal state={state} onNew={quit} />;
+  else if (outcome) overlay = <OutcomeModal state={state} outcome={outcome} onClose={() => setOutcome(null)} />;
+  else if (state.ending && !endingSeen && !state.flags.endingShown)
+    overlay = (
+      <EndingModal
+        state={state}
+        onClose={() => {
+          setEndingSeen(true);
+          act((s) => {
+            s.flags.endingShown = true;
+          });
+        }}
+      />
+    );
+  else if (pending && showEvent)
+    overlay = (
+      <EventModal
+        state={state}
+        pending={pending}
+        onChoose={(choiceId) =>
+          act((s, t) => {
+            setOutcome(resolveEvent(s, pending.instanceId, choiceId, t));
+            if (s.pending.length === 0) setShowEvent(false);
+          })
+        }
+      />
+    );
+  else if (panel === 'bolsa')
+    overlay = <MarketTerminal state={state} now={now} onBet={(tk, dir, stake) => act((s, t) => placeBet(s, tk, dir, stake, t))} onClose={closePanel} />;
+  else if (panel === 'agenda')
+    overlay = (
+      <AgendaModal
+        state={state}
+        now={now}
+        onClose={closePanel}
+        onPick={(id) =>
+          act((s, t) => {
+            startAction(s, id, t);
+            setPanel(null);
+            setShowEvent(true);
+          })
+        }
+      />
+    );
+  else if (panel === 'mejora') overlay = <UpgradeModal state={state} onBuy={() => act(buyUpgrade)} onClose={closePanel} />;
+  else if (panel === 'logros') overlay = <AchievementsModal state={state} onClose={closePanel} />;
+  else if (panel === 'diario') overlay = <LogModal state={state} onClose={closePanel} />;
+  else if (panel === 'menu')
+    overlay = (
+      <MenuModal
+        role={state.character.role}
+        devEnabled={devEnabled}
+        onToggleDev={() => {
+          clock.setDevEnabled(!devEnabled);
+          setDevEnabled(!devEnabled);
+          notify.clearAll();
+        }}
+        onClose={closePanel}
+        onQuit={quit}
+      />
+    );
+  else if (showNews) overlay = <NewsModal state={state} onClose={() => act(markNewsSeen)} />;
+
   return (
     <>
       <Hud state={state} now={now} />
@@ -181,28 +268,14 @@ export function App() {
           act(startShift);
         }}
         onRetire={() => act(retire)}
-        onOpenEvent={() => setShowEvent(true)}
-        onLog={() => setModal('log')}
-        onMenu={() => setModal('menu')}
+        onOpenEvent={() => {
+          setPanel(null);
+          setShowEvent(true);
+        }}
+        onPanel={setPanel}
       />
+      {overlay}
       {toast && <Toast title={toast.title} text={toast.text} />}
-      {outcome ? (
-        <OutcomeModal state={state} outcome={outcome} onClose={() => setOutcome(null)} />
-      ) : pending && showEvent ? (
-        <EventModal
-          state={state}
-          pending={pending}
-          onChoose={(choiceId) =>
-            act((s, t) => {
-              setOutcome(resolveEvent(s, pending.instanceId, choiceId, t));
-              if (s.pending.length === 0) setShowEvent(false);
-            })
-          }
-        />
-      ) : null}
-      {modal === 'log' && <LogModal state={state} onClose={() => setModal(null)} />}
-      {modal === 'menu' && <MenuModal onClose={() => setModal(null)} onQuit={quit} />}
-      {state.gameOver && !outcome && <GameOverModal state={state} onNew={quit} />}
       {devEnabled && (
         <DevPanel
           role={state.character.role}

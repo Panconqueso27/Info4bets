@@ -2,57 +2,55 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-## Cómo ejecutarlo
+**Versión actual: beta 0.2.0**
+
+## Probar la beta
+
+- **Android:** instala el APK (`app-debug.apk`). Hay que permitir "instalar apps de origen desconocido". Cada push a GitHub vuelve a compilarlo en Actions, en el artefacto `la-ciudad-beta-apk`.
+- **iPhone / cualquier navegador:** `npm run build:web` genera `dist-web/la-ciudad.html`, un único archivo con todo el juego.
+- **Modo pruebas:** en el menú ☰, "Activar modo pruebas", o `?dev` en la URL. Sirve para acelerar el reloj, adelantar horas o días y forzar sucesos.
+
+## Desarrollo
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173 (también accesible desde el móvil en la misma red)
-npm test           # tests de la lógica del juego
-npm run build      # build de producción en dist/
+npm run dev        # http://localhost:5173
+npm test           # tests de la lógica (Vitest)
+npm run build      # build web en dist/
+npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
-### Modo desarrollo
+Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
 
-Abre el juego con `?dev` al final de la URL (en `npm run dev` está siempre activo). Aparece el botón **DEV** para:
+## Qué incluye la beta
 
-- acelerar el reloj (x60, x600, x3600) o adelantarlo (+1h, +8h, +1 día),
-- forzar un suceso,
-- borrar la partida.
+- **Personajes:** inmigrante o alcalde, con nombre, edad y personalización faceless en pixel art (ropa, peinado y colores).
+- **La ciudad:** una sola, compartida por los dos personajes, con ciclo día/noche según la hora del dispositivo.
+- **Barras:** 5 por personaje (3 compartidas y 2 exclusivas), contador de días y racha estilo Duolingo.
+- **Rutina diaria:** 8 horas reales en el trabajo o la alcaldía. Si un día no vas, pierdes la racha y el sueldo.
+- **Bolsa:** cada mañana sale el periódico *The Daily Ledger* con noticias simuladas (aciertan el 75% de las veces). Durante la jornada se apuesta desde una terminal de trading roja y verde, y el resultado afecta al dinero y al ánimo.
+- **Sucesos del inmigrante:** redada (1 de 5 resultados; la asesoría legal protege), manifestación (unirse u organizarla), vecino en problemas, emergencia médica, asesoría legal, grupo de apoyo, envío de dinero semanal, reunificación familiar y clases de inglés.
+- **Sucesos del alcalde:** huelga, corrupción, desastre natural y manifestación. En la agenda: seguridad, prensa, obra pública, descanso y concejales. Elecciones cada 30 días.
+- **Mejoras permanentes:** casa (inmigrante) y ayudante (alcalde), en 3 niveles cada una.
+- **Objetivos:** 25 logros por personaje. El último dispara el final positivo, y después se puede seguir jugando.
+- **Notificaciones nativas:** sucesos, fin de la jornada y recordatorio diario de la racha.
+- **Guardado automático:** en la app se guarda además en el almacenamiento nativo.
 
-Así se puede probar sin esperar 8 horas reales. Si después vuelves a la hora real, la partida queda "en el futuro" y no avanza hasta que el reloj real la alcance; lo más sencillo es borrar la partida.
-
-## Estado: Fase 1 (prototipo jugable)
-
-- Selección de personaje, nombre y edad, y personalización (ropa, peinado, colores de ropa, pelo y piel). Personajes *faceless* dibujados por capas.
-- Ciudad única en pixel art, con alcaldía, diner, residencia, neones, taxis y transeúntes. **Ciclo día/noche con la hora real del dispositivo.**
-- 5 barras por personaje (3 compartidas y 2 exclusivas), contador de días y racha.
-- Rutina diaria: mandar al personaje al trabajo o a la alcaldía arranca **8 horas reales**. Solo al cumplirse se puede retirar y cobrar.
-- Si un día no se va a trabajar, **se rompe la racha y no hay sueldo** (los gastos del día se cobran igual). El total de días nunca se reinicia.
-- Sucesos aleatorios durante la jornada, con aviso en pantalla y notificación del navegador:
-  - **Redada** (inmigrante): se sortea 1 de 5 resultados (2 buenos, 3 malos). La detención dura **1 día**, se pierde la paga y la racha queda congelada.
-  - **Huelga municipal** (alcalde): ceder cuesta el 25% del dinero; no ceder suele salir mal.
-- Fin de partida según las reglas de cada personaje.
-- Guardado automático en el dispositivo.
+Cada suceso está separado de sus consecuencias. Cada resultado es bueno o malo y trae su mensaje narrativo, así que no hay cambios silenciosos en las barras.
 
 ## Arquitectura
 
 ```
-src/
-  core/       Reglas del juego en TypeScript puro (sin dibujo): estado, días, racha, jornada, sucesos, finales
-    events/   Catálogo de sucesos como datos: suceso → opciones → resultados (bueno/malo + mensaje + efectos)
-  art/        Pixel art generado por código: personajes, ciudad, ciclo día/noche, tipografía de píxeles
-  scene/      Escena de Phaser (la ciudad) y el puente con la interfaz
-  ui/         Interfaz con Preact: menús, HUD, barras, modales
-  platform/   Reloj (con modo dev), guardado y notificaciones
-tests/        Tests de la lógica (Vitest)
+src/core/         Reglas en TypeScript puro: estado, días, jornada, bolsa, mejoras, logros
+src/core/events/  Sucesos como datos (inmigrante.ts, alcalde.ts)
+src/art/          Pixel art generado por código: personajes, ciudad, día/noche
+src/scene/        Escena de Phaser
+src/ui/           Interfaz (Preact): HUD, terminal de bolsa, paneles
+src/platform/     Reloj, guardado y notificaciones (web y nativas)
+android/          Proyecto Android (Capacitor)
+resources/        Icono fuente
 ```
 
-Para **añadir un suceso** basta con agregar una entrada en `src/core/events/catalog.ts`. Cada resultado lleva su mensaje narrativo, así que no hay cambios silenciosos en las barras. Los números son provisionales; el balanceo fino es de una fase posterior.
+## Pendiente (siguientes fases)
 
-## Próximas fases
-
-2. **Bolsa:** noticias diarias simuladas y una terminal de trading roja y verde.
-3. **Catálogo completo de sucesos** y empaquetado móvil con **Capacitor** (Android/iOS), con notificaciones locales que funcionan con la app cerrada.
-4. **Mejoras permanentes:** casa (inmigrante) y ayudante (alcalde) por niveles, más los finales.
-5. **Logros:** los 25 de cada personaje.
-6. **Contenido y pulido:** barrios, personajes secundarios, arte final y balanceo.
+Barrios y lugares, personajes secundarios, diseño visual final y balanceo numérico fino. Los números actuales son provisionales y están ajustados con simulaciones de partidas.

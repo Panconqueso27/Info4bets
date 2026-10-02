@@ -1,6 +1,7 @@
 import '@fontsource/press-start-2p';
 import '@fontsource/vt323';
 import { render } from 'preact';
+import { restoreNativeSave } from './platform/save';
 import { createGame } from './scene/CityScene';
 import { App } from './ui/App';
 import './ui/styles.css';
@@ -14,4 +15,5 @@ root.append(stage, ui);
 
 // Esperamos la fuente de píxeles para que la escena la use desde el principio.
 document.fonts.load('8px "Press Start 2P"').finally(() => createGame(stage));
-render(<App />, ui);
+// En la app, la partida guardada en el almacenamiento nativo se recupera antes de mostrar nada.
+restoreNativeSave().finally(() => render(<App />, ui));
