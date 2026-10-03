@@ -7,7 +7,9 @@ import { hashString, mixSeed, mulberry32, pickWeighted, randRange } from './rng'
 import { addDays, dateKey, daysBetween, HOUR, startOfDay } from './time';
 import { nextUpgrade, UPGRADES } from './upgrades';
 import { errandWeather, weatherFor, weatherWeight, type Weather } from './weather';
-import type { BarId, Bars, Character, GameState, LogEntry, LogKind, PendingEvent, Role } from './types';
+import type { BarId, Bars, Character, GameState, LogEntry, LogKind, OtherCharacter, PendingEvent, Role } from './types';
+import { ACHIEVEMENT_UNLOCKS, COSMETIC_BY_ID, STREAK_REWARDS } from './cosmetics';
+import { NPC_EFFECTS, NPCS, rememberNpc } from './npcs';
 
 const LOG_LIMIT = 120;
 /** Si el jugador vuelve tras mucho tiempo, no simulamos más de un año de días perdidos. */
@@ -32,7 +34,13 @@ export const STAKES: Record<Role, number[]> = {
 /** Coste de que la salud llegue a cero (hospital). */
 const HOSPITAL_BILL: Record<Role, number> = { inmigrante: 300, alcalde: 50_000 };
 
-export function newGame(character: Character, now: number, seed = Math.floor(Math.random() * 2 ** 32)): GameState {
+/** El otro protagonista por defecto, si el jugador no tiene una partida anterior con ese rol. */
+export const DEFAULT_OTHER: Record<Role, OtherCharacter> = {
+  alcalde: { role: 'alcalde', name: 'Harold Brennan', legacy: false, look: { outfit: 'traje', hair: 'tupe', skin: '#f2d0b0', hairColor: '#c9c4bc', outfitColor: '#3a3a46' } },
+  inmigrante: { role: 'inmigrante', name: 'Manny Ortiz', legacy: false, look: { outfit: 'camarero', hair: 'corto', skin: '#9a6440', hairColor: '#1c1818', outfitColor: '#c0392b' } },
+};
+
+export function newGame(character: Character, now: number, seed = Math.floor(Math.random() * 2 ** 32), other?: OtherCharacter, cosmetics: string[] = []): GameState {
   const role = ROLES[character.role];
   const today = dateKey(now);
   const state: GameState = {
@@ -65,6 +73,10 @@ export function newGame(character: Character, now: number, seed = Math.floor(Mat
     notices: [],
     ending: null,
     term: 1,
+    npcs: {},
+    other: other ?? DEFAULT_OTHER[character.role === 'inmigrante' ? 'alcalde' : 'inmigrante'],
+    cosmetics: [...cosmetics],
+    highlights: [],
   };
   log(state, now, 'info', 'Día 1', `${character.name} empieza su vida en la ciudad. Cada día tendrás que ir ${role.toWorkplace}.`);
   dailyCheck(state, now);
@@ -317,7 +329,7 @@ export function startShift(state: GameState, now: number): void {
   const w = todayWeather(state);
   const pool = eventsFor(state.character.role, 'aleatorio', 'personal')
     .filter((e) => eligible(state, e, day))
-    .map((e) => ({ ...e, weight: e.weight * weatherWeight(e.id, w) }));
+    .map((e) => ({ ...e, weight: e.weight * weatherWeight(e.id, w) * (e.id === 'huelga' && state.flags.treguaSindical ? 0.25 : 1) }));
   const used = new Set<string>();
   const slots = [];
   // Siempre hay un suceso ligero en los primeros 2 minutos, para enganchar.
@@ -341,6 +353,7 @@ export function startShift(state: GameState, now: number): void {
   state.streak += 1;
   state.bestStreak = Math.max(state.bestStreak, state.streak);
   log(state, now, 'info', role.goToWork, `${state.character.name} llega ${role.toWorkplace}. Racha: ${state.streak} 🔥`);
+  streakReward(state, now);
 }
 
 export function canRetire(state: GameState, now: number): boolean {
@@ -362,9 +375,11 @@ export function retire(state: GameState, now: number): void {
   const wear: Bars = { ...role.shiftWear };
   const relief = (UPGRADES[roleId].perLevel.shiftStressRelief ?? 0) * state.upgradeLevel;
   if (relief) wear.estres = Math.max(0, (wear.estres ?? 0) - relief);
-  const deltas = mergeDeltas(applyBars(state, { dinero: role.shiftPay }), applyBars(state, wear));
+  const pay = shiftPay(state);
+  const deltas = mergeDeltas(applyBars(state, { dinero: pay }), applyBars(state, wear));
   state.flags.jornadas = Number(state.flags.jornadas ?? 0) + 1;
-  log(state, now, 'bueno', 'Jornada completa', `${state.character.name} termina sus 8 horas en ${role.workplace} y cobra ${role.formatMoney(role.shiftPay)}.`, deltas);
+  addStat(state, 'ingresos', pay);
+  log(state, now, 'bueno', 'Jornada completa', `${state.character.name} termina sus 8 horas en ${role.workplace} y cobra ${role.formatMoney(pay)}.`, deltas);
   checkGameOver(state, now);
   evaluateAchievements(state, now);
 }
@@ -436,6 +451,7 @@ function settleBets(state: GameState, now: number, p: number) {
     lines.push(`${bet.ticker} ${bet.dir > 0 ? '▲' : '▼'} ${bet.entryPrice.toFixed(2)}→${exit.toFixed(2)}: ${won ? 'acertaste' : 'fallaste'} (${ret >= 0 ? '+' : ''}${role.formatMoney(ret)})`);
   }
   state.market.bets = [];
+  addStat(state, net >= 0 ? 'bolsaGanado' : 'bolsaPerdido', Math.abs(net));
   // El resultado afecta al dinero y al ánimo.
   const mood: Bars = net > 0 ? { estres: -3 } : net < 0 ? { estres: 4 } : {};
   if (roleId === 'inmigrante' && net !== 0) mood.esperanza = net > 0 ? 2 : -2;
@@ -456,8 +472,10 @@ export function buyUpgrade(state: GameState, now: number) {
   if (!next) throw new Error('Ya tienes el nivel máximo.');
   const role = ROLES[roleId];
   const money = state.bars.dinero ?? 0;
-  if (money < next.cost) throw new Error(`Te faltan ${role.formatMoney(next.cost - money)}.`);
-  const deltas = mergeDeltas(applyBars(state, { dinero: -next.cost }), applyBars(state, next.instant));
+  const cost = upgradeCost(state, next.cost);
+  if (money < cost) throw new Error(`Te faltan ${role.formatMoney(cost - money)}.`);
+  const deltas = mergeDeltas(applyBars(state, { dinero: -cost }), applyBars(state, next.instant));
+  if (cost < next.cost) state.flags.descuentoCasa = false;
   state.upgradeLevel = next.level;
   log(state, now, 'bueno', `${UPGRADES[roleId].title}: nivel ${next.level}`, `${next.name}. ${next.description}`, deltas);
   evaluateAchievements(state, now);
@@ -513,6 +531,7 @@ function eventVars(state: GameState, def: EventDef, seed: number): Record<string
   const vars: Record<string, string> = {
     name: state.character.name,
     place: ROLES[state.character.role].workplace,
+    otro: state.other?.name ?? DEFAULT_OTHER[state.character.role === 'inmigrante' ? 'alcalde' : 'inmigrante'].name,
   };
   for (const [k, options] of Object.entries(def.variants ?? {})) {
     vars[k] = options[Math.floor(rand() * options.length)];
@@ -566,6 +585,11 @@ export function resolveEvent(state: GameState, instanceId: string, choiceId: str
     state.eventHistory.push(def.id);
     if (state.eventHistory.length > 10) state.eventHistory.shift();
   }
+  // La relación con los personajes recurrentes recuerda esta decisión.
+  const rel = NPC_EFFECTS[def.id]?.byChoice[choice.id];
+  if (rel) rememberNpc(state, NPC_EFFECTS[def.id].npc, rel.afinidad, rel.recuerdo);
+  addStat(state, outcome.result === 'bueno' ? 'sucesosBuenos' : 'sucesosMalos', 1);
+  remember(state, `${def.title}: ${outcome.title}`, dayNumber(state, now), deltas, outcome.result);
   log(state, now, outcome.result, `${def.title}: ${outcome.title}`, message, deltas);
   if (outcome.effects.endGame) endGame(state, now, outcome.effects.endGame.title, outcome.effects.endGame.text);
   checkGameOver(state, now);
@@ -596,6 +620,7 @@ function applyEffects(state: GameState, fx: Effects, now: number): Bars {
   }
   if (fx.flags) Object.assign(state.flags, fx.flags);
   for (const c of fx.counters ?? []) state.flags[c] = Number(state.flags[c] ?? 0) + 1;
+  if (fx.npc) rememberNpc(state, fx.npc.id, fx.npc.afinidad, fx.npc.recuerdo);
   return deltas;
 }
 
@@ -631,6 +656,11 @@ export function evaluateAchievements(state: GameState, now: number): boolean {
       any = changed = true;
     }
     if (!any) break;
+  }
+  const count = Object.keys(state.achievements).length;
+  for (const u of ACHIEVEMENT_UNLOCKS) {
+    const id = u.cosmetic[state.character.role];
+    if (count >= u.count && id) changed = grantCosmetic(state, id, `${u.count} logros`) || changed;
   }
   return changed;
 }
@@ -770,6 +800,7 @@ function finishErrand(state: GameState, at: number) {
   const wear: Bars = { salud: (ERRAND_WEAR.salud ?? 0) - w.extraWear, estres: (ERRAND_WEAR.estres ?? 0) + w.extraWear };
   const deltas = mergeDeltas(applyBars(state, { dinero: pay }), applyBars(state, wear));
   state.flags.repartos = Number(state.flags.repartos ?? 0) + 1;
+  addStat(state, 'ingresos', pay);
   const fmt = ROLES.inmigrante.formatMoney;
   log(state, at, 'bueno', 'Reparto terminado', `${state.character.name} vuelve con los pies molidos y ${fmt(pay)} en el bolsillo.${w.note ? ` ${w.note}` : ''}`, deltas);
   state.notices.push({ kind: 'aviso', title: 'REPARTO', text: `Reparto terminado: +${fmt(pay)}` });
@@ -789,4 +820,96 @@ export function buyCar(state: GameState, now: number) {
   state.flags.auto = true;
   log(state, now, 'bueno', 'Auto propio', 'Un sedán usado del 79, con la radio que solo coge una emisora. Ahora el reparto dura 2 horas.', deltas);
   evaluateAchievements(state, now);
+}
+
+// ---------------------------------------------------------------------------
+// Racha, armario y estadísticas
+// ---------------------------------------------------------------------------
+
+/** Sueldo de la jornada (Sal puede subirlo). */
+export function shiftPay(state: GameState): number {
+  return ROLES[state.character.role].shiftPay + (state.flags.aumento ? 20 : 0);
+}
+
+/** Precio de la siguiente mejora (con el descuento de Don Ramiro, si lo hay). */
+export function upgradeCost(state: GameState, base: number): number {
+  return state.flags.descuentoCasa && state.character.role === 'inmigrante' ? Math.round(base * 0.8) : base;
+}
+
+function addStat(state: GameState, key: string, n: number) {
+  state.flags[key] = Number(state.flags[key] ?? 0) + n;
+}
+
+/** Guarda las decisiones con más impacto para el resumen final. */
+function remember(state: GameState, title: string, day: number, deltas: Bars, kind: LogKind) {
+  const role = ROLES[state.character.role];
+  let score = 0;
+  for (const [k, v] of Object.entries(deltas) as [BarId, number][]) {
+    const def = role.bars.find((b) => b.id === k);
+    score += def?.moneyScale ? (Math.abs(v) / def.moneyScale) * 100 : Math.abs(v);
+  }
+  const list = (state.highlights ??= []);
+  list.push({ title, day, score: Math.round(score), kind });
+  list.sort((a, b) => b.score - a.score);
+  list.length = Math.min(list.length, 5);
+}
+
+export function grantCosmetic(state: GameState, id: string, why: string): boolean {
+  const list = (state.cosmetics ??= []);
+  if (list.includes(id) || !COSMETIC_BY_ID[id]) return false;
+  list.push(id);
+  state.notices.push({ kind: 'armario', title: 'ARMARIO', text: `Nuevo: ${COSMETIC_BY_ID[id].label} (${why}). Cámbiate en el menú ☰.` });
+  return true;
+}
+
+function streakReward(state: GameState, now: number) {
+  const r = STREAK_REWARDS.find((x) => x.days === state.streak);
+  if (!r || state.flags[`racha${r.days}`]) return;
+  state.flags[`racha${r.days}`] = true;
+  const roleId = state.character.role;
+  const deltas = applyBars(state, { dinero: r.money[roleId] });
+  log(state, now, 'bueno', `🔥 ${r.title}`, `Recompensa por tu racha de ${r.days} días: ${ROLES[roleId].formatMoney(r.money[roleId])}.`, deltas);
+  state.notices.push({ kind: 'racha', title: `RACHA DE ${r.days} DÍAS`, text: `${r.title} +${ROLES[roleId].formatMoney(r.money[roleId])}` });
+  const cos = r.cosmetic?.[roleId];
+  if (cos) grantCosmetic(state, cos, `racha de ${r.days} días`);
+}
+
+/** Cambia la ropa o el peinado (solo lo básico o lo desbloqueado). */
+export function changeLook(state: GameState, look: Character['look']) {
+  state.character.look = { ...look };
+}
+
+export interface Stats {
+  dias: number;
+  mejorRacha: number;
+  jornadas: number;
+  platos: number;
+  documentos: number;
+  repartos: number;
+  ingresos: number;
+  bolsaNeta: number;
+  buenos: number;
+  malos: number;
+  logros: number;
+  personas: number;
+  destacadas: NonNullable<GameState['highlights']>;
+}
+
+export function gameStats(state: GameState, now: number): Stats {
+  const f = (k: string) => Number(state.flags[k] ?? 0);
+  return {
+    dias: state.gameOver?.day ?? dayNumber(state, now),
+    mejorRacha: state.bestStreak,
+    jornadas: f('jornadas'),
+    platos: f('platosLavados'),
+    documentos: f('documentosFirmados'),
+    repartos: f('repartos'),
+    ingresos: f('ingresos'),
+    bolsaNeta: f('bolsaGanado') - f('bolsaPerdido'),
+    buenos: f('sucesosBuenos'),
+    malos: f('sucesosMalos'),
+    logros: Object.keys(state.achievements).length,
+    personas: Object.keys(state.npcs ?? {}).filter((id) => NPCS[id]?.role === state.character.role).length,
+    destacadas: state.highlights ?? [],
+  };
 }

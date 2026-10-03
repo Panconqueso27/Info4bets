@@ -21,6 +21,8 @@ export interface Effects {
   unlock?: string[];
   /** Termina la partida con este final. */
   endGame?: { title: string; text: string };
+  /** Cambia la relación con un personaje recurrente. */
+  npc?: { id: string; afinidad: number; recuerdo?: string };
 }
 
 export type ResultKind = 'bueno' | 'malo';
@@ -67,6 +69,10 @@ export interface EventDef {
   kind: 'aleatorio' | 'personal' | 'diario' | 'accion' | 'apertura';
   /** Ilustración de la tarjeta (ver art/icons.ts). */
   icon?: string;
+  /** Personaje recurrente protagonista (muestra su retrato en la tarjeta). */
+  npc?: string;
+  /** El protagonista del otro rol aparece en este suceso (encuentros). */
+  cross?: boolean;
   title: string;
   /** Texto de la notificación push. */
   notification: string;

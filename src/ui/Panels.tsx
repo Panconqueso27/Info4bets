@@ -6,6 +6,7 @@ import { ROLES } from '../core/roles';
 import type { GameState } from '../core/types';
 import { UPGRADES } from '../core/upgrades';
 import { startOfDay } from '../core/time';
+import { StatsView } from './Extras';
 
 function Modal({ title, onClose, children, kicker }: { title: string; onClose: () => void; children: any; kicker?: string }) {
   return (
@@ -159,14 +160,7 @@ export function EndingModal({ state, onClose }: { state: GameState; onClose: () 
         <div class="kicker">OBJETIVO FINAL CUMPLIDO · DÍA {e.day}</div>
         <h3><Letters text={e.title} /></h3>
         <p>{e.text}</p>
-        <div class="stats">
-          <div class="stat">
-            <b>{Object.keys(state.achievements).length}</b>logros
-          </div>
-          <div class="stat">
-            <b>{state.bestStreak}</b>mejor racha
-          </div>
-        </div>
+        <StatsView state={state} now={e.at} />
         <button class="btn good" onClick={onClose}>
           Seguir viviendo en la ciudad
         </button>

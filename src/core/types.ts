@@ -91,7 +91,7 @@ export interface MarketState {
 }
 
 export interface Notice {
-  kind: 'logro' | 'aviso' | 'final';
+  kind: 'logro' | 'aviso' | 'final' | 'racha' | 'armario';
   title: string;
   text: string;
 }
@@ -147,4 +147,20 @@ export interface GameState {
   term: number;
   /** Reparto de paquetes en curso (trabajo extra del inmigrante). */
   errand?: { startedAt: number; endsAt: number } | null;
+  /** Personajes recurrentes: afinidad y recuerdos. */
+  npcs?: Record<string, { afinidad: number; recuerdos: string[] }>;
+  /** El otro protagonista que vive en la misma ciudad (de una partida anterior o por defecto). */
+  other?: OtherCharacter;
+  /** Ropa y peinados desbloqueados en esta partida. */
+  cosmetics?: string[];
+  /** Decisiones más marcadas de la partida (para las estadísticas). */
+  highlights?: { title: string; day: number; score: number; kind: LogKind }[];
+}
+
+export interface OtherCharacter {
+  role: Role;
+  name: string;
+  look: Look;
+  /** Viene de una partida anterior del jugador. */
+  legacy: boolean;
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   advance,
   applyMinigame,
+  changeLook,
   buyCar,
   buyUpgrade,
   startErrand,
@@ -33,6 +34,8 @@ import { MarketTerminal } from './Market';
 import { AchievementsModal, AgendaModal, EndingModal, NewsModal, UpgradeModal } from './Panels';
 import { Dock, GameOverModal, Hud, LogModal, MenuModal, Toast, eventNotification, type Panel } from './Play';
 import { DecisionCard, ResultCard } from './Cards';
+import { markTutorial, PeopleModal, RewardModal, StatsModal, TUTORIAL, TutorialBubble, tutorialSeen, WardrobeModal } from './Extras';
+import { globalCosmetics, keepCosmetics, otherFor, rememberCharacter } from '../platform/legacy';
 import { Dishwasher } from './Dishwasher';
 import { Paperwork } from './Paperwork';
 import * as audio from '../platform/audio';
@@ -69,6 +72,8 @@ export function App() {
   const [devEnabled, setDevEnabled] = useState(() => clock.isDevEnabled());
   const [endingSeen, setEndingSeen] = useState(false);
   const [minigame, setMinigame] = useState(false);
+  const [reward, setReward] = useState<{ title: string; text: string } | null>(null);
+  const [tutTick, setTutTick] = useState(0);
   const seenPending = useRef(new Set<string>());
 
   const state = game.current;
@@ -139,6 +144,15 @@ export function App() {
     return () => bridge.onTap(null);
   });
 
+  // Al terminar (o alcanzar el final), el protagonista queda en la ciudad para futuras partidas.
+  useEffect(() => {
+    const s = game.current;
+    if (!s || s.flags.legacySaved || !(s.gameOver || s.ending)) return;
+    rememberCharacter(s, s.gameOver?.day ?? s.ending?.day ?? 1);
+    s.flags.legacySaved = true;
+    commit();
+  });
+
   // La escena refleja dónde está el personaje.
   useEffect(() => {
     if (playing)
@@ -147,9 +161,10 @@ export function App() {
         look: state.character.look,
         spot: spotFor(state, now),
         vehicle: state.flags.auto ? 'auto' : 'pie',
+        other: state.other ?? null,
         weather: ((devEnabled && devWeather()) || todayWeather(state)) as Weather,
       });
-    else bridge.set({ role: null, look: null, spot: 'home', weather: 'despejado' });
+    else bridge.set({ role: null, look: null, spot: 'home', weather: 'despejado', other: null });
   });
 
   // Avisos: sucesos nuevos y logros/bolsa.
@@ -165,8 +180,13 @@ export function App() {
     if (!toast && state.notices.length) {
       const n = takeNotice(state)!;
       setToast({ title: n.title, text: n.text });
-      if (n.kind === 'logro' || n.kind === 'final') audio.play.achievement();
+      if (n.kind === 'racha') {
+        setReward({ title: n.title, text: n.text });
+        audio.play.achievement();
+        vibrate([60, 40, 120]);
+      } else if (n.kind === 'logro' || n.kind === 'final') audio.play.achievement();
       else audio.play.notify();
+      if (n.kind === 'armario') keepCosmetics(state.cosmetics ?? []);
       commit();
     }
   });
@@ -197,7 +217,7 @@ export function App() {
   const begin = (c: Character) => {
     deleteGame();
     seenPending.current.clear();
-    game.current = newGame(c, clock.now());
+    game.current = newGame(c, clock.now(), undefined, otherFor(c.role), globalCosmetics());
     setEndingSeen(false);
     commit();
     setScreen({ id: 'play' });
@@ -260,6 +280,7 @@ export function App() {
   let overlay = null;
   if (state.gameOver && !outcome) overlay = <GameOverModal state={state} onNew={quit} />;
   else if (outcome) overlay = <ResultCard state={state} outcome={outcome} onClose={() => setOutcome(null)} />;
+  else if (reward) overlay = <RewardModal title={reward.title} text={reward.text} onClose={() => setReward(null)} />;
   else if (minigame)
     overlay =
       state.character.role === 'inmigrante' ? (
@@ -313,6 +334,19 @@ export function App() {
   else if (panel === 'mejora') overlay = <UpgradeModal state={state} onBuy={() => act(buyUpgrade)} onBuyCar={() => act(buyCar)} onClose={closePanel} />;
   else if (panel === 'logros') overlay = <AchievementsModal state={state} onClose={closePanel} />;
   else if (panel === 'diario') overlay = <LogModal state={state} onClose={closePanel} />;
+  else if (panel === 'personas') overlay = <PeopleModal state={state} onClose={closePanel} />;
+  else if (panel === 'stats') overlay = <StatsModal state={state} now={now} onClose={closePanel} />;
+  else if (panel === 'armario')
+    overlay = (
+      <WardrobeModal
+        state={state}
+        onClose={closePanel}
+        onSave={(look) => {
+          act((s) => changeLook(s, look));
+          setPanel(null);
+        }}
+      />
+    );
   else if (panel === 'menu')
     overlay = (
       <MenuModal
@@ -325,9 +359,30 @@ export function App() {
         }}
         onClose={closePanel}
         onQuit={quit}
+        onOpen={setPanel}
+        onTutorial={() => {
+          resetTutorial();
+          setPanel(null);
+          setTutTick((t) => t + 1);
+        }}
       />
     );
   else if (showNews) overlay = <NewsModal state={state} onClose={() => act(markNewsSeen)} />;
+
+  // Tutorial: un globo cada vez, según lo que esté pasando en pantalla.
+  void tutTick;
+  const seen = tutorialSeen();
+  const cardVisible = !!(pending && showEvent && !outcome && !minigame && !reward);
+  const tutStep =
+    state.gameOver || outcome || reward || minigame || (panel && !cardVisible)
+      ? null
+      : TUTORIAL.find((t) => {
+          if (seen.includes(t.id)) return false;
+          if (t.id === 'tarjeta') return cardVisible;
+          if (cardVisible || showNews) return false;
+          if (t.id === 'minijuego') return !!state.shift && !state.shift.cancelled && clock.now() < state.shift.endsAt;
+          return true;
+        }) ?? null;
 
   return (
     <>
@@ -354,6 +409,19 @@ export function App() {
         onErrand={() => act(startErrand)}
       />
       {overlay}
+      {tutStep && (
+        <TutorialBubble
+          step={tutStep}
+          onNext={() => {
+            markTutorial(tutStep.id);
+            setTutTick((t) => t + 1);
+          }}
+          onSkip={() => {
+            markTutorial('todo');
+            setTutTick((t) => t + 1);
+          }}
+        />
+      )}
       {toast && <Toast title={toast.title} text={toast.text} />}
       {devEnabled && (
         <DevPanel
@@ -371,4 +439,20 @@ export function App() {
       )}
     </>
   );
+}
+
+function vibrate(pattern: number | number[]) {
+  try {
+    navigator.vibrate?.(pattern);
+  } catch {
+    /* sin vibración */
+  }
+}
+
+function resetTutorial() {
+  try {
+    localStorage.removeItem('laciudad.tutorial');
+  } catch {
+    /* sin almacenamiento */
+  }
 }

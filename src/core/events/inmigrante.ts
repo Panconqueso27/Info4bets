@@ -83,6 +83,8 @@ const redada: EventDef = {
           effects: {
             bars: { reputacion: 12 },
             counters: ['redadasSinDetencion', 'vecinosAyudados'],
+            flags: { ramiroEscondido: true },
+            npc: { id: 'ramiro', afinidad: 3, recuerdo: 'Lo escondiste durante la redada.' },
             unlock: ['inm07'],
           },
         },

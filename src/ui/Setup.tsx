@@ -1,6 +1,8 @@
 import { useState } from 'preact/hooks';
 import { Letters } from './AnimText';
-import { defaultLook, HAIR_COLORS, HAIRS, OUTFIT_COLORS, OUTFITS, randomLook, SKINS, type Option } from '../art/character';
+import { lookOptions } from './Extras';
+import { globalCosmetics } from '../platform/legacy';
+import { defaultLook, HAIR_COLORS, OUTFIT_COLORS, randomLook, SKINS, type Option } from '../art/character';
 import { ROLES } from '../core/roles';
 import type { Character, Look, Role } from '../core/types';
 import { CharacterCanvas } from './CharacterCanvas';
@@ -165,6 +167,8 @@ export function Customizer({
   onBack: () => void;
 }) {
   const [look, setLook] = useState<Look>(() => defaultLook(role));
+  // Lo desbloqueado en partidas anteriores también se puede elegir al empezar.
+  const opts = lookOptions(role, globalCosmetics());
   const set = (patch: Partial<Look>) => setLook({ ...look, ...patch });
 
   return (
@@ -175,8 +179,8 @@ export function Customizer({
       <div class="preview">
         <CharacterCanvas look={look} scale={6} walk />
       </div>
-      <Cycle label="ROPA" options={OUTFITS[role]} value={look.outfit} onChange={(outfit) => set({ outfit })} />
-      <Cycle label="PEINADO" options={HAIRS} value={look.hair} onChange={(hair) => set({ hair })} />
+      <Cycle label="ROPA" options={opts.outfits.filter((o) => !o.locked)} value={look.outfit} onChange={(outfit) => set({ outfit })} />
+      <Cycle label="PEINADO" options={opts.hairs.filter((o) => !o.locked)} value={look.hair} onChange={(hair) => set({ hair })} />
       <Swatches label="COLOR ROPA" colors={OUTFIT_COLORS} value={look.outfitColor} onChange={(outfitColor) => set({ outfitColor })} />
       <Swatches label="PELO" colors={HAIR_COLORS} value={look.hairColor} onChange={(hairColor) => set({ hairColor })} />
       <Swatches label="PIEL" colors={SKINS} value={look.skin} onChange={(skin) => set({ skin })} />

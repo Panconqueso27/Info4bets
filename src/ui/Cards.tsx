@@ -6,6 +6,8 @@ import { viewEvent, type ResolvedOutcome } from '../core/game';
 import { ROLES } from '../core/roles';
 import type { BarId, Bars, GameState, PendingEvent } from '../core/types';
 import { play } from '../platform/audio';
+import { afinidad, NPCS } from '../core/npcs';
+import { CharacterCanvas } from './CharacterCanvas';
 import { useSwipe, type Dir } from './useSwipe';
 
 const KIND_LABEL = { aleatorio: 'SUCESO', personal: 'SUCESO PERSONAL', diario: 'HOY', accion: 'DECISIÓN', apertura: 'AL LLEGAR' } as const;
@@ -51,6 +53,29 @@ function BarStrip({ state, hint, deltas }: { state: GameState; hint?: Partial<Re
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Quién protagoniza la tarjeta: un personaje recurrente o el otro protagonista. */
+function NpcStrip({ state, npc, cross }: { state: GameState; npc?: string; cross?: boolean }) {
+  const def = npc ? NPCS[npc] : undefined;
+  const look = def?.look ?? (cross ? state.other?.look : undefined);
+  if (!look) return null;
+  const name = def?.name ?? state.other?.name ?? '';
+  const title = def?.title ?? (state.other?.role === 'alcalde' ? 'El alcalde' : 'Trabaja en el diner');
+  const af = npc ? afinidad(state, npc) : null;
+  return (
+    <div class="npc-strip">
+      <CharacterCanvas look={look} scale={2} />
+      <div>
+        <b>{name}</b>
+        <small>
+          {title}
+          {cross && state.other?.legacy ? ' · de tu otra partida' : ''}
+        </small>
+        {af !== null && <span class="hearts">{af >= 0 ? '♥'.repeat(af) + '♡'.repeat(5 - af) : '💔'.repeat(Math.min(3, -af))}</span>}
+      </div>
     </div>
   );
 }
@@ -114,6 +139,7 @@ export function DecisionCard({ state, pending, onDecide }: { state: GameState; p
           <div class="dcard-art">
             <Icon id={view.def.icon} />
           </div>
+          <NpcStrip state={state} npc={view.def.npc} cross={view.def.cross} />
           <h3 class="dcard-title"><Letters text={view.def.title} /></h3>
           <p class="dcard-text"><Words text={view.intro} delay={250} /></p>
         </div>
@@ -161,6 +187,11 @@ export function ResultCard({ state, outcome, onClose }: { state: GameState; outc
   useEffect(() => {
     if (good) play.good();
     else play.bad();
+    try {
+      navigator.vibrate?.(good ? [30, 40, 30] : [180]);
+    } catch {
+      /* sin vibración */
+    }
   }, []);
   const entries = Object.entries(outcome.deltas) as [BarId, number][];
   return (

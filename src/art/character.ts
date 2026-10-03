@@ -32,6 +32,19 @@ export const OUTFITS: Record<Role, Option[]> = {
   ],
 };
 
+/** Ropa y peinados desbloqueables (ver core/cosmetics.ts). */
+export const EXTRA_OUTFITS: Record<string, Option> = {
+  cuero: { id: 'cuero', label: 'Chaqueta de cuero' },
+  domingo: { id: 'domingo', label: 'Traje de domingo' },
+  esmoquin: { id: 'esmoquin', label: 'Esmoquin' },
+  jogging: { id: 'jogging', label: 'Chándal ochentero' },
+};
+export const EXTRA_HAIRS: Record<string, Option> = {
+  permanente: { id: 'permanente', label: 'Permanente' },
+  gorra: { id: 'gorra', label: 'Gorra de béisbol' },
+  cresta: { id: 'cresta', label: 'Cresta punk' },
+};
+
 export const HAIRS: Option[] = [
   { id: 'corto', label: 'Corto' },
   { id: 'mullet', label: 'Mullet' },
@@ -162,6 +175,69 @@ const WHITE = '#f1ede3';
 const DARK = '#22222a';
 
 const OUTFIT_STYLE: Record<string, OutfitStyle> = {
+  // --- desbloqueables
+  cuero: {
+    body: '#1c1a20',
+    sleeve: '#1c1a20',
+    sleeveLen: 8,
+    pants: '#3b5b8c',
+    shoes: '#111',
+    detail: (px) => {
+      px(7, 10, 2, 10, '#efe9dc');
+      px(5, 10, 2, 3, '#2e2b33');
+      px(9, 10, 2, 3, '#2e2b33');
+      px(6, 13, 1, 6, '#9a9aa6');
+      px(4, 12, 1, 1, '#4a4652');
+      px(11, 12, 1, 1, '#4a4652');
+    },
+  },
+  domingo: {
+    body: '#6b4a2b',
+    sleeve: '#6b4a2b',
+    sleeveLen: 8,
+    pants: '#5a3e24',
+    shoes: '#2a1a10',
+    detail: (px) => {
+      px(6, 10, 4, 1, '#efe2c4');
+      px(7, 11, 2, 3, '#efe2c4');
+      px(7, 11, 2, 6, '#2e5a8a');
+      px(6, 11, 1, 4, '#4f3420');
+      px(9, 11, 1, 4, '#4f3420');
+      px(9, 13, 1, 1, '#e8414f');
+    },
+  },
+  esmoquin: {
+    body: '#111116',
+    sleeve: '#111116',
+    sleeveLen: 8,
+    pants: '#111116',
+    shoes: '#000',
+    detail: (px) => {
+      px(6, 10, 4, 1, '#ffffff');
+      px(6, 11, 4, 7, '#ffffff');
+      px(6, 10, 4, 1, '#000');
+      px(7, 10, 2, 1, '#2a2a2a');
+      for (const y of [13, 15, 17]) px(7, y, 1, 1, '#222');
+      px(5, 11, 1, 5, '#2a2a33');
+      px(10, 11, 1, 5, '#2a2a33');
+    },
+  },
+  jogging: {
+    body: 'P',
+    sleeve: 'P',
+    sleeveLen: 8,
+    pants: 'P',
+    shoes: '#f1ede3',
+    detail: (px, { Pd }) => {
+      px(2, 11, 1, 8, '#f1ede3');
+      px(13, 11, 1, 8, '#f1ede3');
+      px(4, 22, 1, 6, '#f1ede3');
+      px(11, 22, 1, 6, '#f1ede3');
+      px(5, 10, 6, 1, Pd);
+      px(7, 11, 2, 1, '#f1ede3');
+    },
+  },
+
   obrero: {
     body: '#d6cfbd',
     sleeve: '#d6cfbd',
@@ -301,10 +377,34 @@ function drawHair(style: string, layer: 'back' | 'front', px: Px, H: string, Hd:
       case 'afro':
         px(3, 1, 10, 8, Hd);
         break;
+      case 'permanente':
+        px(3, 2, 10, 10, Hd);
+        break;
     }
     return;
   }
   switch (style) {
+    case 'permanente':
+      px(5, 0, 6, 1, H);
+      px(4, 1, 8, 3, H);
+      px(3, 3, 2, 7, H);
+      px(11, 3, 2, 7, Hd);
+      for (const [x, y] of [[4, 1], [7, 0], [10, 1], [3, 5], [12, 6], [3, 8]]) px(x, y, 1, 1, Hd);
+      break;
+    case 'gorra':
+      px(5, 1, 6, 3, '#c0392b');
+      px(5, 1, 6, 1, '#e8584a');
+      px(3, 3, 4, 1, '#8e1f1f');
+      px(7, 1, 1, 1, '#f1ede3');
+      px(10, 4, 1, 2, H);
+      break;
+    case 'cresta':
+      px(7, -1 + 1, 2, 1, H);
+      px(7, 0, 2, 4, H);
+      px(8, 0, 1, 4, Hd);
+      px(5, 3, 2, 1, shade(H, -0.5));
+      px(9, 3, 2, 1, shade(H, -0.5));
+      break;
     case 'corto':
       px(6, 1, 4, 1, H);
       px(5, 2, 6, 2, H);

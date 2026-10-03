@@ -1,5 +1,5 @@
 import type { PlaceId } from '../art/cityMap';
-import type { Look, Role } from '../core/types';
+import type { Look, OtherCharacter, Role } from '../core/types';
 import type { Weather } from '../core/weather';
 
 /** Estado que la interfaz (Preact) comparte con la escena (Phaser). */
@@ -13,12 +13,14 @@ export interface SceneModel {
   /** Con auto, el reparto se hace en coche. */
   vehicle: 'pie' | 'auto';
   weather: Weather;
+  /** El otro protagonista, que también vive en la ciudad. */
+  other: OtherCharacter | null;
   now: () => number;
 }
 
 type Listener = (m: SceneModel) => void;
 
-let model: SceneModel = { role: null, look: null, spot: 'home', vehicle: 'pie', weather: 'despejado', now: () => Date.now() };
+let model: SceneModel = { role: null, look: null, spot: 'home', vehicle: 'pie', weather: 'despejado', other: null, now: () => Date.now() };
 const listeners = new Set<Listener>();
 let tapHandler: ((id: PlaceId) => void) | null = null;
 

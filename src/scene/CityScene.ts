@@ -3,6 +3,11 @@ import {
   aveX,
   COLS,
   generateCityMap,
+  BLOCK_H,
+  blockY,
+  placeBounds,
+  AVE_W,
+  ST_H,
   MAP_H,
   MAP_W,
   PLACE_BY_ID,
@@ -37,9 +42,17 @@ function lookKey(look: Look): string {
 interface Car {
   img: Phaser.GameObjects.Image;
   light: Phaser.GameObjects.Image;
-  vx: number;
-  vy: number;
+  /** 'v' avenidas (norte-sur), 'h' calles (este-oeste) */
+  axis: 'v' | 'h';
+  dir: 1 | -1;
+  /** Carril: avenida o calle por la que circula. */
+  lane: string;
+  speed: number;
+  len: number;
 }
+
+/** Ciclo de semáforos: avenidas y calles se alternan. */
+const SIGNAL_MS = 7000;
 
 interface Walker {
   sprite: Phaser.GameObjects.Sprite;
@@ -48,17 +61,24 @@ interface Walker {
 }
 
 export class CityScene extends Phaser.Scene {
-  private world!: Phaser.GameObjects.Container;
-  private base!: Phaser.GameObjects.Image;
-  private snow!: Phaser.GameObjects.Image;
-  private lightLayer!: Phaser.GameObjects.Image;
-  private neon!: Phaser.GameObjects.Image;
+  private world!: Phaser.GameObjects.Layer;
+  /** Imágenes del mapa por tipo: se tiñen o se encienden según la hora. */
+  private bases: Phaser.GameObjects.Image[] = [];
+  private snows: Phaser.GameObjects.Image[] = [];
+  private lightImgs: Phaser.GameObjects.Image[] = [];
+  private neons: Phaser.GameObjects.Image[] = [];
+  private tops: Record<string, number> = {};
+  private signals!: Phaser.GameObjects.Graphics;
+  private signalPhase = -1;
   private clouds!: Phaser.GameObjects.Graphics;
   private weatherFx!: Phaser.GameObjects.Graphics;
   private flash!: Phaser.GameObjects.Rectangle;
   private uiCam!: Phaser.Cameras.Scene2D.Camera;
   private cars: Car[] = [];
   private walkers: Walker[] = [];
+  private otherSprite: Phaser.GameObjects.Sprite | null = null;
+  private otherLabel: Phaser.GameObjects.Text | null = null;
+  private otherKey = '';
   private player: Phaser.GameObjects.Sprite | null = null;
   private ring!: Phaser.GameObjects.Ellipse;
   private marker!: Phaser.GameObjects.Text;
@@ -83,24 +103,34 @@ export class CityScene extends Phaser.Scene {
 
   create() {
     const art = generateCityMap();
-    this.textures.addCanvas('map-base', art.base);
-    this.textures.addCanvas('map-lights', art.lights);
-    this.textures.addCanvas('map-neon', art.neon);
-    this.textures.addCanvas('map-snow', art.snow);
+    this.tops = art.tops;
     this.makeCarTextures();
     this.makeHeadlight();
 
-    this.world = this.add.container(0, 0);
-    this.base = this.add.image(0, 0, 'map-base').setOrigin(0);
-    this.snow = this.add.image(0, 0, 'map-snow').setOrigin(0).setAlpha(0);
-    this.lightLayer = this.add.image(0, 0, 'map-lights').setOrigin(0).setBlendMode(Phaser.BlendModes.ADD);
-    this.neon = this.add.image(0, 0, 'map-neon').setOrigin(0).setBlendMode(Phaser.BlendModes.ADD);
-    this.world.add([this.base, this.snow, this.lightLayer, this.neon]);
+    // El mapa: suelo abajo y una capa por fila de manzanas, ordenadas por profundidad
+    // para que los edificios tapen a lo que pasa por detrás.
+    this.world = this.add.layer();
+    const addSet = (key: string, set: { base: HTMLCanvasElement; lights: HTMLCanvasElement; neon: HTMLCanvasElement; snow: HTMLCanvasElement }, y: number, depth: number) => {
+      for (const kind of ['base', 'snow', 'lights', 'neon'] as const) this.textures.addCanvas(`${key}-${kind}`, set[kind]);
+      const base = this.add.image(0, y, `${key}-base`).setOrigin(0).setDepth(depth);
+      const snow = this.add.image(0, y, `${key}-snow`).setOrigin(0).setDepth(depth + 0.01).setAlpha(0);
+      const lights = this.add.image(0, y, `${key}-lights`).setOrigin(0).setDepth(depth + 0.02).setBlendMode(Phaser.BlendModes.ADD);
+      const neon = this.add.image(0, y, `${key}-neon`).setOrigin(0).setDepth(depth + 0.03).setBlendMode(Phaser.BlendModes.ADD);
+      this.bases.push(base);
+      this.snows.push(snow);
+      this.lightImgs.push(lights);
+      this.neons.push(neon);
+      this.world.add([base, snow, lights, neon]);
+    };
+    addSet('map-ground', art.ground, 0, -100);
+    art.rows.forEach((r, i) => addSet(`map-row${i}`, r, r.y, r.depth));
+    this.signals = this.add.graphics().setDepth(-50);
+    this.world.add(this.signals);
 
     this.spawnTraffic();
     this.spawnPedestrians();
 
-    this.ring = this.add.ellipse(0, 0, 12, 5).setStrokeStyle(1, 0xffe066).setFillStyle(0xffe066, 0.18).setVisible(false);
+    this.ring = this.add.ellipse(0, 0, 12, 5).setDepth(0).setStrokeStyle(1, 0xffe066).setFillStyle(0xffe066, 0.18).setVisible(false);
     this.world.add(this.ring);
     this.tweens.add({ targets: this.ring, scaleX: 1.35, scaleY: 1.35, alpha: 0.4, duration: 700, yoyo: true, repeat: -1 });
     this.marker = this.add
@@ -116,7 +146,8 @@ export class CityScene extends Phaser.Scene {
     this.weatherFx = this.add.graphics();
     this.flash = this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0);
     this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
-    this.uiCam.ignore(this.world);
+    // La cámara del clima no dibuja el mapa.
+    this.world.cameraFilter |= this.uiCam.id;
     this.cameras.main.ignore([this.weatherFx, this.flash]);
 
     const cam = this.cameras.main;
@@ -195,9 +226,9 @@ export class CityScene extends Phaser.Scene {
 
   private makeLabels() {
     for (const p of PLACES_MAP) {
-      const r = placeRect(p);
+      const r = placeBounds(p, this.tops);
       const t = this.add
-        .text(r.x + r.w / 2, r.y + 2, p.label.toUpperCase(), {
+        .text(r.x + r.w / 2, r.y - 1, p.label.toUpperCase(), {
           fontFamily: 'LC Display, sans-serif',
           fontSize: '6px',
           color: '#ffffff',
@@ -206,7 +237,8 @@ export class CityScene extends Phaser.Scene {
           resolution: 4,
         })
         .setOrigin(0.5, 1)
-        .setAlpha(0.92);
+        .setAlpha(0.92)
+        .setDepth(100000);
       t.setData('place', p.id);
       this.labels.push(t);
       this.world.add(t);
@@ -217,29 +249,102 @@ export class CityScene extends Phaser.Scene {
 
   private spawnTraffic() {
     const rand = mulberry32(42);
-    for (let k = 0; k < 26; k++) {
+    for (let k = 0; k < 30; k++) {
       const police = rand() < 0.08;
       const ci = Math.floor(rand() * CAR_COLORS.length);
-      const vertical = k % 2 === 0;
-      const speed = (16 + rand() * 18) * (rand() < 0.5 ? 1 : -1);
+      const axis: 'v' | 'h' = k % 2 === 0 ? 'v' : 'h';
+      const dir: 1 | -1 = rand() < 0.5 ? 1 : -1;
+      const speed = 16 + rand() * 14;
       let img: Phaser.GameObjects.Image;
-      let vx = 0;
-      let vy = 0;
-      if (vertical) {
+      let lane: string;
+      if (axis === 'v') {
+        // Se conduce por la derecha: hacia el sur por el carril oeste, hacia el norte por el este.
         const i = Math.floor(rand() * (COLS + 1));
-        const lane = speed > 0 ? 4 : -4;
-        img = this.add.image(aveX(i) + lane, rand() * MAP_H, `car-front-${police ? 'p' : ci}`);
-        vy = speed;
+        img = this.add.image(aveX(i) + (dir > 0 ? -4 : 4), rand() * MAP_H, `car-front-${police ? 'p' : ci}`).setOrigin(0.5, 1);
+        lane = `v${i}${dir}`;
       } else {
         const j = Math.floor(rand() * (ROWS + 1));
-        img = this.add.image(rand() * MAP_W, stY(j) + (speed > 0 ? 3 : -2), `car-side-${police ? 'p' : ci}`);
-        img.setFlipX(speed < 0);
-        vx = speed;
+        img = this.add.image(rand() * MAP_W, stY(j) + (dir > 0 ? 5 : -1), `car-side-${police ? 'p' : ci}`).setOrigin(0.5, 1);
+        img.setFlipX(dir < 0);
+        lane = `h${j}${dir}`;
       }
-      const light = this.add.image(img.x, img.y, 'headlight').setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
+      const light = this.add.image(img.x, img.y, 'headlight').setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDepth(99990);
       this.world.add([img, light]);
-      this.cars.push({ img, light, vx, vy });
+      this.cars.push({ img, light, axis, dir, lane, speed, len: axis === 'v' ? 8 : 10 });
     }
+    // separar coches que hayan nacido encima de otros
+    for (const c of this.cars)
+      for (const o of this.cars)
+        if (o !== c && o.lane === c.lane && Math.abs(this.along(o) - this.along(c)) < 14) this.setAlong(o, this.along(o) + 18 * o.dir);
+  }
+
+  private along(c: Car) {
+    return c.axis === 'v' ? c.img.y : c.img.x;
+  }
+
+  private setAlong(c: Car, v: number) {
+    if (c.axis === 'v') c.img.y = v;
+    else c.img.x = v;
+  }
+
+  /** Coordenadas de los cruces a lo largo del eje de un coche. */
+  private crossings(c: Car): number[] {
+    return c.axis === 'v'
+      ? Array.from({ length: ROWS + 1 }, (_, j) => stY(j))
+      : Array.from({ length: COLS + 1 }, (_, i) => aveX(i));
+  }
+
+  /** Mueve el tráfico: respeta semáforos y la distancia con el coche de delante. */
+  private moveTraffic(dt: number, time: number) {
+    const phase = Math.floor(time / SIGNAL_MS) % 2; // 0: avenidas en verde, 1: calles en verde
+    const amber = time % SIGNAL_MS > SIGNAL_MS - 1200;
+    if (phase !== this.signalPhase) this.drawSignals(phase);
+    this.signalPhase = phase;
+    const limit = (c: Car) => (c.axis === 'v' ? MAP_H : MAP_W);
+    for (const c of this.cars) {
+      const pos = this.along(c);
+      // la parte delantera del coche
+      const front = c.axis === 'v' ? (c.dir > 0 ? pos : pos - c.len) : pos + (c.dir * c.len) / 2;
+      let next = pos + c.dir * c.speed * dt;
+      const red = (c.axis === 'v' ? phase !== 0 : phase !== 1) || amber;
+      if (red) {
+        const half = (c.axis === 'v' ? ST_H : AVE_W) / 2 + 2;
+        for (const x of this.crossings(c)) {
+          const stopLine = x - c.dir * half;
+          const dist = (stopLine - front) * c.dir;
+          if (dist >= -0.5 && dist < 10) {
+            next = c.dir > 0 ? Math.min(next, pos + dist) : Math.max(next, pos - dist);
+            break;
+          }
+        }
+      }
+      // no chocar con el de delante en el mismo carril
+      for (const o of this.cars) {
+        if (o === c || o.lane !== c.lane) continue;
+        const gap = (this.along(o) - pos) * c.dir;
+        if (gap > 0 && gap < c.len + 5) next = pos + c.dir * Math.max(0, gap - c.len - 5) * 0.5;
+      }
+      this.setAlong(c, next);
+      if (next > limit(c) + 12) this.setAlong(c, -12);
+      if (next < -12) this.setAlong(c, limit(c) + 12);
+      c.img.setDepth(c.img.y);
+      c.light.setPosition(c.img.x + (c.axis === 'h' ? c.dir * 9 : 0), c.img.y + (c.axis === 'v' ? (c.dir > 0 ? 6 : -14) : -3));
+    }
+  }
+
+  /** Semáforos en las esquinas visibles de cada cruce (acera sur de la manzana de arriba). */
+  private drawSignals(phase: number) {
+    const g = this.signals;
+    g.clear();
+    for (let i = 0; i <= COLS; i++)
+      for (let j = 1; j <= ROWS; j++) {
+        const x = aveX(i) + AVE_W / 2 + 1;
+        const y = blockY(j - 1) + BLOCK_H - 2;
+        if (x > MAP_W - 2) continue;
+        g.fillStyle(0x1a1a1f).fillRect(x, y - 7, 1, 7);
+        g.fillStyle(0x1a1a1f).fillRect(x - 1, y - 9, 3, 3);
+        g.fillStyle(phase === 0 ? 0x3dff7a : 0xff3b3b).fillRect(x, y - 8, 1, 1);
+      }
   }
 
   private spawnPedestrians() {
@@ -292,6 +397,7 @@ export class CityScene extends Phaser.Scene {
   // ---------------------------------------------------------------- personaje
 
   private onModel(m: SceneModel, initial = false) {
+    this.syncOther(m);
     if (!m.role || !m.look) {
       this.walkTween?.stop();
       this.player?.destroy();
@@ -332,6 +438,54 @@ export class CityScene extends Phaser.Scene {
     else this.place(m);
   }
 
+  /** El otro protagonista pasea entre su casa y su trabajo, con su nombre encima. */
+  private syncOther(m: SceneModel) {
+    const o = m.other;
+    const key = o ? `${o.name}-${lookKey(o.look)}` : '';
+    if (key === this.otherKey) return;
+    this.otherKey = key;
+    this.otherSprite?.destroy();
+    this.otherLabel?.destroy();
+    this.otherSprite = null;
+    this.otherLabel = null;
+    if (!o || !m.role) return;
+    const tex = this.ensureMini(o.look);
+    const places = ROLE_PLACES[o.role];
+    const start = placeEntrance(PLACE_BY_ID[places.work]);
+    const sprite = this.add.sprite(start.x, start.y, tex, '0').setOrigin(0.5, 1);
+    const label = this.add
+      .text(start.x, start.y - 12, o.name, { fontFamily: 'LC Body, sans-serif', fontSize: '5px', color: '#ffe066', stroke: '#14101f', strokeThickness: 2, resolution: 4 })
+      .setOrigin(0.5, 1)
+      .setDepth(99999);
+    this.world.add([sprite, label]);
+    this.otherSprite = sprite;
+    this.otherLabel = label;
+    let at: PlaceId = places.work;
+    const loop = () => {
+      if (this.otherSprite !== sprite) return;
+      const to = at === places.work ? places.home : places.work;
+      const pts = route(PLACE_BY_ID[at], PLACE_BY_ID[to]);
+      at = to;
+      const tweens = [];
+      for (let i = 1; i < pts.length; i++) {
+        const dist = Math.abs(pts[i].x - pts[i - 1].x) + Math.abs(pts[i].y - pts[i - 1].y);
+        if (dist > 0.5) tweens.push({ x: pts[i].x, y: pts[i].y, duration: (dist / (WALK_SPEED * 0.7)) * 1000 });
+      }
+      let t = 0;
+      const anim = this.time.addEvent({ delay: 180, loop: true, callback: () => sprite.setFrame(String(1 + (t++ % 2))) });
+      this.tweens.chain({
+        targets: sprite,
+        tweens,
+        onComplete: () => {
+          anim.remove();
+          sprite.setFrame('0');
+          this.time.delayedCall(8000 + Math.random() * 12000, loop);
+        },
+      });
+    };
+    this.time.delayedCall(2000, loop);
+  }
+
   private highlightLabels(role: SceneModel['role']) {
     const mine = role ? ROLE_PLACES[role] : null;
     for (const t of this.labels) {
@@ -357,10 +511,10 @@ export class CityScene extends Phaser.Scene {
     } else if (m.spot === 'work') {
       const e = placeEntrance(PLACE_BY_ID[places.work]);
       p.setVisible(false).setPosition(e.x, e.y);
-      const r = placeRect(PLACE_BY_ID[places.work]);
-      this.marker.setPosition(r.x + r.w / 2, r.y - 8).setVisible(true);
+      const r = placeBounds(PLACE_BY_ID[places.work], this.tops);
+      this.marker.setPosition(r.x + r.w / 2, r.y - 9).setVisible(true).setDepth(100001);
       this.tweens.killTweensOf(this.marker);
-      this.tweens.add({ targets: this.marker, y: r.y - 12, duration: 450, yoyo: true, repeat: -1 });
+      this.tweens.add({ targets: this.marker, y: r.y - 13, duration: 450, yoyo: true, repeat: -1 });
     } else if (m.spot === 'away') {
       p.setVisible(false);
     }
@@ -456,13 +610,11 @@ export class CityScene extends Phaser.Scene {
   }
 
   private tapAt(x: number, y: number) {
-    for (const p of PLACES_MAP) {
-      const r = placeRect(p);
-      if (x >= r.x && x <= r.x + r.w && y >= r.y - 16 && y <= r.y + r.h) {
-        bridge.tap(p.id);
-        return;
-      }
-    }
+    // Los de más al sur van delante: se comprueban primero.
+    const hits = PLACES_MAP.map((p) => ({ p, b: placeBounds(p, this.tops) }))
+      .filter(({ b }) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)
+      .sort((a, b) => b.b.y + b.b.h - (a.b.y + a.b.h));
+    if (hits.length) bridge.tap(hits[0].p.id);
   }
 
   // ---------------------------------------------------------------- luz y clima
@@ -481,10 +633,10 @@ export class CityScene extends Phaser.Scene {
         (ambient & 255) * 0.95,
       );
     }
-    this.base.setTint(ambient);
-    this.snow.setTint(ambient).setAlpha(w === 'nieve' ? 0.85 : 0);
+    for (const b of this.bases) b.setTint(ambient);
+    for (const sn of this.snows) sn.setTint(ambient).setAlpha(w === 'nieve' ? 0.85 : 0);
     const nightA = Math.max(0, (l.night - 0.1) / 0.9);
-    this.lightLayer.setAlpha(Math.max(nightA, w === 'tormenta' ? 0.35 : 0));
+    for (const li of this.lightImgs) li.setAlpha(Math.max(nightA, w === 'tormenta' ? 0.35 : 0));
     for (const c of this.cars) {
       c.img.setTint(ambient);
       c.light.setAlpha(nightA * 0.9);
@@ -552,19 +704,16 @@ export class CityScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     this.updateLight();
-    this.neon.setAlpha((0.55 + this.light.night * 0.45) * (Math.random() < 0.012 ? 0.5 : 1));
+    const neonA = (0.55 + this.light.night * 0.45) * (Math.random() < 0.012 ? 0.5 : 1);
+    for (const n of this.neons) n.setAlpha(neonA);
     this.drawWeather(delta);
 
-    // tráfico
-    const dt = delta / 1000;
-    for (const c of this.cars) {
-      c.img.x += c.vx * dt;
-      c.img.y += c.vy * dt;
-      if (c.img.x > MAP_W + 10) c.img.x = -10;
-      if (c.img.x < -10) c.img.x = MAP_W + 10;
-      if (c.img.y > MAP_H + 10) c.img.y = -10;
-      if (c.img.y < -10) c.img.y = MAP_H + 10;
-      c.light.setPosition(c.img.x + Math.sign(c.vx) * 9, c.img.y + Math.sign(c.vy) * 9);
+    // tráfico y profundidad de peatones
+    this.moveTraffic(delta / 1000, time);
+    for (const wk of this.walkers) wk.sprite.setDepth(wk.sprite.y);
+    if (this.otherSprite && this.otherLabel) {
+      this.otherSprite.setDepth(this.otherSprite.y);
+      this.otherLabel.setPosition(this.otherSprite.x, this.otherSprite.y - 12);
     }
 
     // animación de pasos del personaje
@@ -577,7 +726,8 @@ export class CityScene extends Phaser.Scene {
         this.player.setFrame(String((this.facingBack ? 3 : 0) + this.stepFrame));
       }
       if (!moving && this.player.frame.name !== '0' && this.player.frame.name !== '3') this.player.setFrame('0');
-      this.ring.setVisible(this.player.visible).setPosition(this.player.x, this.player.y - 1);
+      this.player.setDepth(this.player.y + 0.1);
+      this.ring.setVisible(this.player.visible).setPosition(this.player.x, this.player.y - 1).setDepth(this.player.y);
     }
 
     // cámara: sigue al personaje salvo que el jugador haya movido el mapa

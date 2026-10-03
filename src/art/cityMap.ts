@@ -108,22 +108,53 @@ export function route(from: Place, to: Place): { x: number; y: number }[] {
   ];
 }
 
-export interface CityMapArt {
+export interface LayerSet {
   base: HTMLCanvasElement;
   lights: HTMLCanvasElement;
   neon: HTMLCanvasElement;
   snow: HTMLCanvasElement;
+}
+
+/** Edificios de una fila de manzanas: se dibujan con su propia profundidad. */
+export interface RowLayer extends LayerSet {
+  /** Posición vertical del lienzo en el mapa. */
+  y: number;
+  /** Profundidad: lo que esté más al sur que esto se dibuja delante. */
+  depth: number;
+}
+
+export interface CityMapArt {
+  ground: LayerSet;
+  rows: RowLayer[];
   lamps: { x: number; y: number }[];
+  /** Parte más alta dibujada en cada manzana ("c,r"), para tocar y etiquetar. */
+  tops: Record<string, number>;
+}
+
+const ROW_ABOVE = 46;
+const ROW_BELOW = 14;
+export const rowOf = (y: number) => Math.max(0, Math.min(ROWS - 1, Math.floor((y - ST_H) / (BLOCK_H + ST_H))));
+export const colOf = (x: number) => Math.max(0, Math.min(COLS - 1, Math.floor((x - AVE_W) / (BLOCK_W + AVE_W))));
+/** Profundidad de una fila: justo detrás de la acera sur, donde caminan los personajes. */
+export const rowDepth = (r: number) => blockY(r) + BLOCK_H - 2.5;
+
+/** Zona tocable de un lugar, incluida la altura de sus edificios. */
+export function placeBounds(p: Place, tops: Record<string, number>) {
+  const r = placeRect(p);
+  let top = r.y;
+  for (let c = p.c; c < p.c + (p.cw ?? 1); c++) for (let rr = p.r; rr < p.r + (p.rh ?? 1); rr++) top = Math.min(top, tops[`${c},${rr}`] ?? r.y);
+  return { x: r.x, y: top, w: r.w, h: r.y + r.h - top };
 }
 
 type Ctx = CanvasRenderingContext2D;
 
-function canvas() {
+function canvas(h = MAP_H, offsetY = 0) {
   const c = document.createElement('canvas');
   c.width = MAP_W;
-  c.height = MAP_H;
+  c.height = h;
   const ctx = c.getContext('2d')!;
   ctx.imageSmoothingEnabled = false;
+  ctx.translate(0, -offsetY);
   return { c, ctx };
 }
 
@@ -162,6 +193,12 @@ interface Art {
   rand: () => number;
   /** Elementos con volumen: se dibujan de atrás (norte) hacia delante (sur). */
   queue: { key: number; draw: () => void }[];
+  tops: Record<string, number>;
+}
+
+function markTop(a: Art, x: number, footY: number, top: number) {
+  const k = `${colOf(x)},${rowOf(footY - 1)}`;
+  a.tops[k] = Math.min(a.tops[k] ?? Infinity, top);
 }
 
 const later = (a: Art, key: number, draw: () => void) => a.queue.push({ key, draw });
@@ -275,6 +312,7 @@ function facade(a: Art, x: number, y: number, w: number, h: number, color: strin
 function building(a: Art, x: number, y: number, w: number, d: number, H: number, opts: FacadeOpts & { roof?: string; facadeColor?: string; tower?: boolean; laundry?: boolean } = {}) {
   const roofColor = opts.roof ?? ROOFS[Math.floor(a.rand() * ROOFS.length)];
   const fc = opts.facadeColor ?? FACADES[Math.floor(a.rand() * FACADES.length)];
+  markTop(a, x, y + d, y - H - (opts.tower ? 12 : 4));
   later(a, y + d, () => {
     // sombra hacia el este sobre el suelo
     a.base.fillStyle = 'rgba(10, 8, 20, 0.35)';
@@ -660,8 +698,8 @@ function streets(a: Art, lamps: { x: number; y: number }[]) {
 
 export function generateCityMap(seed = 1985): CityMapArt {
   const rand = mulberry32(seed);
-  const b = canvas(), l = canvas(), n = canvas(), s = canvas();
-  const a: Art = { base: b.ctx, lights: l.ctx, neon: n.ctx, snow: s.ctx, rand, queue: [] };
+  const g = { base: canvas(), lights: canvas(), neon: canvas(), snow: canvas() };
+  const a: Art = { base: g.base.ctx, lights: g.lights.ctx, neon: g.neon.ctx, snow: g.snow.ctx, rand, queue: [], tops: {} };
   const lamps: { x: number; y: number }[] = [];
   streets(a, lamps);
 
@@ -682,8 +720,28 @@ export function generateCityMap(seed = 1985): CityMapArt {
     else if (p.id === 'pizza') signBlock(a, p, 'PIZZA', '#ffb13b', '255,177,59');
     else if (p.id === 'bar') signBlock(a, p, 'BAR', '#7dff6a', '125,255,106');
   }
-  // De atrás hacia delante: lo que está más al sur tapa lo de detrás.
-  a.queue.sort((p, q) => p.key - q.key).forEach((d) => d.draw());
-  for (const lp of lamps) glow(a.lights, lp.x, lp.y - 4, 10, '255,206,120', 0.4);
-  return { base: b.c, lights: l.c, neon: n.c, snow: s.c, lamps };
+  // Lugares sin edificios altos: su parte de arriba es la propia manzana (o la cúpula).
+  a.tops['1,4'] = Math.min(a.tops['1,4'] ?? Infinity, blockY(4) - 20);
+  a.tops['2,7'] = Math.min(a.tops['2,7'] ?? Infinity, blockY(7) - 6);
+  a.tops['3,1'] = Math.min(a.tops['3,1'] ?? Infinity, blockY(1) - 2);
+
+  // Cada fila de manzanas va en su propio lienzo, de atrás hacia delante.
+  const rows: RowLayer[] = [];
+  const rowCtx = Array.from({ length: ROWS }, (_, r) => {
+    const y = blockY(r) - ROW_ABOVE;
+    const h = BLOCK_H + ROW_ABOVE + ROW_BELOW;
+    const set = { base: canvas(h, y), lights: canvas(h, y), neon: canvas(h, y), snow: canvas(h, y) };
+    rows.push({ y, depth: rowDepth(r), base: set.base.c, lights: set.lights.c, neon: set.neon.c, snow: set.snow.c });
+    return set;
+  });
+  a.queue.sort((p, q) => p.key - q.key).forEach((d) => {
+    const set = rowCtx[rowOf(d.key)];
+    a.base = set.base.ctx;
+    a.lights = set.lights.ctx;
+    a.neon = set.neon.ctx;
+    a.snow = set.snow.ctx;
+    d.draw();
+  });
+  for (const lp of lamps) glow(g.lights.ctx, lp.x, lp.y - 4, 10, '255,206,120', 0.4);
+  return { ground: { base: g.base.c, lights: g.lights.c, neon: g.neon.c, snow: g.snow.c }, rows, lamps, tops: a.tops };
 }

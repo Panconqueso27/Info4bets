@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: beta 0.3.0**
+**Versión actual: beta 0.4.0**
 
 ## Probar la beta
 
@@ -21,6 +21,16 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.4.0
+
+- **Personajes recurrentes con memoria:** Sal, Doña Carmen, Lupe, Don Ramiro y el agente Kowalski para el inmigrante; la concejala Ruiz, el jefe O'Malley, Diane Brooks y Frank Russo para el alcalde. Recuerdan tus decisiones y vuelven con historias según cómo los trataste. Panel **Personas** en el menú.
+- **Encuentros entre protagonistas:** el inmigrante y el alcalde se cruzan en sucesos y en el mapa. Si terminaste una partida con el otro rol, ese personaje vive en tu ciudad.
+- **Recompensas por racha** (3, 7, 14, 30, 60 y 100 días) y **armario desbloqueable**: chaqueta de cuero, esmoquin, traje de domingo, chándal, permanente, gorra y cresta.
+- **Tutorial** del primer día y **estadísticas** de la partida, con los momentos que la marcaron.
+- **Fechas señaladas:** Halloween, Acción de Gracias, Navidad, 4 de Julio y San Patricio.
+- **Tráfico realista:** carriles por la derecha, semáforos y edificios que tapan lo que pasa por detrás. Las zonas táctiles siguen el contorno de cada edificio.
+- **Música acústica más suave**, con guitarra punteada, contrabajo y escobillas, y vibración al decidir.
 
 ## Novedades 0.3.0
 

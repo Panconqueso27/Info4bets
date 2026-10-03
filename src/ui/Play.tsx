@@ -1,9 +1,10 @@
 import * as audio from '../platform/audio';
+import { StatsView } from './Extras';
 import { Letters, Words } from './AnimText';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { EVENTS } from '../core/events/catalog';
 import { WEATHER_LABEL } from '../core/weather';
-import { todayWeather, canRetire, canStartErrand, canStartShift, dayNumber, ERRAND_PAY, errandHours, marketSession, MINUTES_PER_POINT } from '../core/game';
+import { shiftPay, todayWeather, canRetire, canStartErrand, canStartShift, dayNumber, ERRAND_PAY, errandHours, marketSession, MINUTES_PER_POINT } from '../core/game';
 import { TERM_DAYS } from '../core/events/alcalde';
 import { ROLES, type BarDef } from '../core/roles';
 import { formatDuration } from '../core/time';
@@ -151,7 +152,7 @@ export function Dock({
         )}
         {ready || shift.cancelled ? (
           <button class={`btn ${ready ? 'good' : ''}`} onClick={onRetire}>
-            {shift.cancelled ? 'Volver a casa' : `${role.retire} (+${role.formatMoney(role.shiftPay)})`}
+            {shift.cancelled ? 'Volver a casa' : `${role.retire} (+${role.formatMoney(shiftPay(state))})`}
           </button>
         ) : (
           <div class="row">
@@ -226,7 +227,7 @@ export function Dock({
   );
 }
 
-export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu';
+export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu' | 'personas' | 'armario' | 'stats';
 
 const TOOLS: { id: Panel; icon: string; label: string }[] = [
   { id: 'bolsa', icon: '📈', label: 'Bolsa' },
@@ -289,12 +290,16 @@ export function MenuModal({
   onToggleDev,
   onClose,
   onQuit,
+  onOpen,
+  onTutorial,
 }: {
   role: Role;
   devEnabled: boolean;
   onToggleDev: () => void;
   onClose: () => void;
   onQuit: () => void;
+  onOpen: (p: Panel) => void;
+  onTutorial: () => void;
 }) {
   const [confirm, setConfirm] = useState(false);
   const [sound, setSound] = useState(audio.getPrefs());
@@ -315,6 +320,20 @@ export function MenuModal({
           <li>En la 📋 Agenda tomas decisiones personales; con ⬆ Mejora inviertes tus ahorros.</li>
           <li>☠ {r.loseConditions}</li>
         </ul>
+        <div class="menu-grid">
+          <button class="btn secondary" onClick={() => onOpen('armario')}>
+            👕 Armario
+          </button>
+          <button class="btn secondary" onClick={() => onOpen('personas')}>
+            👥 Personas
+          </button>
+          <button class="btn secondary" onClick={() => onOpen('stats')}>
+            📊 Estadísticas
+          </button>
+          <button class="btn secondary" onClick={onTutorial}>
+            ❓ Ver tutorial
+          </button>
+        </div>
         <div class="row" style={{ marginBottom: 12 }}>
           <button class={`btn secondary ${sound.sfx ? 'on' : ''}`} onClick={() => toggle('sfx')}>
             {sound.sfx ? '🔊 Sonido' : '🔇 Sonido'}
@@ -356,20 +375,7 @@ export function GameOverModal({ state, onNew }: { state: GameState; onNew: () =>
         <div class="kicker">FIN DE LA PARTIDA</div>
         <h3><Letters text={over.title} /></h3>
         <p>{over.text}</p>
-        <div class="stats">
-          <div class="stat">
-            <b>{over.day}</b>días aguantados
-          </div>
-          <div class="stat">
-            <b>{state.bestStreak}</b>mejor racha
-          </div>
-          <div class="stat">
-            <b>{state.daysWorked}</b>jornadas
-          </div>
-          <div class="stat">
-            <b>{state.log.filter((l) => l.kind === 'bueno').length}</b>buenos momentos
-          </div>
-        </div>
+        <StatsView state={state} now={over.at} />
         <button class="btn" onClick={onNew}>
           Nueva partida
         </button>

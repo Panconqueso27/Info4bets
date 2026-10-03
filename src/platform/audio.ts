@@ -14,6 +14,8 @@ let prefs: Prefs = load();
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let musicBus: GainNode | null = null;
+/** Volumen de la música, por debajo de los efectos. */
+const MUSIC_VOL = 0.2;
 
 function load(): Prefs {
   try {
@@ -38,7 +40,7 @@ export function getPrefs(): Prefs {
 export function setPrefs(p: Partial<Prefs>) {
   prefs = { ...prefs, ...p };
   save();
-  if (musicBus && ctx) musicBus.gain.setTargetAtTime(prefs.music ? 0.32 : 0, ctx.currentTime, 0.3);
+  if (musicBus && ctx) musicBus.gain.setTargetAtTime(prefs.music ? MUSIC_VOL : 0, ctx.currentTime, 0.3);
   if (prefs.music) startMusic();
 }
 
@@ -58,8 +60,12 @@ export function unlock() {
       master.gain.value = 0.5;
       master.connect(ctx.destination);
       musicBus = ctx.createGain();
-      musicBus.gain.value = prefs.music ? 0.32 : 0;
-      musicBus.connect(master);
+      musicBus.gain.value = prefs.music ? MUSIC_VOL : 0;
+      // Filtro paso bajo: sonido cálido, sin agudos chillones.
+      const warm = ctx.createBiquadFilter();
+      warm.type = 'lowpass';
+      warm.frequency.value = 3200;
+      musicBus.connect(warm).connect(master);
     } catch {
       return;
     }
@@ -166,24 +172,88 @@ export const play = {
 };
 
 // ---------------------------------------------------------------------------
-// Música synthwave
+// Música: synthwave acústica
 // ---------------------------------------------------------------------------
+// Misma progresión ochentera, pero tocada con instrumentos "de verdad":
+// guitarra punteada (síntesis de cuerda Karplus-Strong), contrabajo suave,
+// escobillas y un poco de reverberación de sala. Volumen bajo, de fondo.
 
 type Mood = 'dia' | 'noche';
 let mood: Mood = 'dia';
 let timer: number | null = null;
 let nextTime = 0;
 let step = 0;
+let room: AudioNode | null = null;
+const plucks = new Map<string, AudioBuffer>();
 
 const N = (semi: number) => 440 * Math.pow(2, semi / 12);
-// Progresiones (semitonos respecto a La 440): día luminoso, noche más oscura.
+// Progresiones (semitonos respecto a La 440): día luminoso, noche más tranquila.
 const SONGS: Record<Mood, { bpm: number; chords: number[][]; bass: number[] }> = {
-  dia: { bpm: 104, chords: [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]], bass: [-24, -28, -21, -26] },
-  noche: { bpm: 84, chords: [[-7, -4, 0], [-11, -7, -4], [-4, 0, 3], [-9, -5, -2]], bass: [-31, -35, -28, -33] },
+  dia: { bpm: 96, chords: [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]], bass: [-24, -28, -21, -26] },
+  noche: { bpm: 76, chords: [[-7, -4, 0], [-11, -7, -4], [-4, 0, 3], [-9, -5, -2]], bass: [-31, -35, -28, -33] },
 };
 
 export function setMood(m: Mood) {
   mood = m;
+}
+
+/** Cuerda pulsada (Karplus-Strong): ruido que pasa por un retardo con filtro. */
+function pluckBuffer(freq: number, dur: number, bright: number): AudioBuffer {
+  const key = `${freq.toFixed(1)}-${dur}-${bright}`;
+  const cached = plucks.get(key);
+  if (cached) return cached;
+  const sr = ctx!.sampleRate;
+  const len = Math.floor(sr * dur);
+  const buf = ctx!.createBuffer(1, len, sr);
+  const d = buf.getChannelData(0);
+  const period = Math.max(2, Math.round(sr / freq));
+  const ring = new Float32Array(period);
+  for (let i = 0; i < period; i++) ring[i] = Math.random() * 2 - 1;
+  let idx = 0;
+  let prev = 0;
+  for (let i = 0; i < len; i++) {
+    const cur = ring[idx];
+    const next = ring[(idx + 1) % period];
+    // promedio = amortiguación; "bright" controla cuánto brillo conserva
+    ring[idx] = (cur * bright + next * (1 - bright)) * 0.996;
+    prev = prev * 0.2 + cur * 0.8;
+    d[i] = prev;
+    idx = (idx + 1) % period;
+  }
+  plucks.set(key, buf);
+  return buf;
+}
+
+function pluck(freq: number, t: number, vol: number, dur = 1.6, bright = 0.5, wet = 0.35) {
+  if (!ctx || !musicBus) return;
+  const src = ctx.createBufferSource();
+  src.buffer = pluckBuffer(freq, dur, bright);
+  const g = ctx.createGain();
+  g.gain.value = vol;
+  src.connect(g).connect(musicBus);
+  if (room && wet > 0) {
+    const send = ctx.createGain();
+    send.gain.value = wet;
+    g.connect(send).connect(room);
+  }
+  src.start(t);
+}
+
+/** Reverberación de sala corta (impulso de ruido que decae). */
+function makeRoom() {
+  if (!ctx || !musicBus || room) return;
+  const len = Math.floor(ctx.sampleRate * 1.4);
+  const imp = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = imp.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+  }
+  const conv = ctx.createConvolver();
+  conv.buffer = imp;
+  const g = ctx.createGain();
+  g.gain.value = 0.5;
+  conv.connect(g).connect(musicBus);
+  room = conv;
 }
 
 function scheduleStep(t: number) {
@@ -193,27 +263,30 @@ function scheduleStep(t: number) {
   const chord = song.chords[bar];
   const s16 = step % 16;
   const beat = 60 / song.bpm / 4;
-  // Bajo en corcheas
-  if (s16 % 2 === 0) tone(N(song.bass[bar] + (s16 % 8 === 6 ? 12 : 0)), t, beat * 1.8, 'sawtooth', 0.09, undefined, musicBus);
-  // Pad al inicio del compás
-  if (s16 === 0) for (const n of chord) tone(N(n - 12), t, beat * 15, 'triangle', 0.035, undefined, musicBus);
-  // Arpegio
-  if (mood === 'dia' || s16 % 2 === 0) {
-    const n = chord[s16 % chord.length] + (s16 >= 8 ? 12 : 0);
-    tone(N(n), t, beat * 0.9, 'square', 0.018, undefined, musicBus);
+  const swing = s16 % 2 === 1 ? beat * 0.12 : 0;
+  // Contrabajo: negras suaves y graves
+  if (s16 % 4 === 0) pluck(N(song.bass[bar] + (s16 === 12 ? 7 : 0)), t, 0.55, 1.2, 0.25, 0.15);
+  // Rasgueo de guitarra al inicio del compás (las notas del acorde, una tras otra)
+  if (s16 === 0) chord.forEach((n, i) => pluck(N(n - 12), t + i * 0.025, 0.22, 2.4, 0.55));
+  // Arpegio punteado, más espaciado de noche
+  if (mood === 'dia' ? s16 % 2 === 0 : s16 % 4 === 2) {
+    const n = chord[(s16 >> 1) % chord.length] + (s16 >= 8 ? 12 : 0);
+    pluck(N(n), t + swing, 0.16, 1.4, 0.6);
   }
-  // Caja y bombo suaves
-  if (s16 % 8 === 4) noise(t, 0.12, 0.08, 1800, 0.6, musicBus);
-  if (s16 % 8 === 0) tone(70, t, 0.15, 'sine', 0.18, 40, musicBus);
+  // Escobillas y bombo suave
+  if (s16 % 4 === 2) noise(t + swing, 0.09, 0.035, 5200, 0.5, musicBus);
+  if (s16 % 8 === 4) noise(t, 0.16, 0.05, 2600, 0.4, musicBus);
+  if (s16 % 8 === 0) tone(58, t, 0.22, 'sine', 0.12, 40, musicBus);
   step++;
   nextTime = t + beat;
 }
 
 function startMusic() {
   if (!ctx || timer !== null) return;
+  makeRoom();
   nextTime = ctx.currentTime + 0.1;
   timer = window.setInterval(() => {
     if (!ctx) return;
-    while (nextTime < ctx.currentTime + 0.25) scheduleStep(nextTime);
+    while (nextTime < ctx.currentTime + 0.3) scheduleStep(nextTime);
   }, 60);
 }
