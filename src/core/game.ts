@@ -757,7 +757,21 @@ export function canPlayMinigame(state: GameState, now: number): boolean {
 }
 
 /** Aplica el resultado de un minijuego: cada acierto descuenta 10 minutos de la jornada. */
-export function applyMinigame(state: GameState, points: number, now: number): number {
+/** Nombre de cada minijuego en el diario. */
+export const MINIGAME_LABEL: Record<string, string> = {
+  dishes: 'Lavaplatos',
+  burgers: 'Plancha',
+  orders: 'Pedidos',
+  coffee: 'Café',
+  mop: 'Fregona',
+  paperwork: 'Papeleo',
+  traffic: 'Semáforos',
+  press: 'Rueda de prensa',
+  budget: 'Presupuestos',
+  handshake: 'Mitin',
+};
+
+export function applyMinigame(state: GameState, points: number, now: number, game?: string): number {
   advance(state, now);
   if (!canPlayMinigame(state, now)) throw new Error('Solo puedes hacerlo durante tu jornada.');
   const n = Math.max(0, Math.min(MAX_POINTS_PER_GAME, Math.floor(points)));
@@ -766,10 +780,19 @@ export function applyMinigame(state: GameState, points: number, now: number): nu
   shift.endsAt = Math.max(now, shift.endsAt - n * MINUTES_PER_POINT * 60_000);
   const saved = Math.round((before - shift.endsAt) / 60_000);
   const roleId = state.character.role;
-  const counter = roleId === 'inmigrante' ? 'platosLavados' : 'documentosFirmados';
-  state.flags[counter] = Number(state.flags[counter] ?? 0) + n;
-  const what = roleId === 'inmigrante' ? `Lavaste ${n} plato${n === 1 ? '' : 's'}` : `Despachaste ${n} documento${n === 1 ? '' : 's'}`;
-  log(state, now, n > 0 ? 'bueno' : 'info', roleId === 'inmigrante' ? 'Lavaplatos' : 'Papeleo', `${what}: la jornada avanza ${saved} min.`);
+  const classic = !game || game === 'dishes' || game === 'paperwork';
+  if (classic) {
+    const counter = roleId === 'inmigrante' ? 'platosLavados' : 'documentosFirmados';
+    state.flags[counter] = Number(state.flags[counter] ?? 0) + n;
+  }
+  addStat(state, 'minijuegos', n);
+  const what = classic
+    ? roleId === 'inmigrante'
+      ? `Lavaste ${n} plato${n === 1 ? '' : 's'}`
+      : `Despachaste ${n} documento${n === 1 ? '' : 's'}`
+    : `${n} acierto${n === 1 ? '' : 's'}`;
+  const title = MINIGAME_LABEL[game ?? ''] ?? (roleId === 'inmigrante' ? 'Lavaplatos' : 'Papeleo');
+  log(state, now, n > 0 ? 'bueno' : 'info', title, `${what}: la jornada avanza ${saved} min.`);
   return saved;
 }
 
@@ -778,8 +801,8 @@ export function applyMinigame(state: GameState, points: number, now: number): nu
 // ---------------------------------------------------------------------------
 
 export const ERRAND_PAY = 110;
-export const ERRAND_WEAR: Bars = { salud: -3, estres: 3 };
-export const CAR_COST = 1500;
+export const ERRAND_WEAR: Bars = { salud: -2, estres: 2 };
+export const CAR_COST = 1200;
 
 export function errandHours(state: GameState): number {
   return state.flags.auto ? 2 : 4;
@@ -1037,7 +1060,7 @@ function finishWorks(state: GameState, now: number): boolean {
 // Ingresos pasivos: máquinas, alquiler, mascota (inmigrante) y turismo (alcalde)
 // ---------------------------------------------------------------------------
 
-export const VENDING_PRICES = [400, 550, 700, 900, 1100];
+export const VENDING_PRICES = [350, 450, 600, 750, 900];
 export const VENDING_INCOME = 15;
 export const PET_MONTHLY = 20;
 export const TOURIST_SPEND = 40;

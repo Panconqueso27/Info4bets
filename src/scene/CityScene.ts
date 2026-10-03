@@ -33,6 +33,7 @@ import type { Look } from '../core/types';
 import { randomLook } from '../art/character';
 import { bridge, type SceneModel, type Spot } from './bridge';
 import { drawPet, drawVending } from '../art/sprites';
+import { thunder } from '../platform/audio';
 
 /** Cambia la profundidad solo si varía: cada cambio obliga a reordenar la capa. */
 function depthOf(o: Phaser.GameObjects.Components.Depth & { depth: number }, d: number) {
@@ -874,6 +875,7 @@ export class CityScene extends Phaser.Scene {
     if (w === 'tormenta' && this.time.now > this.nextLightning) {
       this.nextLightning = this.time.now + 5000 + Math.random() * 9000;
       this.flash.setFillStyle(0xffffff, 0.75).setVisible(true);
+      thunder(0.3 + Math.random() * 0.8);
       this.tweens.add({ targets: this.flash, fillAlpha: 0, duration: 450, ease: 'Expo.Out', onComplete: () => this.flash.setVisible(false) });
     }
     // sombras de nubes que cruzan la ciudad de día

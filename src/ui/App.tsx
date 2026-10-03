@@ -45,6 +45,23 @@ import { markTutorial, PeopleModal, RewardModal, StatsModal, TUTORIAL, TutorialB
 import { globalCosmetics, keepCosmetics, otherFor, rememberCharacter } from '../platform/legacy';
 import { Dishwasher } from './Dishwasher';
 import { Paperwork } from './Paperwork';
+import { Burgers, Coffee, Mop, Orders } from './games/Diner';
+import { Budget, Handshake, Press, Traffic } from './games/Office';
+import { MiniGameMenu } from './games/Menu';
+import { saveRecord, type MiniProps } from './games/kit';
+
+const MINIGAMES: Record<string, (p: MiniProps) => any> = {
+  dishes: Dishwasher,
+  paperwork: Paperwork,
+  burgers: Burgers,
+  orders: Orders,
+  coffee: Coffee,
+  mop: Mop,
+  traffic: Traffic,
+  press: Press,
+  budget: Budget,
+  handshake: Handshake,
+};
 import * as audio from '../platform/audio';
 import { lightAt } from '../art/daynight';
 import { Customizer, IdentityForm, RoleSelect, TitleScreen } from './Setup';
@@ -81,7 +98,8 @@ export function App() {
   const [toast, setToast] = useState<{ title: string; text: string } | null>(null);
   const [devEnabled, setDevEnabled] = useState(() => clock.isDevEnabled());
   const [endingSeen, setEndingSeen] = useState(false);
-  const [minigame, setMinigame] = useState(false);
+  /** 'menu' = elegir minijuego; si no, el id del que se está jugando. */
+  const [minigame, setMinigame] = useState<string | null>(null);
   const [reward, setReward] = useState<{ title: string; text: string } | null>(null);
   const [tutTick, setTutTick] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
@@ -126,6 +144,25 @@ export function App() {
     };
   }, []);
   useEffect(() => audio.setMood(lightAt(now).night > 0.5 ? 'noche' : 'dia'), [Math.floor(now / 60_000)]);
+
+  // Sonido ambiente: clima, hora, lugar y lo que está pasando.
+  useEffect(() => {
+    const s = game.current;
+    const d = new Date(now);
+    const spot = s && screen.id === 'play' ? spotFor(s, now) : 'home';
+    const place: audio.AmbPlace =
+      spot === 'work' ? (s!.character.role === 'inmigrante' ? 'diner' : 'alcaldia') : spot === 'errand' ? 'reparto' : spot === 'away' ? 'fuera' : 'casa';
+    const md = `${d.getMonth() + 1}-${d.getDate()}`;
+    audio.setAmbience({
+      weather: s && screen.id === 'play' ? (((devEnabled && devWeather()) || todayWeather(s)) as Weather) : 'despejado',
+      hour: d.getHours() + d.getMinutes() / 60,
+      place,
+      works: !!s && (Object.values(s.lots ?? {}).some((l) => l.buildingUntil) || Object.keys(s.renovating ?? {}).length > 0),
+      pet: s?.pet?.kind ?? null,
+      crowd: !!s && s.character.role === 'alcalde' && Number(s.flags.turistasAyer ?? 0) > 900,
+      fiesta: md === '12-24' || md === '12-25' ? 'navidad' : md === '7-4' ? 'julio' : null,
+    });
+  });
 
   // Tocar un lugar del mapa: la Bolsa abre la terminal, tu trabajo te lleva a trabajar.
   useEffect(() => {
@@ -323,13 +360,22 @@ export function App() {
   if (state.gameOver && !outcome) overlay = <GameOverModal state={state} onNew={quit} />;
   else if (outcome) overlay = <ResultCard state={state} outcome={outcome} onClose={() => setOutcome(null)} />;
   else if (reward) overlay = <RewardModal title={reward.title} text={reward.text} onClose={() => setReward(null)} />;
-  else if (minigame)
-    overlay =
-      state.character.role === 'inmigrante' ? (
-        <Dishwasher onClose={() => setMinigame(false)} onFinish={(n) => { setMinigame(false); act((s, t) => applyMinigame(s, n, t)); }} />
-      ) : (
-        <Paperwork onClose={() => setMinigame(false)} onFinish={(n) => { setMinigame(false); act((s, t) => applyMinigame(s, n, t)); }} />
-      );
+  else if (minigame === 'menu')
+    overlay = <MiniGameMenu role={state.character.role} onPick={(id) => { audio.play.click(); setMinigame(id); }} onClose={() => setMinigame(null)} />;
+  else if (minigame) {
+    const Game = MINIGAMES[minigame];
+    const id = minigame;
+    overlay = (
+      <Game
+        onClose={() => setMinigame(null)}
+        onFinish={(n) => {
+          setMinigame(null);
+          if (id === 'dishes' || id === 'paperwork') saveRecord(id, n);
+          act((s, t) => applyMinigame(s, n, t, id));
+        }}
+      />
+    );
+  }
   else if (state.ending && !endingSeen && !state.flags.endingShown)
     overlay = (
       <EndingModal
@@ -458,7 +504,7 @@ export function App() {
         onMinigame={() => {
           audio.play.click();
           setPanel(null);
-          setMinigame(true);
+          setMinigame('menu');
         }}
         onErrand={() => act(startErrand)}
       />

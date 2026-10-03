@@ -8,6 +8,7 @@ const KEY = 'laciudad.audio';
 interface Prefs {
   sfx: boolean;
   music: boolean;
+  ambient: boolean;
 }
 
 let prefs: Prefs = load();
@@ -15,13 +16,16 @@ let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let musicBus: GainNode | null = null;
 /** Volumen de la música, por debajo de los efectos. */
-const MUSIC_VOL = 0.2;
+const MUSIC_VOL = 0.26;
+let ambBus: GainNode | null = null;
+/** Volumen del ambiente: siempre por debajo de la música. */
+const AMB_VOL = 0.55;
 
 function load(): Prefs {
   try {
-    return { sfx: true, music: true, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
+    return { sfx: true, music: true, ambient: true, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
   } catch {
-    return { sfx: true, music: true };
+    return { sfx: true, music: true, ambient: true };
   }
 }
 
@@ -41,7 +45,9 @@ export function setPrefs(p: Partial<Prefs>) {
   prefs = { ...prefs, ...p };
   save();
   if (musicBus && ctx) musicBus.gain.setTargetAtTime(prefs.music ? MUSIC_VOL : 0, ctx.currentTime, 0.3);
+  if (ambBus && ctx) ambBus.gain.setTargetAtTime(prefs.ambient ? AMB_VOL : 0, ctx.currentTime, 0.3);
   if (prefs.music) startMusic();
+  if (prefs.ambient) startAmbience();
 }
 
 /** Pausa todo el audio cuando la app pasa a segundo plano. */
@@ -64,14 +70,18 @@ export function unlock() {
       // Filtro paso bajo: sonido cálido, sin agudos chillones.
       const warm = ctx.createBiquadFilter();
       warm.type = 'lowpass';
-      warm.frequency.value = 3200;
+      warm.frequency.value = 5200;
       musicBus.connect(warm).connect(master);
+      ambBus = ctx.createGain();
+      ambBus.gain.value = prefs.ambient ? AMB_VOL : 0;
+      ambBus.connect(master);
     } catch {
       return;
     }
   }
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   if (prefs.music) startMusic();
+  if (prefs.ambient) startAmbience();
 }
 
 // ---------------------------------------------------------------------------
@@ -180,145 +190,328 @@ export const play = {
 };
 
 // ---------------------------------------------------------------------------
-// Música: synthwave acústica
+// Música: synthwave ochentera (la original), más animada y pegadiza
 // ---------------------------------------------------------------------------
-// Misma progresión ochentera, pero tocada con instrumentos "de verdad":
-// guitarra punteada (síntesis de cuerda Karplus-Strong), contrabajo suave,
-// escobillas y un poco de reverberación de sala. Volumen bajo, de fondo.
+// Canción de 16 compases en bucle con secciones: intro (arpegio y bajo),
+// estrofa con melodía, estribillo con la melodía una octava arriba y un
+// redoble de caja antes de volver. De noche, más lenta y suave.
 
 type Mood = 'dia' | 'noche';
 let mood: Mood = 'dia';
 let timer: number | null = null;
 let nextTime = 0;
 let step = 0;
-let room: AudioNode | null = null;
-const plucks = new Map<string, AudioBuffer>();
+let echo: AudioNode | null = null;
 
 const N = (semi: number) => 440 * Math.pow(2, semi / 12);
-// Progresiones (semitonos respecto a La 440): día luminoso, noche más tranquila.
-const SONGS: Record<Mood, { bpm: number; chords: number[][]; bass: number[] }> = {
-  dia: { bpm: 96, chords: [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]], bass: [-24, -28, -21, -26] },
-  noche: { bpm: 76, chords: [[-7, -4, 0], [-11, -7, -4], [-4, 0, 3], [-9, -5, -2]], bass: [-31, -35, -28, -33] },
+
+interface Song {
+  bpm: number;
+  chords: number[][];
+  bass: number[];
+  /** Melodía de 2 compases (32 semicorcheas): nota o null (silencio). */
+  hook: (number | null)[];
+}
+
+const _ = null;
+const SONGS: Record<Mood, Song> = {
+  // La menor – Fa – Do – Sol: el clásico de los 80.
+  dia: {
+    bpm: 116,
+    chords: [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]],
+    bass: [-24, -28, -21, -26],
+    hook: [12, _, 15, _, 19, _, 17, 15, _, _, 12, _, 15, _, 10, _, 12, _, _, 15, _, 17, _, 19, 22, _, 19, _, 17, _, 15, _],
+  },
+  noche: {
+    bpm: 96,
+    chords: [[-7, -4, 0], [-11, -7, -4], [-4, 0, 3], [-9, -5, -2]],
+    bass: [-31, -35, -28, -33],
+    hook: [5, _, _, 8, _, _, 12, _, 10, _, 8, _, _, _, 5, _, 3, _, _, 5, _, _, 8, _, 7, _, 5, _, 3, _, _, _],
+  },
 };
 
 export function setMood(m: Mood) {
   mood = m;
 }
 
-/** Cuerda pulsada (Karplus-Strong): ruido que pasa por un retardo con filtro. */
-function pluckBuffer(freq: number, dur: number, bright: number): AudioBuffer {
-  const key = `${freq.toFixed(1)}-${dur}-${bright}`;
-  const cached = plucks.get(key);
-  if (cached) return cached;
-  const sr = ctx!.sampleRate;
-  const len = Math.floor(sr * dur);
-  const buf = ctx!.createBuffer(1, len, sr);
-  const d = buf.getChannelData(0);
-  const period = Math.max(2, Math.round(sr / freq));
-  const ring = new Float32Array(period);
-  for (let i = 0; i < period; i++) ring[i] = Math.random() * 2 - 1;
-  let idx = 0;
-  let prev = 0;
-  for (let i = 0; i < len; i++) {
-    const cur = ring[idx];
-    const next = ring[(idx + 1) % period];
-    // promedio = amortiguación; "bright" controla cuánto brillo conserva
-    ring[idx] = (cur * bright + next * (1 - bright)) * 0.996;
-    prev = prev * 0.2 + cur * 0.8;
-    d[i] = prev;
-    idx = (idx + 1) % period;
-  }
-  plucks.set(key, buf);
-  return buf;
+/** Eco en tiempo (corchea con puntillo) para la melodía: muy synthwave. */
+function makeEcho() {
+  if (!ctx || !musicBus || echo) return;
+  const d = ctx.createDelay(1);
+  d.delayTime.value = 0.39;
+  const fb = ctx.createGain();
+  fb.gain.value = 0.32;
+  const wet = ctx.createGain();
+  wet.gain.value = 0.35;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 2400;
+  d.connect(lp).connect(fb).connect(d);
+  lp.connect(wet).connect(musicBus);
+  echo = d;
 }
 
-function pluck(freq: number, t: number, vol: number, dur = 1.6, bright = 0.5, wet = 0.35) {
+function lead(freq: number, t: number, dur: number, vol: number) {
   if (!ctx || !musicBus) return;
-  const src = ctx.createBufferSource();
-  src.buffer = pluckBuffer(freq, dur, bright);
-  const g = ctx.createGain();
-  g.gain.value = vol;
-  src.connect(g).connect(musicBus);
-  if (room && wet > 0) {
-    const send = ctx.createGain();
-    send.gain.value = wet;
-    g.connect(send).connect(room);
+  // Dos ondas ligeramente desafinadas: sonido gordo de sintetizador
+  for (const [type, det] of [['square', -6], ['sawtooth', 6]] as [OscillatorType, number][]) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    o.detune.value = det;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+    g.gain.setTargetAtTime(vol * 0.6, t + 0.05, 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(musicBus);
+    if (echo) g.connect(echo);
+    o.start(t);
+    o.stop(t + dur + 0.05);
   }
-  src.start(t);
-}
-
-/** Reverberación de sala corta (impulso de ruido que decae). */
-function makeRoom() {
-  if (!ctx || !musicBus || room) return;
-  const len = Math.floor(ctx.sampleRate * 1.4);
-  const imp = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let ch = 0; ch < 2; ch++) {
-    const d = imp.getChannelData(ch);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-  }
-  const conv = ctx.createConvolver();
-  conv.buffer = imp;
-  const g = ctx.createGain();
-  g.gain.value = 0.5;
-  conv.connect(g).connect(musicBus);
-  room = conv;
 }
 
 function scheduleStep(t: number) {
   if (!ctx || !musicBus) return;
   const song = SONGS[mood];
-  const bar = Math.floor(step / 16) % song.chords.length;
+  const night = mood === 'noche';
+  const bar16 = Math.floor(step / 16) % 16; // compás dentro de la canción
+  const bar = bar16 % 4;
   const chord = song.chords[bar];
   const s16 = step % 16;
   const beat = 60 / song.bpm / 4;
-  const swing = s16 % 2 === 1 ? beat * 0.12 : 0;
-  // Contrabajo: negras suaves y graves
-  if (s16 % 4 === 0) pluck(N(song.bass[bar] + (s16 === 12 ? 7 : 0)), t, 0.55, 1.2, 0.25, 0.15);
-  // Rasgueo de guitarra al inicio del compás (las notas del acorde, una tras otra)
-  if (s16 === 0) chord.forEach((n, i) => pluck(N(n - 12), t + i * 0.025, 0.22, 2.4, 0.55));
-  // Arpegio punteado, más espaciado de noche
-  if (mood === 'dia' ? s16 % 2 === 0 : s16 % 4 === 2) {
-    const n = chord[(s16 >> 1) % chord.length] + (s16 >= 8 ? 12 : 0);
-    pluck(N(n), t + swing, 0.16, 1.4, 0.6);
+  const section = bar16 < 4 ? 'intro' : bar16 < 8 ? 'estrofa' : bar16 < 14 ? 'estribillo' : 'puente';
+  const full = section === 'estribillo';
+
+  // Bajo en corcheas con octava saltarina
+  if (s16 % 2 === 0) tone(N(song.bass[bar] + (s16 % 8 === 6 ? 12 : 0)), t, beat * 1.7, 'sawtooth', night ? 0.07 : 0.09, undefined, musicBus);
+  // Pad de acorde
+  if (s16 === 0) for (const n of chord) tone(N(n - 12), t, beat * 15, 'triangle', 0.035, undefined, musicBus);
+  // Arpegio brillante en semicorcheas
+  if (!night || s16 % 2 === 0) {
+    const n = chord[s16 % chord.length] + (s16 >= 8 ? 12 : 0) + (full ? 12 : 0);
+    tone(N(n), t, beat * 0.8, 'square', full ? 0.016 : 0.02, undefined, musicBus);
   }
-  // Escobillas y bombo suave
-  if (s16 % 4 === 2) noise(t + swing, 0.09, 0.035, 5200, 0.5, musicBus);
-  if (s16 % 8 === 4) noise(t, 0.16, 0.05, 2600, 0.4, musicBus);
-  if (s16 % 8 === 0) tone(58, t, 0.22, 'sine', 0.12, 40, musicBus);
+  // Melodía pegadiza (en estrofa y estribillo; en el estribillo, una octava arriba)
+  if (section === 'estrofa' || full) {
+    const note = song.hook[(bar16 % 2) * 16 + s16];
+    if (note !== null) lead(N(note - 12 + (full ? 12 : 0)), t, beat * 2.6, night ? 0.026 : 0.034);
+  }
+  // Batería: bombo en negras, caja en 2 y 4, charles en corcheas
+  const kick = section === 'intro' ? s16 % 8 === 0 : s16 % 4 === 0;
+  if (kick) tone(120, t, 0.18, 'sine', night ? 0.2 : 0.28, 38, musicBus);
+  if (section !== 'intro' && s16 % 8 === 4) {
+    noise(t, 0.16, night ? 0.09 : 0.13, 1800, 0.6, musicBus);
+    tone(190, t, 0.08, 'triangle', 0.05, 120, musicBus);
+  }
+  if (s16 % 2 === 0) noise(t, 0.035, s16 % 4 === 2 ? 0.05 : 0.025, 8000, 1.2, musicBus);
+  // Redoble antes de volver a empezar
+  if (section === 'puente' && bar16 === 15 && s16 >= 8) noise(t, 0.08, 0.05 + (s16 - 8) * 0.012, 2000, 0.6, musicBus);
+  // Platillo al empezar el estribillo
+  if (bar16 === 8 && s16 === 0) noise(t, 1.2, 0.07, 6000, 0.4, musicBus);
   step++;
   nextTime = t + beat;
 }
 
-/** Prepara las cuerdas de las dos canciones poco a poco, en ratos libres, para que no haya tirones. */
-let warmed = false;
-function warmUp() {
-  if (warmed || !ctx) return;
-  warmed = true;
-  const jobs: [number, number, number][] = [];
-  for (const song of Object.values(SONGS)) {
-    song.bass.forEach((b) => jobs.push([N(b), 1.2, 0.25], [N(b + 7), 1.2, 0.25]));
-    for (const chord of song.chords)
-      for (const n of chord) jobs.push([N(n - 12), 2.4, 0.55], [N(n), 1.4, 0.6], [N(n + 12), 1.4, 0.6]);
-  }
-  const idle: (cb: () => void) => void = (cb) =>
-    'requestIdleCallback' in window ? (window as any).requestIdleCallback(cb, { timeout: 500 }) : setTimeout(cb, 30);
-  const next = () => {
-    const j = jobs.shift();
-    if (!j) return;
-    pluckBuffer(...j);
-    idle(next);
-  };
-  noiseBuffer();
-  idle(next);
-}
-
 function startMusic() {
   if (!ctx || timer !== null) return;
-  makeRoom();
-  warmUp();
+  noiseBuffer();
+  makeEcho();
   nextTime = ctx.currentTime + 0.1;
   timer = window.setInterval(() => {
     if (!ctx) return;
     while (nextTime < ctx.currentTime + 0.3) scheduleStep(nextTime);
   }, 60);
+}
+
+// ---------------------------------------------------------------------------
+// Sonido ambiente: sigue al clima, la hora, el lugar y lo que pasa
+// ---------------------------------------------------------------------------
+
+export type AmbPlace = 'casa' | 'calle' | 'diner' | 'alcaldia' | 'reparto' | 'fuera';
+
+export interface Ambience {
+  weather: 'despejado' | 'nublado' | 'lluvia' | 'tormenta' | 'nieve';
+  /** Hora local (0–24, con decimales). */
+  hour: number;
+  place: AmbPlace;
+  /** Hay obras en marcha (solar, obras públicas o renovaciones). */
+  works: boolean;
+  pet: 'gato' | 'perro' | null;
+  /** Mucha gente (crucero, Times Square...). */
+  crowd: boolean;
+  /** Fecha especial: 'navidad' | 'julio' | null. */
+  fiesta: string | null;
+}
+
+let amb: Ambience = { weather: 'despejado', hour: 12, place: 'casa', works: false, pet: null, crowd: false, fiesta: null };
+let ambTimer: number | null = null;
+/** Capas continuas (lluvia, viento, ciudad, murmullo): ruido filtrado en bucle. */
+const beds: Record<string, { gain: GainNode; filter?: BiquadFilterNode }> = {};
+
+export function setAmbience(a: Partial<Ambience>) {
+  const next = { ...amb, ...a };
+  const changed = (Object.keys(a) as (keyof Ambience)[]).some((k) => next[k] !== amb[k]);
+  amb = next;
+  if (changed) updateBeds();
+}
+
+function bed(name: string, type: BiquadFilterType, freq: number, q: number, lfo?: { rate: number; depth: number }) {
+  if (!ctx || !ambBus || beds[name]) return;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer();
+  src.loop = true;
+  const f = ctx.createBiquadFilter();
+  f.type = type;
+  f.frequency.value = freq;
+  f.Q.value = q;
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  src.connect(f).connect(g).connect(ambBus);
+  if (lfo) {
+    // Ráfagas: el filtro sube y baja despacio
+    const o = ctx.createOscillator();
+    o.frequency.value = lfo.rate;
+    const og = ctx.createGain();
+    og.gain.value = lfo.depth;
+    o.connect(og).connect(f.frequency);
+    o.start();
+  }
+  src.start(0, Math.random());
+  beds[name] = { gain: g, filter: f };
+}
+
+function startAmbience() {
+  if (!ctx || ambTimer !== null) return;
+  bed('lluvia', 'lowpass', 1600, 0.3);
+  bed('lluviaAlta', 'highpass', 5000, 0.4);
+  bed('viento', 'bandpass', 420, 0.9, { rate: 0.13, depth: 260 });
+  bed('ciudad', 'lowpass', 260, 0.5);
+  bed('murmullo', 'bandpass', 650, 1.4, { rate: 0.4, depth: 120 });
+  updateBeds();
+  ambTimer = window.setInterval(ambientTick, 250);
+}
+
+function updateBeds() {
+  if (!ctx || !beds.lluvia) return;
+  const w = amb.weather;
+  const indoor = amb.place === 'diner' || amb.place === 'alcaldia';
+  const muffle = indoor ? 0.35 : 1;
+  const day = amb.hour >= 7 && amb.hour < 21;
+  const set = (name: string, v: number) => beds[name].gain.gain.setTargetAtTime(v, ctx!.currentTime, 1.2);
+  set('lluvia', (w === 'tormenta' ? 0.5 : w === 'lluvia' ? 0.3 : 0) * muffle);
+  set('lluviaAlta', (w === 'tormenta' ? 0.07 : w === 'lluvia' ? 0.04 : 0) * muffle);
+  set('viento', (w === 'nieve' ? 0.32 : w === 'tormenta' ? 0.18 : w === 'nublado' ? 0.07 : 0.02) * muffle);
+  set('ciudad', indoor ? 0.04 : day ? 0.16 : 0.07);
+  set('murmullo', indoor ? (amb.place === 'diner' ? 0.11 : 0.05) : amb.crowd ? 0.08 : 0);
+}
+
+const chance = (perSecond: number) => Math.random() < perSecond / 4;
+
+/** Cada 250 ms decide si suena algo puntual según lo que está pasando. */
+function ambientTick() {
+  if (!ctx || !ambBus || !prefs.ambient || ctx.state !== 'running') return;
+  const t = ctx.currentTime + 0.05;
+  const h = amb.hour;
+  const w = amb.weather;
+  const wet = w === 'lluvia' || w === 'tormenta';
+  const out = ambBus;
+  const indoor = amb.place === 'diner' || amb.place === 'alcaldia';
+  // Pájaros al amanecer (y algo por la mañana), si no llueve ni nieva
+  if (!wet && w !== 'nieve' && !indoor && h >= 5 && h < 10 && chance(h < 8 ? 0.7 : 0.2)) bird(t, out);
+  // Grillos de noche en verano, si no llueve
+  if (!wet && w !== 'nieve' && (h >= 21 || h < 5) && chance(0.35)) crickets(t, out);
+  // Tráfico: bocinas de día en la calle
+  if (!indoor && h >= 8 && h < 20 && chance(amb.place === 'reparto' ? 0.12 : 0.05)) horn(t, out);
+  // Sirena lejana de noche
+  if ((h >= 22 || h < 4) && chance(0.012)) siren(t, out);
+  // Lugares
+  if (amb.place === 'diner') {
+    if (chance(0.35)) tone(2600 + Math.random() * 900, t, 0.12, 'triangle', 0.025, undefined, out); // platos
+    if (chance(0.03)) [1568, 2093].forEach((f, i) => tone(f, t + i * 0.09, 0.4, 'sine', 0.03, undefined, out)); // caja registradora
+  }
+  if (amb.place === 'alcaldia') {
+    if (chance(0.12)) for (let i = 0; i < 4 + Math.random() * 6; i++) noise(t + i * 0.09, 0.03, 0.06, 3000, 2, out); // máquina de escribir
+    if (chance(0.02)) for (let i = 0; i < 2; i++) for (let k = 0; k < 8; k++) tone(k % 2 ? 1100 : 900, t + i * 0.6 + k * 0.04, 0.04, 'square', 0.012, undefined, out); // teléfono
+  }
+  // Obras: martillo y hormigonera
+  if (amb.works && !indoor && h >= 7 && h < 19 && chance(0.25)) {
+    noise(t, 0.05, 0.08, 1500, 1.5, out);
+    tone(170, t, 0.06, 'square', 0.02, 110, out);
+  }
+  // Mascota
+  if (amb.pet && (amb.place === 'casa' || amb.place === 'calle') && chance(0.012)) (amb.pet === 'perro' ? bark : meow)(t, out);
+  // Fiestas
+  if (amb.fiesta === 'navidad' && chance(0.05)) [0, 4, 7, 12].forEach((s, i) => tone(N(s + 12), t + i * 0.3, 1.2, 'sine', 0.025, undefined, out));
+  if (amb.fiesta === 'julio' && (h >= 20 || h < 1) && chance(0.15)) firework(t, out);
+}
+
+/** El trueno lo pide la escena justo después de cada relámpago. */
+export function thunder(delay = 0.4) {
+  if (!ctx || !ambBus || !prefs.ambient) return;
+  const t = ctx.currentTime + delay;
+  noise(t, 2.4, 0.5, 90, 0.5, ambBus);
+  noise(t + 0.05, 0.6, 0.25, 260, 0.6, ambBus);
+  tone(48, t, 1.8, 'sine', 0.2, 30, ambBus);
+}
+
+function bird(t: number, out: AudioNode) {
+  const base = 2600 + Math.random() * 1600;
+  const n = 2 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < n; i++) tone(base * (1 + Math.random() * 0.25), t + i * 0.11, 0.07, 'sine', 0.03, base * 1.35, out);
+}
+
+function crickets(t: number, out: AudioNode) {
+  for (let i = 0; i < 3; i++) tone(4400 + Math.random() * 200, t + i * 0.05, 0.03, 'sine', 0.012, undefined, out);
+}
+
+function horn(t: number, out: AudioNode) {
+  const long = Math.random() < 0.4;
+  for (const f of [370, 466]) tone(f, t, long ? 0.5 : 0.18, 'square', 0.012, undefined, out);
+}
+
+function siren(t: number, out: AudioNode) {
+  if (!ctx) return;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'sine';
+  for (let i = 0; i < 6; i++) {
+    o.frequency.setValueAtTime(620, t + i * 0.7);
+    o.frequency.linearRampToValueAtTime(880, t + i * 0.7 + 0.35);
+  }
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.012, t + 1);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 4.2);
+  o.connect(g).connect(out);
+  o.start(t);
+  o.stop(t + 4.3);
+}
+
+function bark(t: number, out: AudioNode) {
+  for (let i = 0; i < 2; i++) {
+    tone(320, t + i * 0.22, 0.12, 'sawtooth', 0.03, 180, out);
+    noise(t + i * 0.22, 0.1, 0.04, 900, 1, out);
+  }
+}
+
+function meow(t: number, out: AudioNode) {
+  if (!ctx) return;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(600, t);
+  o.frequency.linearRampToValueAtTime(900, t + 0.18);
+  o.frequency.linearRampToValueAtTime(520, t + 0.55);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.03, t + 0.05);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+  o.connect(g).connect(out);
+  o.start(t);
+  o.stop(t + 0.65);
+}
+
+function firework(t: number, out: AudioNode) {
+  tone(400, t, 0.6, 'sine', 0.02, 1600, out);
+  noise(t + 0.6, 0.5, 0.12, 400, 0.5, out);
+  for (let i = 0; i < 6; i++) noise(t + 0.8 + i * 0.05 + Math.random() * 0.1, 0.03, 0.04, 5000, 2, out);
 }

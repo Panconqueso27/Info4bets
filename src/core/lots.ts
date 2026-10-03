@@ -43,32 +43,32 @@ export interface CivicDef {
 }
 
 export const CIVIC: CivicDef[] = [
-  { id: 'parque', label: 'Parque de barrio', icon: '🌳', cost: 200_000, days: 2, instant: { popularidad: 6, estres: -3 }, tourism: 0.25, income: 0, description: 'Árboles, bancos y una fuente. Los vecinos lo agradecen.' },
-  { id: 'escuela', label: 'Escuela pública', icon: '🏫', cost: 350_000, days: 3, instant: { popularidad: 8, control: 4 }, tourism: 0, income: 0, description: 'Aulas nuevas para mil niños del barrio.' },
-  { id: 'hospital', label: 'Centro de salud', icon: '🏥', cost: 500_000, days: 3, instant: { popularidad: 10, control: 3 }, tourism: 0, income: 5_000, description: 'Urgencias abiertas 24 horas en un barrio que no tenía.' },
-  { id: 'metro', label: 'Estación de metro', icon: '🚇', cost: 600_000, days: 4, instant: { control: 8, popularidad: 4 }, tourism: 0.3, income: 12_000, description: 'Una línea más que conecta el barrio con el centro.' },
-  { id: 'museo', label: 'Museo de la ciudad', icon: '🏛', cost: 450_000, days: 3, instant: { popularidad: 5 }, tourism: 0.6, income: 4_000, description: 'Historia de Nueva York, del puerto a los rascacielos.' },
-  { id: 'viviendas', label: 'Viviendas sociales', icon: '🏘', cost: 400_000, days: 3, instant: { popularidad: 10, control: -2 }, tourism: 0, income: 6_000, description: 'Pisos asequibles para familias trabajadoras.' },
+  { id: 'parque', label: 'Parque de barrio', icon: '🌳', cost: 150_000, days: 2, instant: { popularidad: 6, estres: -3 }, tourism: 0.25, income: 0, description: 'Árboles, bancos y una fuente. Los vecinos lo agradecen.' },
+  { id: 'escuela', label: 'Escuela pública', icon: '🏫', cost: 250_000, days: 3, instant: { popularidad: 8, control: 4 }, tourism: 0, income: 0, description: 'Aulas nuevas para mil niños del barrio.' },
+  { id: 'hospital', label: 'Centro de salud', icon: '🏥', cost: 350_000, days: 3, instant: { popularidad: 10, control: 3 }, tourism: 0, income: 5_000, description: 'Urgencias abiertas 24 horas en un barrio que no tenía.' },
+  { id: 'metro', label: 'Estación de metro', icon: '🚇', cost: 450_000, days: 4, instant: { control: 8, popularidad: 4 }, tourism: 0.3, income: 12_000, description: 'Una línea más que conecta el barrio con el centro.' },
+  { id: 'museo', label: 'Museo de la ciudad', icon: '🏛', cost: 300_000, days: 3, instant: { popularidad: 5 }, tourism: 0.6, income: 4_000, description: 'Historia de Nueva York, del puerto a los rascacielos.' },
+  { id: 'viviendas', label: 'Viviendas sociales', icon: '🏘', cost: 300_000, days: 3, instant: { popularidad: 10, control: -2 }, tourism: 0, income: 6_000, description: 'Pisos asequibles para familias trabajadoras.' },
 ];
 
 export const CIVIC_BY_ID = Object.fromEntries(CIVIC.map((c) => [c.id, c])) as Record<string, CivicDef>;
 
 /** Renovación de manzanas (alcalde): dos niveles. */
 export const RENOVATION = [
-  { level: 1, label: 'Fachadas restauradas', cost: 120_000, hours: 24, instant: { popularidad: 2 } as Bars, tourism: 0.08 },
-  { level: 2, label: 'Neones y arbolado', cost: 90_000, hours: 24, instant: { popularidad: 2, control: 1 } as Bars, tourism: 0.08 },
+  { level: 1, label: 'Fachadas restauradas', cost: 80_000, hours: 24, instant: { popularidad: 2 } as Bars, tourism: 0.08 },
+  { level: 2, label: 'Neones y arbolado', cost: 60_000, hours: 24, instant: { popularidad: 2, control: 1 } as Bars, tourism: 0.08 },
 ];
 
 /** La casa del inmigrante en su solar, por fases (una por día). */
-export const LOT_PRICE = 600;
+export const LOT_PRICE = 500;
 export const HOUSE_PHASES = [
-  { label: 'Cimientos', cost: 400, hours: 24, text: 'Una hormigonera, tres amigos y mucho sudor.' },
-  { label: 'Estructura', cost: 800, hours: 24, text: 'Vigas y ladrillo: ya se ve la forma de la casa.' },
-  { label: 'Tejado', cost: 600, hours: 24, text: 'Tejas rojas como las de tu pueblo.' },
-  { label: 'Acabados', cost: 500, hours: 24, text: 'Pintura, ventanas y una puerta con tu nombre.' },
+  { label: 'Cimientos', cost: 300, hours: 24, text: 'Una hormigonera, tres amigos y mucho sudor.' },
+  { label: 'Estructura', cost: 600, hours: 24, text: 'Vigas y ladrillo: ya se ve la forma de la casa.' },
+  { label: 'Tejado', cost: 500, hours: 24, text: 'Tejas rojas como las de tu pueblo.' },
+  { label: 'Acabados', cost: 400, hours: 24, text: 'Pintura, ventanas y una puerta con tu nombre.' },
 ];
 /** Al terminarla la alquilas: ingreso diario. */
-export const HOUSE_RENT = 30;
+export const HOUSE_RENT = 35;
 
 export function lotState(state: GameState, id: string) {
   return state.lots?.[id];

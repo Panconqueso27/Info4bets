@@ -160,8 +160,8 @@ export function Dock({
         ) : (
           <div class="row">
             <button class="btn minigame-btn" onClick={onMinigame}>
-              {isImm ? '🍽 Lavar platos' : '🖋 Papeleo'}
-              <small>−{MINUTES_PER_POINT} min por {isImm ? 'plato' : 'acierto'}</small>
+              {isImm ? '🍽 Minijuegos' : '🖋 Minijuegos'}
+              <small>−{MINUTES_PER_POINT} min por acierto · 5 juegos</small>
             </button>
             <button class="btn secondary" disabled>
               {role.retire}
@@ -312,7 +312,7 @@ export function MenuModal({
   const [confirm, setConfirm] = useState(false);
   const [sound, setSound] = useState(audio.getPrefs());
   const [low, setLow] = useState(lowFx());
-  const toggle = (k: 'sfx' | 'music') => {
+  const toggle = (k: 'sfx' | 'music' | 'ambient') => {
     audio.unlock();
     audio.setPrefs({ [k]: !sound[k] });
     setSound(audio.getPrefs());
@@ -343,12 +343,15 @@ export function MenuModal({
             ❓ Ver tutorial
           </button>
         </div>
-        <div class="row" style={{ marginBottom: 12 }}>
+        <div class="menu-grid" style={{ marginBottom: 12 }}>
           <button class={`btn secondary ${sound.sfx ? 'on' : ''}`} onClick={() => toggle('sfx')}>
             {sound.sfx ? '🔊 Sonido' : '🔇 Sonido'}
           </button>
           <button class={`btn secondary ${sound.music ? 'on' : ''}`} onClick={() => toggle('music')}>
             {sound.music ? '🎵 Música' : '🔇 Música'}
+          </button>
+          <button class={`btn secondary ${sound.ambient ? 'on' : ''}`} onClick={() => toggle('ambient')}>
+            {sound.ambient ? '🌧 Ambiente' : '🔇 Ambiente'}
           </button>
           <button
             class={`btn secondary ${low ? '' : 'on'}`}

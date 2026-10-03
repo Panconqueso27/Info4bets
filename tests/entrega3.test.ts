@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ROLES } from '../src/core/roles';
 import { EVENTS } from '../src/core/events/catalog';
 import {
   advance,
@@ -57,7 +58,7 @@ describe('personajes recurrentes', () => {
     while (rollOutcome(s, EVENTS['sal-aumento'], EVENTS['sal-aumento'].choices[0], seed).id !== 'sube') seed++;
     s.pending.push({ instanceId: 'x', eventId: 'sal-aumento', firedAt: at(1, 12), seed });
     resolveEvent(s, 'x', 'aceptar', at(1, 12));
-    expect(shiftPay(s)).toBe(160);
+    expect(shiftPay(s)).toBe(ROLES.inmigrante.shiftPay + 20);
   });
 
   it('Don Ramiro, al que escondiste, te consigue descuento en la casa', () => {
@@ -131,7 +132,7 @@ describe('temporada y estadísticas', () => {
     advance(s, at(1, 17));
     const st = gameStats(s, at(1, 17));
     expect(st.jornadas).toBe(1);
-    expect(st.ingresos).toBe(140);
+    expect(st.ingresos).toBe(ROLES.inmigrante.shiftPay);
     expect(st.buenos + st.malos).toBe(1);
     expect(st.personas).toBe(1);
     expect(st.destacadas.length).toBe(1);

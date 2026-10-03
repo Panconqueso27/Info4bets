@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: beta 0.5.0**
+**Versión actual: beta 0.6.0**
 
 ## Probar la beta
 
@@ -21,6 +21,22 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.6.0
+
+- **Música synthwave original**, más animada: canción con intro, estrofa, estribillo con la melodía una octava arriba, eco y batería con redobles. De noche, más lenta y suave.
+- **Sonido ambiente** que sigue al juego (con su propio interruptor en ☰):
+  - Lluvia, tormenta con truenos sincronizados con los relámpagos, viento con nieve.
+  - Pájaros al amanecer, tráfico y bocinas de día, grillos y sirenas de noche.
+  - Platos y caja registradora en el diner; máquinas de escribir y teléfonos en la alcaldía.
+  - Martillos si hay obras, tu mascota, campanas en Navidad y fuegos artificiales el 4 de Julio.
+- **Tipografía pixel art:** Pixelify Sans para los textos y Silkscreen para títulos y botones, con tildes y ñ.
+- **8 minijuegos nuevos** (5 por personaje, con menú, récords y combos):
+  - Inmigrante: plancha, pedidos, café y fregona.
+  - Alcalde: semáforos, rueda de prensa, presupuestos y mitin.
+- **Precios ajustados** con simulaciones de partidas: hay algo que comprar cada pocos días y metas grandes hacia los dos meses.
+  - Inmigrante: sueldo $160, gastos $65. Más baratos: cuarto, apartamento y casa, el auto, el solar, las fases de la casa y las máquinas. Los trabajos extra cansan menos.
+  - Alcalde: sueldo $80K, gastos $35K. Ayudantes, obras públicas y renovaciones más baratos.
 
 ## Novedades 0.5.0
 

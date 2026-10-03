@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ROLES } from '../src/core/roles';
 import { ACHIEVEMENTS, achievementsFor } from '../src/core/achievements';
 import { EVENTS, eventsFor } from '../src/core/events/catalog';
 import {
@@ -75,7 +76,7 @@ describe('bolsa', () => {
     const entry = quote(s, 'ATLM', at(1, 9), 1 / 8);
     const exit = quote(s, 'ATLM', at(1, 16), 1);
     retire(s, at(1, 16));
-    const expected = before + betReturn(50, 1, entry, exit) + 140;
+    const expected = before + betReturn(50, 1, entry, exit) + ROLES.inmigrante.shiftPay;
     expect(Math.abs(s.bars.dinero! - expected)).toBeLessThanOrEqual(1);
     expect(s.market.bets).toHaveLength(0);
     expect(s.log.some((l) => l.title === 'Cierre de la bolsa')).toBe(true);
@@ -90,7 +91,7 @@ describe('mejoras permanentes', () => {
     expect(lv[0].cost).toBeLessThan(lv[1].cost);
     expect(lv[1].cost).toBeLessThan(lv[2].cost);
     // Con el sueldo neto diario no se compra de un día para otro.
-    expect(lv[0].cost - s.bars.dinero!).toBeGreaterThan(5 * (140 - 70));
+    expect(lv[0].cost - s.bars.dinero!).toBeGreaterThan(5 * (ROLES.inmigrante.shiftPay - ROLES.inmigrante.dailyCost));
     s.bars.dinero = 10_000;
     buyUpgrade(s, at(1));
     expect(s.upgradeLevel).toBe(1);
