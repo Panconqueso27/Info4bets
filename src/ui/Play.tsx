@@ -2,12 +2,12 @@ import * as audio from '../platform/audio';
 import { Letters, Words } from './AnimText';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { EVENTS } from '../core/events/catalog';
-import { canRetire, canStartErrand, canStartShift, dayNumber, ERRAND_PAY, errandHours, marketSession, MINUTES_PER_POINT } from '../core/game';
+import { WEATHER_LABEL } from '../core/weather';
+import { todayWeather, canRetire, canStartErrand, canStartShift, dayNumber, ERRAND_PAY, errandHours, marketSession, MINUTES_PER_POINT } from '../core/game';
 import { TERM_DAYS } from '../core/events/alcalde';
 import { ROLES, type BarDef } from '../core/roles';
 import { formatDuration } from '../core/time';
 import type { BarId, Bars, GameState, Role } from '../core/types';
-import { lightAt } from '../art/daynight';
 
 /** La fuente de píxeles no tiene mayúsculas con tilde. */
 export function caps(s: string): string {
@@ -72,7 +72,9 @@ export function Hud({ state, now }: { state: GameState; now: number }) {
         ))}
         <div class="clock">
           <span>🕐 {time}</span>
-          <span>{lightAt(now).label}</span>
+          <span>
+            {WEATHER_LABEL[todayWeather(state)].icon} {WEATHER_LABEL[todayWeather(state)].label}
+          </span>
         </div>
       </div>
     </div>

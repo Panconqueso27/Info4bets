@@ -15,6 +15,7 @@ import {
   startAction,
   startShift,
   takeNotice,
+  todayWeather,
   type ResolvedOutcome,
 } from '../core/game';
 import { EVENTS } from '../core/events/catalog';
@@ -25,7 +26,9 @@ import * as clock from '../platform/clock';
 import * as notify from '../platform/notify';
 import { deleteGame, loadGame, saveGame } from '../platform/save';
 import { bridge, type Spot } from '../scene/bridge';
-import { DevPanel } from './DevPanel';
+import { PLACE_BY_ID, ROLE_PLACES } from '../art/cityMap';
+import { DevPanel, devWeather } from './DevPanel';
+import type { Weather } from '../core/weather';
 import { MarketTerminal } from './Market';
 import { AchievementsModal, AgendaModal, EndingModal, NewsModal, UpgradeModal } from './Panels';
 import { Dock, GameOverModal, Hud, LogModal, MenuModal, Toast, eventNotification, type Panel } from './Play';
@@ -107,10 +110,46 @@ export function App() {
   }, []);
   useEffect(() => audio.setMood(lightAt(now).night > 0.5 ? 'noche' : 'dia'), [Math.floor(now / 60_000)]);
 
+  // Tocar un lugar del mapa: la Bolsa abre la terminal, tu trabajo te lleva a trabajar.
+  useEffect(() => {
+    bridge.onTap((id) => {
+      const s = game.current;
+      if (!s || screen.id !== 'play') return;
+      audio.play.click();
+      const mine = ROLE_PLACES[s.character.role];
+      if (id === 'bolsa') return setPanel('bolsa');
+      if (id === mine.work && !canStartShift(s, clock.now())) {
+        notify.requestPermission();
+        return act(startShift);
+      }
+      const label = PLACE_BY_ID[id].label;
+      const flavor: Record<string, string> = {
+        casa: 'Tu cuarto, tu ropa tendida y el depósito de agua que gotea.',
+        residencia: 'La residencia oficial. Jardín, reja y silencio.',
+        diner: s.character.role === 'inmigrante' ? 'Tu trabajo. Huele a café y a plancha.' : 'Un diner de los de siempre.',
+        alcaldia: s.character.role === 'alcalde' ? 'Tu despacho te espera.' : 'La alcaldía. Allí se decide todo.',
+        parque: 'El pulmón de la ciudad.',
+        plaza: 'Neones, taxis y ruido las 24 horas.',
+        hotel: 'Hotel con letrero rosa. Nadie pregunta.',
+        pizza: 'Porción a 75 centavos.',
+        bar: 'Cerveza fría y béisbol en la tele.',
+      };
+      setToast({ title: label.toUpperCase(), text: flavor[id] ?? '' });
+    });
+    return () => bridge.onTap(null);
+  });
+
   // La escena refleja dónde está el personaje.
   useEffect(() => {
-    if (playing) bridge.set({ role: state.character.role, look: state.character.look, spot: spotFor(state, now) });
-    else bridge.set({ role: null, look: null, spot: 'home' });
+    if (playing)
+      bridge.set({
+        role: state.character.role,
+        look: state.character.look,
+        spot: spotFor(state, now),
+        vehicle: state.flags.auto ? 'auto' : 'pie',
+        weather: ((devEnabled && devWeather()) || todayWeather(state)) as Weather,
+      });
+    else bridge.set({ role: null, look: null, spot: 'home', weather: 'despejado' });
   });
 
   // Avisos: sucesos nuevos y logros/bolsa.

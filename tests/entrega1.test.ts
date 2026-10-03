@@ -99,3 +99,24 @@ describe('reparto de paquetes', () => {
     expect(s.shift).toBeNull();
   });
 });
+
+describe('clima', () => {
+  it('nieva en invierno y no en verano, de forma determinista', async () => {
+    const { weatherFor } = await import('../src/core/weather');
+    let snowWinter = 0, snowSummer = 0;
+    for (let d = 1; d <= 28; d++) {
+      const dd = String(d).padStart(2, '0');
+      if (weatherFor(5, `2026-01-${dd}`) === 'nieve') snowWinter++;
+      if (weatherFor(5, `2026-07-${dd}`) === 'nieve') snowSummer++;
+      expect(weatherFor(5, `2026-01-${dd}`)).toBe(weatherFor(5, `2026-01-${dd}`));
+    }
+    expect(snowWinter).toBeGreaterThan(3);
+    expect(snowSummer).toBe(0);
+  });
+
+  it('repartir con mal tiempo paga un plus', async () => {
+    const { errandWeather } = await import('../src/core/weather');
+    expect(errandWeather('nieve').extraPay).toBeGreaterThan(0);
+    expect(errandWeather('despejado').extraPay).toBe(0);
+  });
+});

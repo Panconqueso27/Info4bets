@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: beta 0.2.0**
+**Versión actual: beta 0.3.0**
 
 ## Probar la beta
 
@@ -21,6 +21,17 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.3.0
+
+- **Ciudad en vista cenital inclinada (3/4):** azoteas y fachadas con volumen, tráfico, peatones, mapa que se arrastra y se amplía, y lugares tocables (la Bolsa abre la terminal).
+- **Decisiones con tarjetas deslizables:** derecha, izquierda y arriba, con animación y sonido según salga bien o mal.
+- **Suceso de apertura** ligero en los primeros 2 minutos de cada jornada.
+- **Minijuegos:** lavaplatos (inmigrante) y papeleo (alcalde). Cada acierto descuenta 10 minutos de la jornada.
+- **Reparto de paquetes:** trabajo extra de 4 horas, una vez al día. El auto lo reduce a 2 horas.
+- **Clima según la estación:** lluvia, tormenta y nieve. Cambia los sucesos y el reparto, y las noches de nieve sin casa propia hacen daño.
+- **Sonido:** efectos chiptune y música synthwave de día y de noche.
+- **Interfaz neón** con tipografía nueva y animada.
 
 ## Qué incluye la beta
 

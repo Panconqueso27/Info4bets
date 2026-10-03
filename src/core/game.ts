@@ -6,6 +6,7 @@ import { ROLES, SHIFT_HOURS } from './roles';
 import { hashString, mixSeed, mulberry32, pickWeighted, randRange } from './rng';
 import { addDays, dateKey, daysBetween, HOUR, startOfDay } from './time';
 import { nextUpgrade, UPGRADES } from './upgrades';
+import { errandWeather, weatherFor, weatherWeight, type Weather } from './weather';
 import type { BarId, Bars, Character, GameState, LogEntry, LogKind, PendingEvent, Role } from './types';
 
 const LOG_LIMIT = 120;
@@ -258,8 +259,11 @@ function closeDay(state: GameState, now: number) {
   const overnight: Bars = { ...role.overnight };
   const extraHealth = (UPGRADES[roleId].perLevel.overnightHealth ?? 0) * state.upgradeLevel;
   if (extraHealth) overnight.salud = (overnight.salud ?? 0) + extraHealth;
+  // Noche de nieve sin casa propia: frío en el cuarto compartido.
+  const cold = roleId === 'inmigrante' && state.upgradeLevel === 0 && weatherFor(state.seed, closing.date) === 'nieve';
+  if (cold) overnight.salud = (overnight.salud ?? 0) - 3;
   let deltas = mergeDeltas(applyBars(state, passive), applyBars(state, { dinero: -role.dailyCost }), applyBars(state, overnight));
-  const extra = passiveNotes.length ? ` Te ayudan ${passiveNotes.join(' y ')}.` : '';
+  const extra = (passiveNotes.length ? ` Te ayudan ${passiveNotes.join(' y ')}.` : '') + (cold ? ' Sin calefacción, la nieve se cuela por la ventana.' : '');
   if ((state.bars.dinero ?? 0) < 0) {
     deltas = mergeDeltas(deltas, applyBars(state, role.debtPenalty));
     entry('malo', 'Deudas', `Día ${closingDay}: cerraste el día en números rojos. Las deudas pesan.${extra}`, deltas);
@@ -309,7 +313,11 @@ export function startShift(state: GameState, now: number): void {
 
   // Los sucesos de la jornada se sortean al empezar, para poder programar
   // las notificaciones aunque la app esté cerrada.
-  const pool = eventsFor(state.character.role, 'aleatorio', 'personal').filter((e) => eligible(state, e, day));
+  // El clima del día cambia qué sucesos son más probables.
+  const w = todayWeather(state);
+  const pool = eventsFor(state.character.role, 'aleatorio', 'personal')
+    .filter((e) => eligible(state, e, day))
+    .map((e) => ({ ...e, weight: e.weight * weatherWeight(e.id, w) }));
   const used = new Set<string>();
   const slots = [];
   // Siempre hay un suceso ligero en los primeros 2 minutos, para enganchar.
@@ -757,10 +765,19 @@ export function startErrand(state: GameState, now: number) {
 
 function finishErrand(state: GameState, at: number) {
   state.errand = null;
-  const deltas = mergeDeltas(applyBars(state, { dinero: ERRAND_PAY }), applyBars(state, ERRAND_WEAR));
+  const w = errandWeather(todayWeather(state));
+  const pay = ERRAND_PAY + w.extraPay;
+  const wear: Bars = { salud: (ERRAND_WEAR.salud ?? 0) - w.extraWear, estres: (ERRAND_WEAR.estres ?? 0) + w.extraWear };
+  const deltas = mergeDeltas(applyBars(state, { dinero: pay }), applyBars(state, wear));
   state.flags.repartos = Number(state.flags.repartos ?? 0) + 1;
-  log(state, at, 'bueno', 'Reparto terminado', `${state.character.name} vuelve con los pies molidos y ${ROLES.inmigrante.formatMoney(ERRAND_PAY)} en el bolsillo.`, deltas);
-  state.notices.push({ kind: 'aviso', title: 'REPARTO', text: `Reparto terminado: +${ROLES.inmigrante.formatMoney(ERRAND_PAY)}` });
+  const fmt = ROLES.inmigrante.formatMoney;
+  log(state, at, 'bueno', 'Reparto terminado', `${state.character.name} vuelve con los pies molidos y ${fmt(pay)} en el bolsillo.${w.note ? ` ${w.note}` : ''}`, deltas);
+  state.notices.push({ kind: 'aviso', title: 'REPARTO', text: `Reparto terminado: +${fmt(pay)}` });
+}
+
+/** Clima del día actual de la partida. */
+export function todayWeather(state: GameState): Weather {
+  return weatherFor(state.seed, state.today.date);
 }
 
 export function buyCar(state: GameState, now: number) {

@@ -47,6 +47,14 @@ export function DevPanel({
           <button class="btn secondary" onClick={act(() => clock.skip(8 * HOUR))}>+8h</button>
           <button class="btn secondary" onClick={act(() => clock.skip(24 * HOUR))}>+1 día</button>
         </div>
+        <div class="kicker">CLIMA (SOLO VISUAL)</div>
+        <div class="grid">
+          {['', 'lluvia', 'tormenta', 'nieve'].map((w) => (
+            <button key={w} class={`btn secondary ${devWeather() === w ? 'on' : ''}`} onClick={act(() => setDevWeather(w))}>
+              {w || 'real'}
+            </button>
+          ))}
+        </div>
         {role && (
           <>
             <div class="kicker">FORZAR SUCESO</div>
@@ -73,4 +81,24 @@ export function DevPanel({
       </div>
     </div>
   );
+}
+
+const WEATHER_KEY = 'laciudad.devweather';
+
+/** Clima forzado desde el panel de desarrollo (solo cambia lo que se ve). */
+export function devWeather(): string {
+  try {
+    return localStorage.getItem(WEATHER_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function setDevWeather(w: string) {
+  try {
+    if (w) localStorage.setItem(WEATHER_KEY, w);
+    else localStorage.removeItem(WEATHER_KEY);
+  } catch {
+    /* sin almacenamiento */
+  }
 }

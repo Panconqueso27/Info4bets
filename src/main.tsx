@@ -15,6 +15,9 @@ ui.id = 'ui';
 root.append(stage, ui);
 
 // Esperamos la fuente de píxeles para que la escena la use desde el principio.
-document.fonts.load('8px "Press Start 2P"').finally(() => createGame(stage));
+document.fonts.load('8px "Press Start 2P"').finally(() => {
+  const game = createGame(stage);
+  if (import.meta.env.DEV) (window as any).__game = game;
+});
 // En la app, la partida guardada en el almacenamiento nativo se recupera antes de mostrar nada.
 restoreNativeSave().finally(() => render(<App />, ui));
