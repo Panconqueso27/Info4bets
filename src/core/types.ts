@@ -145,8 +145,18 @@ export interface GameState {
   ending: Ending | null;
   /** Mandato actual del alcalde (empieza en 1). */
   term: number;
-  /** Reparto de paquetes en curso (trabajo extra del inmigrante). */
-  errand?: { startedAt: number; endsAt: number } | null;
+  /** Trabajo extra en curso: reparto de paquetes o un trabajo de la radio. */
+  errand?: Errand | null;
+  /** Solares de esta partida: id → estado. */
+  lots?: Record<string, LotState>;
+  /** Manzanas renovadas por el alcalde: "c,r" → nivel (1-2). */
+  renovated?: Record<string, number>;
+  /** Obras de renovación en curso: "c,r" → instante en que terminan. */
+  renovating?: Record<string, number>;
+  /** Mascota del inmigrante. */
+  pet?: Pet | null;
+  /** Máquinas expendedoras del inmigrante. */
+  vending?: { count: number; broken: number };
   /** Personajes recurrentes: afinidad y recuerdos. */
   npcs?: Record<string, { afinidad: number; recuerdos: string[] }>;
   /** El otro protagonista que vive en la misma ciudad (de una partida anterior o por defecto). */
@@ -163,4 +173,31 @@ export interface OtherCharacter {
   look: Look;
   /** Viene de una partida anterior del jugador. */
   legacy: boolean;
+}
+
+export interface Errand {
+  startedAt: number;
+  endsAt: number;
+  kind?: 'reparto' | 'radio';
+  label?: string;
+  pay?: number;
+  wear?: Bars;
+}
+
+export interface LotState {
+  /** Quién lo tiene: la ciudad (alcalde) o el jugador (inmigrante). */
+  owner: 'ciudad' | 'jugador';
+  /** Obra del alcalde (parque, escuela...) o 'casa' del inmigrante. */
+  building: string;
+  /** Fases completadas (casa del inmigrante: 0-4; obra del alcalde: 0-1). */
+  phase: number;
+  /** En obras hasta este instante (0 = nada en marcha). */
+  buildingUntil: number;
+}
+
+export interface Pet {
+  kind: 'gato' | 'perro';
+  name: string;
+  /** Día de adopción (para cobrar cada 30 días). */
+  since: number;
 }

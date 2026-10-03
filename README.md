@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: beta 0.4.0**
+**Versión actual: beta 0.5.0**
 
 ## Probar la beta
 
@@ -21,6 +21,21 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.5.0
+
+- **Solares:** seis solares vacíos por partida. El **alcalde** construye obras públicas (parque, escuela, centro de salud, metro, museo y viviendas sociales) y renueva cualquier manzana tocándola en el mapa (fachadas restauradas; luego neones y arbolado). El **inmigrante** compra un solar y levanta su casa en 4 fases de un día cada una (cimientos, estructura, tejado y acabados). Al terminarla la alquila. Esta casa es aparte de la mejora de vivienda. Todo se ve en el mapa: carteles de FOR SALE, vallas, andamios y grúas.
+- **Mascota:** un gato o un perro callejero puede seguirte al salir del diner. Si lo adoptas vive contigo, te baja el estrés cada noche, te sigue por el mapa y tiene sus propios sucesos. Cuesta $20 al mes.
+- **Radio WNYC:** cada día anuncia 3 trabajos extra para el inmigrante (puerto, mudanzas, niñera, obra...). Se puede hacer uno al día, fuera de la jornada.
+- **Ingresos pasivos:**
+  - El inmigrante instala hasta 5 **máquinas expendedoras** ($15 al día cada una). Se pueden romper o te las pueden robar.
+  - El alcalde cobra el **turismo**: los turistas dependen de la popularidad, los atractivos de la ciudad y el clima. También hay sucesos de cruceros y guías de viaje.
+- **Más fluido:**
+  - Lluvia, nieve y nubes ya no se redibujan en cada fotograma.
+  - La bolsa calcula menos y la música se prepara en ratos libres.
+  - Se quitaron los efectos CSS más pesados (desenfoques y sombras animadas).
+  - Si el móvil va justo, el juego baja la calidad solo. También hay un botón ✨/🔋 en el menú.
+  - Medido con la CPU 4 veces más lenta y lluvia: antes 51 fps, ahora 60 fps. Con la Bolsa abierta: antes 49 fps, ahora 60 fps.
 
 ## Novedades 0.4.0
 

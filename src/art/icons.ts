@@ -94,6 +94,26 @@ const ICONS: Record<string, string[]> = {
     '............', '............', '.wwwwwwwwww.', '.wkwwwwwwkw.', '.wwkwwwwkww.', '.wwwkwwkwww.',
     '.wwwwkkwwww.', '.wwwwwwwwww.', '.wwwwwwwwrw.', '.wwwwwwwwww.', '............', '............',
   ],
+  mascota: [
+    '............', '.n.......n..', '.nn.....nn..', '.nnnnnnnnn..', '.nkknnnkkn..', '.nnnnwnnnn..',
+    '..nnkkknn...', '...nnnnn....', '..nnnnnnn..n', '..nnnnnnn.n.', '..nn.n.nnn..', '............',
+  ],
+  maquina: [
+    '..rrrrrrrr..', '..rwwwwwwr..', '..rwbywgwr..', '..rwwwwwwr..', '..rwrygbwr..', '..rwwwwwwr..',
+    '..rwgbrywr..', '..rwwwwwwr..', '..rrrrrrkr..', '..rkkkkrrr..', '..rrrrrrrr..', '..AA....AA..',
+  ],
+  barco: [
+    '............', '.....r......', '.....r......', '....www.....', '...wwwww....', '..wwwwwwwww.',
+    '..wbwbwbwbw.', 'AAAAAAAAAAAA', '.AAAAAAAAAA.', '..AAAAAAAA..', 'bbbbbbbbbbbb', 'BBBBBBBBBBBB',
+  ],
+  radio: [
+    '.........a..', '........a...', '.......a....', '.nnnnnnnnnn.', '.nkkkkknyyn.', '.nkakaknyyn.',
+    '.nkkkkkn..n.', '.nkakaknwwn.', '.nkkkkknwwn.', '.nnnnnnnnnn.', '..N......N..', '............',
+  ],
+  casa: [
+    '.....rr.....', '....rrrr....', '...rrrrrr...', '..rrrrrrrr..', '.rrrrrrrrrr.', '..wwwwwwww..',
+    '..wbbwwbbw..', '..wbbwwbbw..', '..wwwnnwww..', '..wwwnnwww..', '..wwwnnwww..', '.gggggggggg.',
+  ],
   estrella: [
     '.....yy.....', '.....yy.....', '....yyyy....', 'yyyyyyyyyyyy', '.yyyyyyyyyy.', '..yyyyyyyy..',
     '...yyyyyy...', '..yyyyyyyy..', '..yyy..yyy..', '.yyy....yyy.', '.yy......yy.', '............',

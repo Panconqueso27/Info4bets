@@ -5,6 +5,13 @@ import {
   changeLook,
   buyCar,
   buyUpgrade,
+  buildCivic,
+  buildHousePhase,
+  buyLot,
+  buyVending,
+  renovateBlock,
+  repairVending,
+  takeRadioJob,
   startErrand,
   canStartShift,
   forceEvent,
@@ -41,6 +48,9 @@ import { Paperwork } from './Paperwork';
 import * as audio from '../platform/audio';
 import { lightAt } from '../art/daynight';
 import { Customizer, IdentityForm, RoleSelect, TitleScreen } from './Setup';
+import { BlockModal, LotCard, NegocioModal, ObrasModal, RadioModal, TurismoModal } from './City';
+import { Modal } from './Panels';
+import { cityLook, citySignature, LOT_BY_ID } from '../core/lots';
 
 type Screen =
   | { id: 'title' }
@@ -74,6 +84,8 @@ export function App() {
   const [minigame, setMinigame] = useState(false);
   const [reward, setReward] = useState<{ title: string; text: string } | null>(null);
   const [tutTick, setTutTick] = useState(0);
+  const [target, setTarget] = useState<string | null>(null);
+  const cityRef = useRef({ sig: '\u0000', look: cityLook(null) });
   const seenPending = useRef(new Set<string>());
 
   const state = game.current;
@@ -122,12 +134,21 @@ export function App() {
       if (!s || screen.id !== 'play') return;
       audio.play.click();
       const mine = ROLE_PLACES[s.character.role];
+      if (id.startsWith('lot:')) {
+        setPanel(null);
+        return setTarget(id);
+      }
+      if (id.startsWith('block:')) {
+        if (s.character.role !== 'alcalde') return setToast({ title: 'MANZANA', text: 'Edificios de vecinos. Solo el alcalde puede renovarlos.' });
+        setPanel(null);
+        return setTarget(id);
+      }
       if (id === 'bolsa') return setPanel('bolsa');
       if (id === mine.work && !canStartShift(s, clock.now())) {
         notify.requestPermission();
         return act(startShift);
       }
-      const label = PLACE_BY_ID[id].label;
+      const label = PLACE_BY_ID[id as keyof typeof PLACE_BY_ID].label;
       const flavor: Record<string, string> = {
         casa: 'Tu cuarto, tu ropa tendida y el depósito de agua que gotea.',
         residencia: 'La residencia oficial. Jardín, reja y silencio.',
@@ -155,8 +176,16 @@ export function App() {
 
   // La escena refleja dónde está el personaje.
   useEffect(() => {
+    if (playing) {
+      const sig = citySignature(state);
+      if (sig !== cityRef.current.sig) cityRef.current = { sig, look: cityLook(state) };
+    }
     if (playing)
       bridge.set({
+        city: cityRef.current.look,
+        citySig: cityRef.current.sig,
+        pet: state.pet?.kind ?? null,
+        vending: state.vending?.count ?? 0,
         role: state.character.role,
         look: state.character.look,
         spot: spotFor(state, now),
@@ -164,7 +193,7 @@ export function App() {
         other: state.other ?? null,
         weather: ((devEnabled && devWeather()) || todayWeather(state)) as Weather,
       });
-    else bridge.set({ role: null, look: null, spot: 'home', weather: 'despejado', other: null });
+    else bridge.set({ role: null, look: null, spot: 'home', weather: 'despejado', other: null, pet: null, vending: 0 });
   });
 
   // Avisos: sucesos nuevos y logros/bolsa.
@@ -208,11 +237,19 @@ export function App() {
         if (!sl.fired && sl.at < s.shift.endsAt) list.push({ id: `ev-${sl.at}`, at: sl.at, title: EVENTS[sl.eventId].title, body: EVENTS[sl.eventId].notification });
       list.push({ id: `end-${s.shift.endsAt}`, at: s.shift.endsAt, title: 'Jornada terminada', body: `${s.character.name} ya puede ${role.retire.toLowerCase()} y cobrar.` });
     }
-    if (s.errand) list.push({ id: `errand-${s.errand.endsAt}`, at: s.errand.endsAt, title: 'Reparto terminado', body: `${s.character.name} volvió del reparto con el dinero.` });
+    if (s.errand)
+      list.push({
+        id: `errand-${s.errand.endsAt}`,
+        at: s.errand.endsAt,
+        title: s.errand.kind === 'radio' ? 'Trabajo terminado' : 'Reparto terminado',
+        body: s.errand.kind === 'radio' ? `${s.character.name} terminó: ${s.errand.label}. ¡A cobrar!` : `${s.character.name} volvió del reparto con el dinero.`,
+      });
+    for (const l of Object.values(s.lots ?? {}))
+      if (l.buildingUntil) list.push({ id: `obra-${l.buildingUntil}`, at: l.buildingUntil, title: '🏗 Obras terminadas', body: 'Ve a ver cómo ha quedado.' });
     const tomorrow = startOfDay(addDays(s.today.date, 1)) + REMINDER_HOUR * 3_600_000;
     list.push({ id: `rem-${tomorrow}`, at: tomorrow, title: `🔥 Racha de ${s.streak} días`, body: `No olvides ir ${role.toWorkplace} hoy o perderás la racha.` });
     notify.scheduleAll(list, clock.now(), clock.getSpeed());
-  }, [state?.shift?.startedAt, state?.shift?.endsAt, state?.errand?.endsAt, state?.shift?.cancelled, state?.gameOver, state?.today.date, state?.streak, clock.getSpeed()]);
+  }, [state?.shift?.startedAt, state?.shift?.endsAt, state?.errand?.endsAt, state?.shift?.cancelled, state?.gameOver, state?.today.date, state?.streak, clock.getSpeed(), citySignature(state)]);
 
   const begin = (c: Character) => {
     deleteGame();
@@ -275,6 +312,11 @@ export function App() {
   const pending = state.pending[0];
   const showNews = !state.gameOver && state.newsSeenDate !== state.today.date;
   const closePanel = () => setPanel(null);
+  const cityActions = {
+    onBuyLot: (id: string) => act((s, t) => buyLot(s, id, t)),
+    onBuildPhase: () => act(buildHousePhase),
+    onBuildCivic: (id: string, civic: string) => act((s, t) => buildCivic(s, id, civic, t)),
+  };
 
   // Un solo panel a la vez, por orden de prioridad.
   let overlay = null;
@@ -314,6 +356,18 @@ export function App() {
         }
       />
     );
+  else if (target?.startsWith('lot:'))
+    overlay = (
+      <Modal title={LOT_BY_ID[target.slice(4)].label} kicker="SOLAR" onClose={() => setTarget(null)}>
+        <LotCard state={state} lotId={target.slice(4)} now={now} {...cityActions} />
+      </Modal>
+    );
+  else if (target?.startsWith('block:'))
+    overlay = <BlockModal state={state} blockKey={target.slice(6)} now={now} onRenovate={() => act((s, t) => renovateBlock(s, target.slice(6), t))} onClose={() => setTarget(null)} />;
+  else if (panel === 'obras') overlay = <ObrasModal state={state} now={now} {...cityActions} onClose={closePanel} />;
+  else if (panel === 'radio') overlay = <RadioModal state={state} now={now} onTake={(id) => { act((s, t) => takeRadioJob(s, id, t)); setPanel(null); }} onClose={closePanel} />;
+  else if (panel === 'negocio') overlay = <NegocioModal state={state} onBuy={() => act(buyVending)} onRepair={() => act(repairVending)} onClose={closePanel} />;
+  else if (panel === 'turismo') overlay = <TurismoModal state={state} onClose={closePanel} />;
   else if (panel === 'bolsa')
     overlay = <MarketTerminal state={state} now={now} onBet={(tk, dir, stake) => act((s, t) => placeBet(s, tk, dir, stake, t))} onClose={closePanel} />;
   else if (panel === 'agenda')

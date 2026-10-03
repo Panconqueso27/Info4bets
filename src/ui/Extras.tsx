@@ -234,6 +234,7 @@ export const TUTORIAL: TutStep[] = [
   { id: 'minijuego', at: 'bottom', text: '¿No quieres esperar? Juega al minijuego: cada acierto descuenta 10 minutos de la jornada.' },
   { id: 'tarjeta', at: 'top', text: 'Los sucesos llegan como tarjetas. Deslízala a la derecha, a la izquierda o hacia arriba para decidir.' },
   { id: 'herramientas', at: 'bottom', text: 'Abajo tienes la Bolsa, tu Agenda de decisiones, las Mejoras, los Logros y el Diario. En ☰ están el Armario y tu gente.' },
+  { id: 'v05', at: 'bottom', text: 'Novedad: desliza la fila de botones. 🏗 Solares y obras (también tocando el mapa), 📻 Radio con trabajos extra, 🥤 tu Negocio o 📸 el Turismo de la ciudad.' },
 ];
 
 export function tutorialSeen(): string[] {

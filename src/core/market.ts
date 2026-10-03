@@ -81,7 +81,21 @@ export interface DayPlan {
 /** Probabilidad de que una noticia acierte la dirección real. */
 export const NEWS_ACCURACY = 0.75;
 
+const planCache = new Map<string, DayPlan>();
+
+/** Plan del día (memoizado: la terminal lo pide decenas de veces por segundo). */
 export function dayPlan(seed: number, date: string): DayPlan {
+  const key = `${seed}|${date}`;
+  let plan = planCache.get(key);
+  if (!plan) {
+    plan = makeDayPlan(seed, date);
+    if (planCache.size > 64) planCache.clear();
+    planCache.set(key, plan);
+  }
+  return plan;
+}
+
+function makeDayPlan(seed: number, date: string): DayPlan {
   const rand = mulberry32(mixSeed(seed, hashString(`market-${date}`)));
   const moves: Record<string, number> = {};
   for (const c of COMPANIES) {
@@ -107,12 +121,24 @@ export function priceAt(seed: number, date: string, ticker: string, open: number
   const plan = dayPlan(seed, date);
   const move = plan.moves[ticker] ?? 0;
   const t = Math.max(0, Math.min(1, p));
-  const r = mulberry32(mixSeed(seed, hashString(`path-${date}-${ticker}`)));
-  const a1 = r() * 6.28, a2 = r() * 6.28, a3 = r() * 6.28;
+  const [a1, a2, a3] = phases(seed, date, ticker);
   const amp = 0.012 + Math.abs(move) * 0.35;
   // El ruido vale 0 en la apertura y en el cierre.
   const noise = Math.sin(t * Math.PI) * amp * (Math.sin(t * 9 + a1) * 0.6 + Math.sin(t * 23 + a2) * 0.3 + Math.sin(t * 51 + a3) * 0.1);
   return Math.max(0.5, open * (1 + move * t + noise));
+}
+
+const phaseCache = new Map<string, [number, number, number]>();
+function phases(seed: number, date: string, ticker: string): [number, number, number] {
+  const key = `${seed}|${date}|${ticker}`;
+  let ph = phaseCache.get(key);
+  if (!ph) {
+    const r = mulberry32(mixSeed(seed, hashString(`path-${date}-${ticker}`)));
+    ph = [r() * 6.28, r() * 6.28, r() * 6.28];
+    if (phaseCache.size > 512) phaseCache.clear();
+    phaseCache.set(key, ph);
+  }
+  return ph;
 }
 
 export function initialPrices(): Record<string, number> {

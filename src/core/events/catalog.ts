@@ -2,6 +2,7 @@ import { ALCALDE_EVENTS } from './alcalde';
 import { APERTURA_EVENTS } from './apertura';
 import { HISTORIAS_EVENTS } from './historias';
 import { INMIGRANTE_EVENTS } from './inmigrante';
+import { PASIVOS_EVENTS } from './pasivos';
 import type { EventDef } from './types';
 
 /**
@@ -9,7 +10,7 @@ import type { EventDef } from './types';
  * consecuencias viven en sus resultados (bueno/malo), cada uno con su mensaje.
  */
 export const EVENTS: Record<string, EventDef> = Object.fromEntries(
-  [...INMIGRANTE_EVENTS, ...ALCALDE_EVENTS, ...APERTURA_EVENTS, ...HISTORIAS_EVENTS].map((e) => [e.id, e]),
+  [...INMIGRANTE_EVENTS, ...ALCALDE_EVENTS, ...APERTURA_EVENTS, ...HISTORIAS_EVENTS, ...PASIVOS_EVENTS].map((e) => [e.id, e]),
 );
 
 export function eventsFor(role: EventDef['role'], ...kinds: EventDef['kind'][]): EventDef[] {

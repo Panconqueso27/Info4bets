@@ -8,7 +8,7 @@ import { UPGRADES } from '../core/upgrades';
 import { startOfDay } from '../core/time';
 import { StatsView } from './Extras';
 
-function Modal({ title, onClose, children, kicker }: { title: string; onClose: () => void; children: any; kicker?: string }) {
+export function Modal({ title, onClose, children, kicker }: { title: string; onClose: () => void; children: any; kicker?: string }) {
   return (
     <div class="modal-wrap" onClick={onClose}>
       <div class="modal" onClick={(e) => e.stopPropagation()}>

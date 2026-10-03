@@ -1,5 +1,6 @@
 import { mulberry32 } from '../core/rng';
 import type { Role } from '../core/types';
+import { LOTS, type CityLook, type LotDef } from '../core/lots';
 import { shade } from './character';
 import { drawText, textWidth } from './pixelfont';
 
@@ -191,6 +192,7 @@ interface Art {
   neon: Ctx;
   snow: Ctx;
   rand: () => number;
+  seed: number;
   /** Elementos con volumen: se dibujan de atrás (norte) hacia delante (sur). */
   queue: { key: number; draw: () => void }[];
   tops: Record<string, number>;
@@ -262,6 +264,8 @@ interface FacadeOpts {
   fireEscape?: boolean;
   /** Ancho de ventana (2 = estrecha, 3 = ancha). */
   win?: number;
+  /** Tira de neón bajo el toldo (manzanas renovadas). */
+  trim?: string;
 }
 
 /** Fachada frontal: cornisa, ventanas (algunas encendidas), escalera de incendios y planta baja. */
@@ -301,6 +305,7 @@ function facade(a: Art, x: number, y: number, w: number, h: number, color: strin
     for (let xx = x + 2; xx < x + w - 1; xx += 2) rect(base, xx, sy, 1, 1, '#f1ede3');
     rect(base, x + 1, sy + 1, w - 2, 3, '#2c3446');
     rect(lights, x + 1, sy + 1, w - 2, 3, '#ffdb94');
+    if (opts.trim) rect(a.neon, x + 1, sy - 1, w - 2, 1, opts.trim);
     const door = x + Math.floor(rand() * (w - 4)) + 1;
     rect(base, door, sy + 1, 3, 3, '#3a2a20');
     rect(snow, x, sy, w, 1, 'rgba(245,250,255,0.9)');
@@ -309,25 +314,54 @@ function facade(a: Art, x: number, y: number, w: number, h: number, color: strin
 }
 
 /** Edificio completo: huella (x, y, w, d) en el suelo y altura H. */
-function building(a: Art, x: number, y: number, w: number, d: number, H: number, opts: FacadeOpts & { roof?: string; facadeColor?: string; tower?: boolean; laundry?: boolean } = {}) {
+function building(a: Art, x: number, y: number, w: number, d: number, H: number, opts: FacadeOpts & { roof?: string; facadeColor?: string; tower?: boolean; laundry?: boolean; scaffold?: boolean } = {}) {
   const roofColor = opts.roof ?? ROOFS[Math.floor(a.rand() * ROOFS.length)];
   const fc = opts.facadeColor ?? FACADES[Math.floor(a.rand() * FACADES.length)];
+  // Cada edificio con su propio azar: cambiar un solar no altera el resto del mapa.
+  const own = mulberry32(Math.floor(a.rand() * 0x7fffffff));
   markTop(a, x, y + d, y - H - (opts.tower ? 12 : 4));
   later(a, y + d, () => {
+    const prev = a.rand;
+    a.rand = own;
     // sombra hacia el este sobre el suelo
     a.base.fillStyle = 'rgba(10, 8, 20, 0.35)';
     a.base.fillRect(x + w, y + d - Math.min(H, d), Math.min(4, Math.ceil(H / 3)), Math.min(H, d));
     roof(a, x, y - H, w, d, roofColor, { tower: opts.tower, laundry: opts.laundry });
     facade(a, x, y + d - H, w, H, fc, opts);
+    if (opts.scaffold) scaffold(a, x, y + d - H - 2, w, H + 2);
+    a.rand = prev;
   });
 }
 
+/** Andamio con red verde delante de una fachada en obras. */
+function scaffold(a: Art, x: number, y: number, w: number, h: number) {
+  rect(a.base, x, y, w, h, 'rgba(40,110,60,0.35)');
+  for (let xx = x; xx <= x + w - 1; xx += 5) rect(a.base, xx, y, 1, h, '#c8a040');
+  for (let yy = y + 2; yy < y + h; yy += 3) rect(a.base, x, yy, w, 1, '#a8862e');
+}
+
 /** Divide una manzana en edificios de alturas variadas. */
-function genericBlock(a: Art, c: number, r: number) {
-  const x0 = blockX(c) + SIDEWALK;
+const RESTORED = ['#b5523e', '#c98a5a', '#d8c7a4', '#a8584a', '#c2b08c', '#8fa3b5', '#b98e72', '#d3a07a'];
+const TRIMS = ['#ff4f9a', '#4ff0ff', '#ffcc33', '#7dff6a', '#ff8a3b'];
+
+interface BlockOpts {
+  /** Solo media manzana (la otra mitad es un solar). */
+  half?: 'oeste' | 'este';
+  /** Nivel de renovación (alcalde). */
+  renov?: number;
+  /** Andamios: la manzana está en obras. */
+  works?: boolean;
+}
+
+function genericBlock(a: Art, c: number, r: number, o: BlockOpts = {}) {
+  const prevRand = a.rand;
+  a.rand = mulberry32((a.seed ^ (c * 7919 + r * 104729)) >>> 0);
+  const half = Math.floor(BLOCK_W / 2);
+  const x0 = blockX(c) + (o.half === 'oeste' ? half : SIDEWALK);
   const y0 = blockY(r) + SIDEWALK;
-  const w0 = BLOCK_W - SIDEWALK * 2;
+  const w0 = o.half ? half - SIDEWALK : BLOCK_W - SIDEWALK * 2;
   const h0 = BLOCK_H - SIDEWALK * 2;
+  const renov = o.renov ?? 0;
   // dos filas de parcelas: la de atrás (norte) y la de delante (sur, con tiendas)
   const backD = Math.round(h0 * (0.4 + a.rand() * 0.15));
   const rows: [number, number, boolean][] = [
@@ -340,10 +374,25 @@ function genericBlock(a: Art, c: number, r: number) {
       const lw = Math.min(x0 + w0 - x, 12 + Math.floor(a.rand() * 18));
       const finalW = x0 + w0 - (x + lw) < 10 ? x0 + w0 - x : lw;
       const H = 6 + Math.floor(a.rand() * 9);
-      building(a, x, ry, finalW, rd, H, { shop: front, fireEscape: a.rand() < 0.35, win: a.rand() < 0.3 ? 3 : 2, laundry: a.rand() < 0.25 });
+      const fe = a.rand() < 0.35;
+      const win = a.rand() < 0.3 ? 3 : 2;
+      const laundry = a.rand() < 0.25;
+      const pick = a.rand();
+      building(a, x, ry, finalW, rd, H, {
+        shop: front,
+        fireEscape: fe,
+        win,
+        laundry: laundry && !renov,
+        facadeColor: renov ? RESTORED[Math.floor(pick * RESTORED.length)] : undefined,
+        trim: renov >= 2 && front ? TRIMS[Math.floor(pick * TRIMS.length)] : undefined,
+        scaffold: o.works && front,
+      });
       x += finalW;
     }
   }
+  // Renovación nivel 2: arbolado en la acera.
+  if (renov >= 2) for (let tx = x0 + 6; tx < x0 + w0 - 3; tx += 14) tree(a, tx, blockY(r) + BLOCK_H - 1, 2);
+  a.rand = prevRand;
 }
 
 function neonSign(a: Art, text: string, cx: number, y: number, color: string, rgb: string, board = '#1d1d24') {
@@ -643,6 +692,348 @@ function signBlock(a: Art, p: Place, text: string, color: string, rgb: string, v
 }
 
 // --------------------------------------------------------------------------
+// Solares: vacíos, en obras, casa del inmigrante y obras públicas
+// --------------------------------------------------------------------------
+
+/** Rectángulo de la media manzana que ocupa un solar. */
+export function lotRect(l: LotDef) {
+  const half = Math.floor(BLOCK_W / 2);
+  return { x: blockX(l.c) + (l.side === 'este' ? half : 0), y: blockY(l.r), w: half, h: BLOCK_H };
+}
+
+/** Parte edificable del solar (sin la acera exterior). */
+function lotInner(l: LotDef) {
+  const r = lotRect(l);
+  const x = r.x + (l.side === 'oeste' ? SIDEWALK : 0);
+  return { x, y: r.y + SIDEWALK, w: r.w - SIDEWALK, h: r.h - SIDEWALK * 2 };
+}
+
+function dirt(a: Art, x: number, y: number, w: number, h: number) {
+  rect(a.base, x, y, w, h, '#6b5a44');
+  for (let i = 0; i < (w * h) / 5; i++) rect(a.base, x + a.rand() * w, y + a.rand() * h, 1, 1, a.rand() < 0.5 ? '#5c4c38' : '#7d6a52');
+  rect(a.snow, x, y, w, h, 'rgba(240,246,255,0.85)');
+}
+
+/** Valla de obra o de alambre en el borde sur del solar. */
+function fence(a: Art, x: number, y: number, w: number, hoarding: boolean) {
+  later(a, y + 0.3, () => {
+    if (hoarding) {
+      rect(a.base, x, y - 5, w, 5, '#2b2f36');
+      for (let xx = x; xx < x + w; xx += 4) rect(a.base, xx, y - 5, 2, 1, '#f2c230');
+      rect(a.base, x, y - 1, w, 1, '#14101f');
+    } else {
+      for (let xx = x; xx < x + w; xx += 2) rect(a.base, xx, y - 4 + ((xx / 2) % 2), 1, 1, '#9aa0a6');
+      for (let xx = x; xx < x + w; xx += 2) rect(a.base, xx + 1, y - 3 - ((xx / 2) % 2), 1, 1, '#7d838a');
+      rect(a.base, x, y - 5, w, 1, '#9aa0a6');
+      for (let xx = x; xx < x + w; xx += 8) rect(a.base, xx, y - 5, 1, 5, '#5d6268');
+    }
+  });
+}
+
+function boardSign(a: Art, text: string, cx: number, y: number, board: string, ink: string) {
+  later(a, y + 10, () => {
+    const w = textWidth(text) + 4;
+    const x = Math.round(cx - w / 2);
+    rect(a.base, x + 2, y + 8, 1, 4, '#4a3020');
+    rect(a.base, x + w - 3, y + 8, 1, 4, '#4a3020');
+    rect(a.base, x, y, w, 8, board);
+    rect(a.base, x, y + 7, w, 1, shade(board, -0.3));
+    drawText(a.base, text, x + 2, y + 1, ink);
+  });
+}
+
+function crane(a: Art, x: number, y: number, h: number) {
+  later(a, y + 0.2, () => {
+    for (let yy = y - h; yy < y; yy += 2) {
+      rect(a.base, x, yy, 1, 2, '#f2c230');
+      rect(a.base, x + 2, yy, 1, 2, '#f2c230');
+      rect(a.base, x + ((yy / 2) % 2 ? 1 : 0), yy, 2, 1, '#c99a1e');
+    }
+    rect(a.base, x - 10, y - h, 26, 2, '#f2c230');
+    for (let xx = x - 10; xx < x + 16; xx += 3) rect(a.base, xx, y - h + 1, 1, 1, '#c99a1e');
+    rect(a.base, x - 9, y - h + 2, 4, 3, '#55595f');
+    rect(a.base, x + 13, y - h + 2, 1, 9, '#14101f');
+    rect(a.base, x + 12, y - h + 11, 3, 2, '#7a5232');
+    rect(a.lights, x + 1, y - h - 1, 1, 1, '#ff3b3b');
+    rect(a.snow, x - 10, y - h - 1, 26, 1, 'rgba(245,250,255,0.9)');
+  });
+  markTop(a, x, y, y - h - 2);
+}
+
+function emptyLot(a: Art, l: LotDef, sold: boolean) {
+  const { x, y, w, h } = lotInner(l);
+  dirt(a, x, y, w, h);
+  for (let i = 0; i < 18; i++) rect(a.base, x + 2 + a.rand() * (w - 4), y + 2 + a.rand() * (h - 6), 1, 2, a.rand() < 0.6 ? '#5f8a3a' : '#7aa04a');
+  for (let i = 0; i < 4; i++) rect(a.base, x + 3 + a.rand() * (w - 8), y + 4 + a.rand() * (h - 12), 3, 2, '#8a8478');
+  fence(a, x, y + h, w, false);
+  boardSign(a, sold ? 'SOLD' : 'FOR SALE', x + w / 2, y + h - 22, sold ? '#c0392b' : '#f4efe2', sold ? '#ffffff' : '#c0392b');
+  a.tops[`${l.c},${l.r}`] = Math.min(a.tops[`${l.c},${l.r}`] ?? Infinity, y + h - 26);
+}
+
+/** Casa del inmigrante, según las fases terminadas. */
+function houseLot(a: Art, l: LotDef, phase: number, works: boolean) {
+  const { x, y, w, h } = lotInner(l);
+  if (phase < 4) dirt(a, x, y, w, h);
+  else {
+    rect(a.base, x, y, w, h, '#4f8a3e');
+    for (let i = 0; i < 120; i++) rect(a.base, x + a.rand() * w, y + a.rand() * h, 1, 1, '#5c9a48');
+    rect(a.snow, x, y, w, h, 'rgba(240,246,255,0.88)');
+  }
+  const hx = x + 4, hw = w - 8, hy = y + 8, hd = 18;
+  const H = 10;
+  if (phase >= 1) {
+    // cimientos: losa de hormigón con varillas
+    rect(a.base, hx - 1, hy - 1, hw + 2, hd + 2, '#9c9890');
+    rect(a.base, hx, hy, hw, hd, '#b9b5ac');
+    if (phase === 1) for (let xx = hx + 2; xx < hx + hw - 1; xx += 4) for (let yy = hy + 2; yy < hy + hd - 1; yy += 4) rect(a.base, xx, yy, 1, 1, '#7a4a2a');
+  }
+  if (phase === 2) {
+    later(a, hy + hd, () => {
+      const top = hy + hd - H;
+      for (let xx = hx; xx <= hx + hw - 1; xx += 5) rect(a.base, xx, top, 1, H, '#c99a5a');
+      rect(a.base, hx, top, hw, 1, '#a8783a');
+      rect(a.base, hx, top + 5, hw, 1, '#a8783a');
+      for (let xx = hx; xx <= hx + hw - 1; xx += 5) rect(a.base, xx, hy - H, 1, hd - 1, '#b0844a');
+      rect(a.base, hx, hy - H, hw, 1, '#a8783a');
+    });
+    markTop(a, hx, hy + hd, hy - H - 2);
+  }
+  if (phase >= 3) {
+    const finished = phase >= 4;
+    const wall = finished ? '#e8dcc0' : '#c9a46a';
+    later(a, hy + hd, () => {
+      rect(a.base, hx + hw, hy + hd - H, 3, H, 'rgba(10,8,20,0.35)');
+      // tejado a dos aguas
+      rect(a.base, hx - 1, hy - H, hw + 2, hd / 2, '#b8442e');
+      rect(a.base, hx - 1, hy - H + hd / 2, hw + 2, hd / 2 - 1, '#9a3424');
+      rect(a.base, hx - 1, hy - H + hd / 2, hw + 2, 1, '#d8664a');
+      rect(a.snow, hx, hy - H, hw, hd - 2, 'rgba(245,250,255,0.92)');
+      const fy = hy + hd - H;
+      rect(a.base, hx, fy, hw, H, wall);
+      rect(a.base, hx, fy, hw, 1, shade(wall, 0.2));
+      if (finished) {
+        for (const wx of [hx + 3, hx + hw - 7]) {
+          rect(a.base, wx, fy + 2, 4, 3, '#26304a');
+          rect(a.base, wx - 1, fy + 2, 1, 3, '#2f6fb3');
+          rect(a.base, wx + 4, fy + 2, 1, 3, '#2f6fb3');
+          rect(a.lights, wx, fy + 2, 4, 3, '#ffd27a');
+        }
+        rect(a.base, hx + hw / 2 - 2, fy + 3, 4, H - 3, '#7a3a2a');
+        rect(a.base, hx + hw / 2 + 1, fy + 6, 1, 1, '#ffd24a');
+        rect(a.base, hx + hw - 6, hy - H - 3, 3, 4, '#7a3a2a');
+        glow(a.lights, hx + hw / 2, fy + H + 2, 10, '255,214,130', 0.5);
+      } else {
+        for (let xx = hx + 1; xx < hx + hw; xx += 3) rect(a.base, xx, fy + 1, 1, H - 1, shade(wall, -0.08));
+        rect(a.base, hx + 3, fy + 2, 4, 3, '#3a2a20');
+        rect(a.base, hx + hw - 7, fy + 2, 4, 3, '#3a2a20');
+        rect(a.base, hx + hw / 2 - 2, fy + 3, 4, H - 3, '#3a2a20');
+      }
+    });
+    markTop(a, hx, hy + hd, hy - H - 4);
+  }
+  if (phase >= 4) {
+    // jardín, valla blanca y buzón
+    later(a, y + h - 0.5, () => {
+      for (let xx = x; xx < x + w; xx += 2) if (Math.abs(xx - (x + w / 2)) > 3) rect(a.base, xx, y + h - 4, 1, 3, '#ffffff');
+      rect(a.base, x, y + h - 3, w, 1, '#e8e4d8');
+      rect(a.base, x + w / 2 + 6, y + h - 7, 1, 5, '#4a3020');
+      rect(a.base, x + w / 2 + 5, y + h - 9, 4, 2, '#2f6fb3');
+      rect(a.base, x + w / 2 - 1, y + hd + 8, 2, h - hd - 12, '#cfc6ad');
+    });
+    tree(a, x + 5, y + h - 5, 3);
+  }
+  if (works) {
+    later(a, hy + hd + 0.1, () => scaffold(a, hx - 1, hy + hd - H - 3, hw + 2, H + 3));
+    // hormigonera
+    later(a, y + h - 6, () => {
+      rect(a.base, x + w - 9, y + h - 12, 6, 5, '#e2a23b');
+      rect(a.base, x + w - 8, y + h - 13, 4, 1, '#c07a1a');
+      rect(a.base, x + w - 9, y + h - 7, 1, 2, '#14101f');
+      rect(a.base, x + w - 4, y + h - 7, 1, 2, '#14101f');
+    });
+    markTop(a, hx, hy + hd, hy - H - 5);
+  }
+  if (phase < 4) fence(a, x, y + h, w, works);
+  if (phase === 0 && !works) boardSign(a, 'SOLD', x + w / 2, y + h - 22, '#c0392b', '#ffffff');
+}
+
+function civicBox(a: Art, x: number, y: number, w: number, d: number, H: number, wall: string, roofC: string, win: string) {
+  const own = mulberry32(Math.floor(a.rand() * 0x7fffffff));
+  later(a, y + d, () => {
+    rect(a.base, x + w, y + d - H, 3, H, 'rgba(10,8,20,0.35)');
+    rect(a.base, x, y - H, w, d, roofC);
+    rect(a.base, x, y - H, w, 1, shade(roofC, 0.3));
+    rect(a.snow, x + 1, y - H + 1, w - 2, d - 2, 'rgba(245,250,255,0.92)');
+    const fy = y + d - H;
+    rect(a.base, x, fy, w, H, wall);
+    rect(a.base, x, fy, w, 1, shade(wall, 0.25));
+    for (let yy = fy + 3; yy <= fy + H - 4; yy += 3)
+      for (let xx = x + 2; xx <= x + w - 3; xx += 4) {
+        rect(a.base, xx, yy, 2, 2, '#26304a');
+        if (own() < 0.6) rect(a.lights, xx, yy, 2, 2, win);
+      }
+    rect(a.base, x + w / 2 - 2, fy + H - 4, 4, 4, '#3a2a20');
+    rect(a.lights, x + w / 2 - 2, fy + H - 4, 4, 1, '#ffe2a0');
+  });
+  markTop(a, x, y + d, y - H - 10);
+}
+
+function civicLot(a: Art, l: LotDef, id: string) {
+  const { x, y, w, h } = lotInner(l);
+  const pave = (c: string) => {
+    rect(a.base, x, y, w, h, c);
+    rect(a.snow, x, y, w, h, 'rgba(240,246,255,0.8)');
+  };
+  if (id === 'parque') {
+    rect(a.base, x, y, w, h, '#3f7a3a');
+    for (let i = 0; i < 150; i++) rect(a.base, x + a.rand() * w, y + a.rand() * h, 1, 1, a.rand() < 0.5 ? '#4a8a42' : '#356a31');
+    rect(a.snow, x, y, w, h, 'rgba(240,246,255,0.85)');
+    rect(a.base, x + w / 2 - 1, y, 3, h, '#c9b98e');
+    rect(a.base, x, y + h / 2, w, 3, '#c9b98e');
+    disc(a.base, x + w / 2, y + h / 2 + 1, 4, '#8a8478');
+    disc(a.base, x + w / 2, y + h / 2 + 1, 2, '#4f8fb8');
+    glow(a.lights, x + w / 2, y + h / 2, 10, '150,210,255', 0.4);
+    for (const [tx, ty] of [[x + 7, y + 12], [x + w - 7, y + 14], [x + 8, y + h - 8], [x + w - 8, y + h - 6], [x + w / 2 + 9, y + 6]]) tree(a, Math.round(tx), Math.round(ty), 3);
+    later(a, y + h / 2 + 8, () => {
+      rect(a.base, x + 4, y + h / 2 + 5, 6, 1, '#7a5232');
+      rect(a.base, x + 4, y + h / 2 + 6, 1, 1, '#4a3020');
+      rect(a.base, x + 9, y + h / 2 + 6, 1, 1, '#4a3020');
+    });
+    a.tops[`${l.c},${l.r}`] = Math.min(a.tops[`${l.c},${l.r}`] ?? Infinity, y - 6);
+    return;
+  }
+  if (id === 'escuela') {
+    pave('#a9a397');
+    civicBox(a, x + 2, y + 6, w - 4, 20, 13, '#9a4a34', '#4a4850', '#ffd27a');
+    later(a, y + 27, () => {
+      rect(a.base, x + w / 2 - 12, y + 26 - 13 + 1, 24, 6, '#f4efe2');
+      drawText(a.base, 'SCHOOL', Math.round(x + w / 2 - textWidth('SCHOOL') / 2), y + 26 - 13 + 2, '#2f6fb3');
+      rect(a.base, x + w - 5, y - 16, 1, 9, '#333');
+      rect(a.base, x + w - 4, y - 16, 5, 3, '#2f6fb3');
+      rect(a.base, x + w - 4, y - 15, 5, 1, '#c0392b');
+    });
+    later(a, y + h - 4, () => {
+      rect(a.base, x + 4, y + h - 13, 18, 7, '#f2c230');
+      rect(a.base, x + 4, y + h - 13, 18, 1, '#ffe066');
+      for (let xx = x + 6; xx < x + 21; xx += 3) rect(a.base, xx, y + h - 11, 2, 2, '#26304a');
+      rect(a.base, x + 4, y + h - 8, 18, 1, '#14101f');
+      rect(a.base, x + 6, y + h - 6, 2, 1, '#14101f');
+      rect(a.base, x + 18, y + h - 6, 2, 1, '#14101f');
+    });
+    return;
+  }
+  if (id === 'hospital') {
+    pave('#b9b3a6');
+    civicBox(a, x + 2, y + 4, w - 4, 22, 16, '#ece6d8', '#c9c3b6', '#cfe6ff');
+    later(a, y + 26.1, () => {
+      const cx = x + w / 2, cy = y + 4 - 16 + 9;
+      rect(a.base, cx - 1, cy - 4, 3, 9, '#e8414f');
+      rect(a.base, cx - 4, cy - 1, 9, 3, '#e8414f');
+      neonSign(a, 'HOSPITAL', cx, y + 26 - 16 + 2, '#ff4f6d', '255,79,109', '#1d1d24');
+    });
+    later(a, y + h - 4, () => {
+      rect(a.base, x + w - 16, y + h - 12, 12, 6, '#f4efe2');
+      rect(a.base, x + w - 16, y + h - 9, 12, 1, '#e8414f');
+      rect(a.base, x + w - 6, y + h - 12, 2, 3, '#2c3446');
+      rect(a.lights, x + w - 13, y + h - 13, 2, 1, '#ff3b3b');
+    });
+    return;
+  }
+  if (id === 'metro') {
+    pave('#8d8a86');
+    for (let yy = y; yy < y + h; yy += 4) for (let xx = x + ((yy / 4) % 2 ? 2 : 0); xx < x + w; xx += 4) rect(a.base, xx, yy, 2, 2, '#9a9792');
+    // boca de metro con barandilla y escaleras
+    const ex = x + w / 2 - 8, ey = y + 18;
+    rect(a.base, ex, ey, 16, 14, '#26242a');
+    for (let s = 0; s < 6; s++) rect(a.base, ex + 2, ey + 2 + s * 2, 12, 1, '#55505c');
+    later(a, ey + 14, () => {
+      rect(a.base, ex - 1, ey - 3, 18, 1, '#2e5a3a');
+      rect(a.base, ex - 1, ey - 3, 1, 17, '#2e5a3a');
+      rect(a.base, ex + 16, ey - 3, 1, 17, '#2e5a3a');
+      for (const gx of [ex - 1, ex + 16]) {
+        rect(a.base, gx, ey - 9, 1, 6, '#2e5a3a');
+        disc(a.base, gx, ey - 11, 2, '#3fbf6a');
+        glow(a.lights, gx, ey - 11, 8, '120,255,150', 0.6);
+      }
+      rect(a.base, ex + 1, ey - 11, 14, 7, '#14101f');
+      drawText(a.neon, 'SUB', ex + 3, ey - 10, '#7dff6a');
+      glow(a.neon, ex + 8, ey - 8, 12, '125,255,106', 0.35);
+    });
+    tree(a, x + 6, y + h - 6, 3);
+    tree(a, x + w - 6, y + h - 6, 3);
+    a.tops[`${l.c},${l.r}`] = Math.min(a.tops[`${l.c},${l.r}`] ?? Infinity, ey - 14);
+    return;
+  }
+  if (id === 'museo') {
+    pave('#c6c0b3');
+    const bx = x + 2, by = y + 8, bw = w - 4, bd = 20, H = 14;
+    later(a, by + bd, () => {
+      rect(a.base, bx + bw, by + bd - H, 3, H, 'rgba(10,8,20,0.35)');
+      rect(a.base, bx, by - H, bw, bd, '#d8d0bf');
+      rect(a.snow, bx + 1, by - H + 1, bw - 2, bd - 2, 'rgba(245,250,255,0.92)');
+      const fy = by + bd - H;
+      for (let r = 0; r < 5; r++) rect(a.base, bx + 2 + r * 3, fy - 5 + r, bw - 4 - r * 6, 1, '#f4efe2');
+      rect(a.base, bx, fy, bw, H, '#ece6d8');
+      for (let i = bx + 2; i < bx + bw - 2; i += 5) {
+        rect(a.base, i, fy + 2, 2, H - 3, '#fbf8f0');
+        rect(a.base, i + 2, fy + 3, 3, H - 5, '#26304a');
+        rect(a.lights, i + 2, fy + 3, 3, H - 5, 'rgba(255,220,160,0.7)');
+      }
+      rect(a.base, bx + bw / 2 - 12, fy - 1, 24, 1, '#c9c1b0');
+      drawText(a.base, 'MUSEUM', Math.round(bx + bw / 2 - textWidth('MUSEUM') / 2), fy - 7, '#6d6656');
+      for (let s = 0; s < 3; s++) rect(a.base, bx - 1 + s, fy + H + s, bw + 2 - s * 2, 1, '#cfc8b8');
+      // pancarta
+      rect(a.base, bx + 2, fy + 2, 3, 8, '#c0392b');
+      rect(a.base, bx + bw - 5, fy + 2, 3, 8, '#2f6fb3');
+    });
+    markTop(a, bx, by + bd, by - H - 8);
+    return;
+  }
+  // viviendas sociales: dos bloques altos de ladrillo
+  pave('#8d8a86');
+  building(a, x + 1, y + 2, Math.floor((w - 2) / 2), 22, 20, { facadeColor: '#9a5a44', roof: '#4a4850', fireEscape: true });
+  building(a, x + 1 + Math.floor((w - 2) / 2), y + 2, Math.ceil((w - 2) / 2), 22, 18, { facadeColor: '#8e4a3a', roof: '#56606a', fireEscape: true, tower: true });
+  tree(a, x + 6, y + h - 6, 3);
+  tree(a, x + w - 8, y + h - 6, 3);
+  later(a, y + h - 3, () => {
+    rect(a.base, x + 12, y + h - 10, 10, 1, '#7a5232');
+    rect(a.base, x + 12, y + h - 9, 1, 2, '#4a3020');
+    rect(a.base, x + 21, y + h - 9, 1, 2, '#4a3020');
+  });
+}
+
+function civicWorks(a: Art, l: LotDef) {
+  const { x, y, w, h } = lotInner(l);
+  dirt(a, x, y, w, h);
+  // estructura a medias con andamio y grúa
+  later(a, y + 26, () => {
+    rect(a.base, x + 4, y + 6, w - 8, 20, '#8f8b84');
+    for (let xx = x + 4; xx < x + w - 4; xx += 6) rect(a.base, xx, y + 26 - 12, 1, 12, '#6d6a64');
+    rect(a.base, x + 4, y + 26 - 12, w - 8, 1, '#6d6a64');
+    scaffold(a, x + 3, y + 26 - 13, w - 6, 13);
+  });
+  markTop(a, x + 4, y + 26, y - 10);
+  crane(a, x + w - 8, y + 28, 40);
+  later(a, y + h - 6, () => {
+    rect(a.base, x + 5, y + h - 12, 8, 4, '#e2a23b');
+    rect(a.base, x + 5, y + h - 14, 4, 2, '#c07a1a');
+    rect(a.base, x + 12, y + h - 15, 1, 4, '#14101f');
+    for (let i = 0; i < 3; i++) rect(a.base, x + 16 + i * 4, y + h - 10, 3, 3, '#c9a46a');
+  });
+  fence(a, x, y + h, w, true);
+}
+
+function drawLot(a: Art, l: LotDef, st: CityLook['lots'][string] | undefined) {
+  const prev = a.rand;
+  a.rand = mulberry32((a.seed ^ (l.c * 31 + l.r * 977 + 5)) >>> 0);
+  if (!st) emptyLot(a, l, false);
+  else if (st.owner === 'jugador') houseLot(a, l, st.phase, st.works);
+  else if (st.works && st.phase === 0) civicWorks(a, l);
+  else civicLot(a, l, st.building);
+  a.rand = prev;
+}
+
+// --------------------------------------------------------------------------
 // Calles
 // --------------------------------------------------------------------------
 
@@ -678,7 +1069,10 @@ function streets(a: Art, lamps: { x: number; y: number }[]) {
         });
       }
       // boca de incendios y cubo de basura
-      if (a.rand() < 0.5) later(a, y + BLOCK_H - 1, () => rect(base, x + 20 + a.rand() * 40, y + BLOCK_H - 4, 2, 3, '#c0392b'));
+      if (a.rand() < 0.5) {
+        const hx = x + 20 + a.rand() * 40;
+        later(a, y + BLOCK_H - 1, () => rect(a.base, hx, y + BLOCK_H - 4, 2, 3, '#c0392b'));
+      }
     }
   for (let i = 0; i <= COLS; i++)
     for (let j = 0; j <= ROWS; j++) {
@@ -696,17 +1090,25 @@ function streets(a: Art, lamps: { x: number; y: number }[]) {
   }
 }
 
-export function generateCityMap(seed = 1985): CityMapArt {
+export function generateCityMap(seed = 1985, look?: CityLook | null): CityMapArt {
   const rand = mulberry32(seed);
   const g = { base: canvas(), lights: canvas(), neon: canvas(), snow: canvas() };
-  const a: Art = { base: g.base.ctx, lights: g.lights.ctx, neon: g.neon.ctx, snow: g.snow.ctx, rand, queue: [], tops: {} };
+  const a: Art = { base: g.base.ctx, lights: g.lights.ctx, neon: g.neon.ctx, snow: g.snow.ctx, rand, seed, queue: [], tops: {} };
   const lamps: { x: number; y: number }[] = [];
   streets(a, lamps);
 
   const special = new Set<string>();
   for (const p of PLACES_MAP)
     for (let c = p.c; c < p.c + (p.cw ?? 1); c++) for (let r = p.r; r < p.r + (p.rh ?? 1); r++) special.add(`${c},${r}`);
-  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (!special.has(`${c},${r}`)) genericBlock(a, c, r);
+  const renovating = new Set(look?.renovating ?? []);
+  for (let c = 0; c < COLS; c++)
+    for (let r = 0; r < ROWS; r++) {
+      const key = `${c},${r}`;
+      if (special.has(key)) continue;
+      const lot = LOTS.find((l) => l.c === c && l.r === r);
+      genericBlock(a, c, r, { half: lot?.side, renov: look?.renovated[key] ?? 0, works: renovating.has(key) });
+      if (lot) drawLot(a, lot, look?.lots[lot.id]);
+    }
 
   for (const p of PLACES_MAP) {
     if (p.id === 'parque') park(a, p);

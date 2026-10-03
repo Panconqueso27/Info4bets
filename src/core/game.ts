@@ -4,9 +4,11 @@ import type { ChoiceDef, Effects, EventDef, OutcomeDef } from './events/types';
 import { betReturn, closePrices, dayPlan, initialPrices, priceAt, type NewsItem } from './market';
 import { ROLES, SHIFT_HOURS } from './roles';
 import { hashString, mixSeed, mulberry32, pickWeighted, randRange } from './rng';
-import { addDays, dateKey, daysBetween, HOUR, startOfDay } from './time';
+import { addDays, dateKey, DAY, daysBetween, HOUR, startOfDay } from './time';
 import { nextUpgrade, UPGRADES } from './upgrades';
 import { errandWeather, weatherFor, weatherWeight, type Weather } from './weather';
+import { CIVIC_BY_ID, HOUSE_PHASES, HOUSE_RENT, LOT_BY_ID, LOT_PRICE, ownedLot, RENOVATION } from './lots';
+import { RADIO_BY_ID, radioJobs } from './radio';
 import type { BarId, Bars, Character, GameState, LogEntry, LogKind, OtherCharacter, PendingEvent, Role } from './types';
 import { ACHIEVEMENT_UNLOCKS, COSMETIC_BY_ID, STREAK_REWARDS } from './cosmetics';
 import { NPC_EFFECTS, NPCS, rememberNpc } from './npcs';
@@ -173,6 +175,8 @@ export function advance(state: GameState, now: number): boolean {
     }
   }
 
+  changed = finishWorks(state, now) || changed;
+
   if (state.errand && now >= state.errand.endsAt) {
     finishErrand(state, state.errand.endsAt);
     changed = true;
@@ -269,6 +273,11 @@ function closeDay(state: GameState, now: number) {
 
   // --- Gastos fijos y descanso nocturno
   const overnight: Bars = { ...role.overnight };
+  // La mascota ayuda a dormir mejor.
+  if (state.pet) {
+    overnight.estres = (overnight.estres ?? 0) - 2;
+    overnight.esperanza = (overnight.esperanza ?? 0) + 1;
+  }
   const extraHealth = (UPGRADES[roleId].perLevel.overnightHealth ?? 0) * state.upgradeLevel;
   if (extraHealth) overnight.salud = (overnight.salud ?? 0) + extraHealth;
   // Noche de nieve sin casa propia: frío en el cuarto compartido.
@@ -282,6 +291,9 @@ function closeDay(state: GameState, now: number) {
   } else {
     entry('info', 'Fin del día', `Día ${closingDay}: gastos pagados (${role.formatMoney(role.dailyCost)}) y una noche de descanso.${extra}`, deltas);
   }
+
+  // --- Ingresos pasivos y gastos recurrentes
+  passiveIncome(state, closing.date, closingDay, entry);
 
   // --- Encuesta semanal del alcalde
   if (roleId === 'alcalde' && closingDay % 7 === 0) {
@@ -532,6 +544,7 @@ function eventVars(state: GameState, def: EventDef, seed: number): Record<string
     name: state.character.name,
     place: ROLES[state.character.role].workplace,
     otro: state.other?.name ?? DEFAULT_OTHER[state.character.role === 'inmigrante' ? 'alcalde' : 'inmigrante'].name,
+    pet: state.pet?.name ?? 'tu mascota',
   };
   for (const [k, options] of Object.entries(def.variants ?? {})) {
     vars[k] = options[Math.floor(rand() * options.length)];
@@ -593,7 +606,7 @@ export function resolveEvent(state: GameState, instanceId: string, choiceId: str
   log(state, now, outcome.result, `${def.title}: ${outcome.title}`, message, deltas);
   if (outcome.effects.endGame) endGame(state, now, outcome.effects.endGame.title, outcome.effects.endGame.text);
   checkGameOver(state, now);
-  def.onResolve?.(state, { outcome, deltas, previous, unlock: (id) => unlock(state, id, now) });
+  def.onResolve?.(state, { outcome, deltas, previous, unlock: (id) => unlock(state, id, now), day: dayNumber(state, now), vars });
   for (const id of outcome.effects.unlock ?? []) unlock(state, id, now);
   evaluateAchievements(state, now);
   return { event: def, choice, outcome, message, deltas };
@@ -788,13 +801,24 @@ export function startErrand(state: GameState, now: number) {
   advance(state, now);
   const block = canStartErrand(state, now);
   if (block) throw new Error(block === 'done-today' ? 'Hoy ya hiciste el reparto.' : 'Ahora no puedes salir a repartir.');
-  state.errand = { startedAt: now, endsAt: now + errandHours(state) * HOUR };
+  state.errand = { startedAt: now, endsAt: now + errandHours(state) * HOUR, kind: 'reparto' };
   state.flags.repartoDia = dayNumber(state, now);
   log(state, now, 'info', 'Reparto', `${state.character.name} sale a repartir paquetes por la ciudad (${errandHours(state)} h).`);
 }
 
 function finishErrand(state: GameState, at: number) {
+  const job = state.errand;
   state.errand = null;
+  if (job?.kind === 'radio') {
+    const pay = job.pay ?? 0;
+    const deltas = mergeDeltas(applyBars(state, { dinero: pay }), applyBars(state, job.wear ?? {}));
+    addStat(state, 'ingresos', pay);
+    addStat(state, 'trabajosRadio', 1);
+    const fmt = ROLES.inmigrante.formatMoney;
+    log(state, at, 'bueno', 'Trabajo de la radio', `${job.label}: hecho. Cobras ${fmt(pay)} en mano.`, deltas);
+    state.notices.push({ kind: 'aviso', title: 'RADIO', text: `${job.label}: +${fmt(pay)}` });
+    return;
+  }
   const w = errandWeather(todayWeather(state));
   const pay = ERRAND_PAY + w.extraPay;
   const wear: Bars = { salud: (ERRAND_WEAR.salud ?? 0) - w.extraWear, estres: (ERRAND_WEAR.estres ?? 0) + w.extraWear };
@@ -912,4 +936,216 @@ export function gameStats(state: GameState, now: number): Stats {
     personas: Object.keys(state.npcs ?? {}).filter((id) => NPCS[id]?.role === state.character.role).length,
     destacadas: state.highlights ?? [],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Solares, obras y casa por fases
+// ---------------------------------------------------------------------------
+
+function pay(state: GameState, cost: number) {
+  const money = state.bars.dinero ?? 0;
+  if (money < cost) throw new Error(`Te faltan ${ROLES[state.character.role].formatMoney(cost - money)}.`);
+  return applyBars(state, { dinero: -cost });
+}
+
+/** El inmigrante compra un solar (solo uno). */
+export function buyLot(state: GameState, lotId: string, now: number) {
+  advance(state, now);
+  if (state.character.role !== 'inmigrante') throw new Error('Solo el inmigrante compra solares.');
+  if (ownedLot(state)) throw new Error('Ya tienes un solar.');
+  if (state.lots?.[lotId]) throw new Error('Ese solar ya no está libre.');
+  const deltas = pay(state, LOT_PRICE);
+  (state.lots ??= {})[lotId] = { owner: 'jugador', building: 'casa', phase: 0, buildingUntil: 0 };
+  log(state, now, 'bueno', 'Solar comprado', `${LOT_BY_ID[lotId].label} es tuyo. Ahora, a construir poco a poco.`, deltas);
+  state.notices.push({ kind: 'aviso', title: 'SOLAR', text: `¡${LOT_BY_ID[lotId].label} es tuyo!` });
+}
+
+/** Siguiente fase de la casa del inmigrante (tarda un día). */
+export function buildHousePhase(state: GameState, now: number) {
+  advance(state, now);
+  const id = ownedLot(state);
+  const lot = id ? state.lots![id] : undefined;
+  if (!lot) throw new Error('Primero compra un solar.');
+  if (lot.buildingUntil) throw new Error('Ya hay obras en marcha.');
+  const phase = HOUSE_PHASES[lot.phase];
+  if (!phase) throw new Error('Tu casa ya está terminada.');
+  const deltas = pay(state, phase.cost);
+  lot.buildingUntil = now + phase.hours * HOUR;
+  log(state, now, 'info', `Obras: ${phase.label}`, `${phase.text} Estará lista en ${phase.hours} horas.`, deltas);
+}
+
+/** El alcalde levanta una obra pública en un solar libre. */
+export function buildCivic(state: GameState, lotId: string, civicId: string, now: number) {
+  advance(state, now);
+  if (state.character.role !== 'alcalde') throw new Error('Solo el alcalde construye obras públicas.');
+  if (state.lots?.[lotId]) throw new Error('Ese solar ya está ocupado.');
+  const def = CIVIC_BY_ID[civicId];
+  const deltas = pay(state, def.cost);
+  (state.lots ??= {})[lotId] = { owner: 'ciudad', building: civicId, phase: 0, buildingUntil: now + def.days * DAY };
+  log(state, now, 'info', `Obras: ${def.label}`, `Empiezan las obras en ${LOT_BY_ID[lotId].label}. Inauguración en ${def.days} días.`, deltas);
+}
+
+/** El alcalde renueva una manzana (dos niveles). */
+export function renovateBlock(state: GameState, key: string, now: number) {
+  advance(state, now);
+  if (state.character.role !== 'alcalde') throw new Error('Solo el alcalde renueva edificios.');
+  if (state.renovating?.[key]) throw new Error('Esa manzana ya está en obras.');
+  const level = state.renovated?.[key] ?? 0;
+  const next = RENOVATION[level];
+  if (!next) throw new Error('Esa manzana ya está renovada al máximo.');
+  const deltas = pay(state, next.cost);
+  (state.renovating ??= {})[key] = now + next.hours * HOUR;
+  log(state, now, 'info', `Renovación: ${next.label}`, `Andamios en la manzana ${key}. Lista en ${next.hours} horas.`, deltas);
+}
+
+/** Termina las obras cuyo plazo ha vencido. */
+function finishWorks(state: GameState, now: number): boolean {
+  let changed = false;
+  for (const [id, lot] of Object.entries(state.lots ?? {})) {
+    if (!lot.buildingUntil || lot.buildingUntil > now) continue;
+    lot.buildingUntil = 0;
+    lot.phase += 1;
+    changed = true;
+    if (lot.owner === 'ciudad') {
+      const def = CIVIC_BY_ID[lot.building];
+      const deltas = applyBars(state, def.instant);
+      log(state, now, 'bueno', `Inauguración: ${def.label}`, `${def.description} Cortas la cinta en ${LOT_BY_ID[id].label}.`, deltas);
+      state.notices.push({ kind: 'aviso', title: 'INAUGURACIÓN', text: `${def.icon} ${def.label}` });
+      addStat(state, 'obras', 1);
+    } else {
+      const done = lot.phase >= HOUSE_PHASES.length;
+      const deltas = applyBars(state, done ? { esperanza: 20, salud: 8 } : { esperanza: 3 });
+      const label = HOUSE_PHASES[lot.phase - 1].label;
+      log(state, now, 'bueno', done ? '¡Tu casa está terminada!' : `Fase terminada: ${label}`, done ? `Tienes una casa con tu nombre. La alquilas: te dará ${ROLES.inmigrante.formatMoney(HOUSE_RENT)} cada día.` : 'Un paso más hacia tu casa propia.', deltas);
+      state.notices.push({ kind: 'aviso', title: 'TU CASA', text: done ? '¡Casa terminada!' : `${label}: hecho` });
+    }
+  }
+  for (const [key, until] of Object.entries(state.renovating ?? {})) {
+    if (until > now) continue;
+    delete state.renovating![key];
+    const level = (state.renovated ?? {})[key] ?? 0;
+    const r = RENOVATION[level];
+    (state.renovated ??= {})[key] = level + 1;
+    const deltas = applyBars(state, r.instant);
+    log(state, now, 'bueno', `Renovación: ${r.label}`, `La manzana ${key} luce como nueva. Los vecinos sacan fotos.`, deltas);
+    changed = true;
+  }
+  return changed;
+}
+
+// ---------------------------------------------------------------------------
+// Ingresos pasivos: máquinas, alquiler, mascota (inmigrante) y turismo (alcalde)
+// ---------------------------------------------------------------------------
+
+export const VENDING_PRICES = [400, 550, 700, 900, 1100];
+export const VENDING_INCOME = 15;
+export const PET_MONTHLY = 20;
+export const TOURIST_SPEND = 40;
+
+export function buyVending(state: GameState, now: number) {
+  advance(state, now);
+  const v = (state.vending ??= { count: 0, broken: 0 });
+  const price = VENDING_PRICES[v.count];
+  if (price === undefined) throw new Error('Ya tienes todas las máquinas.');
+  const deltas = pay(state, price);
+  v.count += 1;
+  log(state, now, 'bueno', 'Máquina expendedora', `Instalas tu máquina nº ${v.count}: refrescos y chocolatinas. Dará unos ${ROLES.inmigrante.formatMoney(VENDING_INCOME)} al día.`, deltas);
+}
+
+export function repairVending(state: GameState, now: number) {
+  advance(state, now);
+  const v = state.vending;
+  if (!v?.broken) throw new Error('No hay máquinas rotas.');
+  const deltas = pay(state, 40 * v.broken);
+  v.broken = 0;
+  log(state, now, 'info', 'Máquinas reparadas', 'El técnico deja tus máquinas como nuevas.', deltas);
+}
+
+export interface Tourism {
+  tourists: number;
+  income: number;
+  attractions: number;
+  weather: number;
+}
+
+/** Turistas del día: popularidad × atractivo de la ciudad × clima. */
+export function tourismFor(state: GameState, date: string): Tourism {
+  let attractions = 1;
+  for (const lot of Object.values(state.lots ?? {})) if (lot.owner === 'ciudad' && lot.phase > 0) attractions += CIVIC_BY_ID[lot.building]?.tourism ?? 0;
+  for (const lvl of Object.values(state.renovated ?? {})) attractions += lvl * 0.08;
+  const w = weatherFor(state.seed, date);
+  const weather = { despejado: 1, nublado: 0.9, lluvia: 0.6, tormenta: 0.3, nieve: 0.75 }[w];
+  const tourists = Math.round(1000 * ((state.bars.popularidad ?? 0) / 100) * attractions * weather);
+  return { tourists, income: tourists * TOURIST_SPEND, attractions, weather };
+}
+
+/** Ingresos diarios de obras públicas (taquillas, abonos, alquileres). */
+export function civicIncome(state: GameState): number {
+  let sum = 0;
+  for (const lot of Object.values(state.lots ?? {})) if (lot.owner === 'ciudad' && lot.phase > 0) sum += CIVIC_BY_ID[lot.building]?.income ?? 0;
+  return sum;
+}
+
+function passiveIncome(state: GameState, date: string, day: number, entry: (kind: LogKind, title: string, text: string, deltas?: Bars) => void) {
+  const fmt = ROLES[state.character.role].formatMoney;
+  if (state.character.role === 'inmigrante') {
+    const parts: string[] = [];
+    let money = 0;
+    const v = state.vending;
+    if (v?.count) {
+      const working = Math.max(0, v.count - v.broken);
+      const inc = working * VENDING_INCOME;
+      money += inc;
+      parts.push(`máquinas ${fmt(inc)}${v.broken ? ` (${v.broken} rota${v.broken > 1 ? 's' : ''})` : ''}`);
+    }
+    const lot = ownedLot(state);
+    if (lot && state.lots![lot].phase >= HOUSE_PHASES.length) {
+      money += HOUSE_RENT;
+      parts.push(`alquiler ${fmt(HOUSE_RENT)}`);
+    }
+    if (state.pet && day > state.pet.since && (day - state.pet.since) % 30 === 0) {
+      money -= PET_MONTHLY;
+      parts.push(`comida y veterinario de ${state.pet.name} -${fmt(PET_MONTHLY)}`);
+    }
+    if (!parts.length) return;
+    addStat(state, 'pasivos', Math.max(0, money));
+    entry(money >= 0 ? 'bueno' : 'malo', 'Ingresos pasivos', `Día ${day}: ${parts.join(' · ')}.`, applyBars(state, { dinero: money }));
+  } else {
+    const t = tourismFor(state, date);
+    const civic = civicIncome(state);
+    const total = t.income + civic;
+    if (!total) return;
+    state.flags.turistasAyer = t.tourists;
+    addStat(state, 'pasivos', total);
+    entry('bueno', 'Turismo e ingresos', `Día ${day}: ${t.tourists.toLocaleString('es')} turistas dejaron ${fmt(t.income)}${civic ? ` · obras públicas ${fmt(civic)}` : ''}.`, applyBars(state, { dinero: total }));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Radio: trabajos extra del inmigrante
+// ---------------------------------------------------------------------------
+
+export function todayJobs(state: GameState) {
+  return radioJobs(state.seed, state.today.date);
+}
+
+export function canTakeRadioJob(state: GameState, now: number): string | null {
+  if (state.character.role !== 'inmigrante') return 'Solo para el inmigrante';
+  if (state.gameOver) return 'Partida terminada';
+  if (state.errand) return 'Ya estás en otro trabajo';
+  if (state.shift) return 'Estás en tu jornada';
+  if (state.detainedUntil > now) return 'Estás detenido';
+  if (state.flags.radioDia === dayNumber(state, now)) return 'Hoy ya hiciste un trabajo de la radio';
+  return null;
+}
+
+export function takeRadioJob(state: GameState, jobId: string, now: number) {
+  advance(state, now);
+  const why = canTakeRadioJob(state, now);
+  if (why) throw new Error(why);
+  const job = RADIO_BY_ID[jobId];
+  if (!todayJobs(state).some((j) => j.id === jobId)) throw new Error('Ese trabajo ya no está disponible.');
+  state.errand = { startedAt: now, endsAt: now + job.hours * HOUR, kind: 'radio', label: job.label, pay: job.pay, wear: job.wear };
+  state.flags.radioDia = dayNumber(state, now);
+  log(state, now, 'info', 'Radio', `${state.character.name} acepta el trabajo: ${job.label} (${job.hours} h).`);
 }

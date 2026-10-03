@@ -1,4 +1,5 @@
 import * as audio from '../platform/audio';
+import { lowFx, setLowFx } from '../scene/CityScene';
 import { StatsView } from './Extras';
 import { Letters, Words } from './AnimText';
 import { useEffect, useRef, useState } from 'preact/hooks';
@@ -118,7 +119,9 @@ export function Dock({
     body = (
       <>
         <div class="status">
-          <span>📦 Repartiendo paquetes por la ciudad · vuelve en <b>{formatDuration(e.endsAt - now)}</b></span>
+          <span>
+            {e.kind === 'radio' ? `📻 ${e.label}` : '📦 Repartiendo paquetes por la ciudad'} · vuelve en <b>{formatDuration(e.endsAt - now)}</b>
+          </span>
         </div>
         <div class="progress errand">
           <div style={{ width: `${Math.min(1, (now - e.startedAt) / (e.endsAt - e.startedAt)) * 100}%` }} />
@@ -216,8 +219,8 @@ export function Dock({
         </button>
       )}
       <div class="dock-tools">
-        {TOOLS.map((t) => (
-          <button key={t.id} class={`tool ${t.id === 'bolsa' && marketSession(state, now) ? 'live' : ''}`} onClick={() => onPanel(t.id)}>
+        {TOOLS.filter((t) => !t.role || t.role === state.character.role).map((t) => (
+          <button key={t.id + t.label} class={`tool ${t.id === 'bolsa' && marketSession(state, now) ? 'live' : ''}`} onClick={() => onPanel(t.id)}>
             <span class="tool-ic">{t.icon}</span>
             {t.label}
           </button>
@@ -227,12 +230,17 @@ export function Dock({
   );
 }
 
-export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu' | 'personas' | 'armario' | 'stats';
+export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu' | 'personas' | 'armario' | 'stats' | 'obras' | 'radio' | 'negocio' | 'turismo';
 
-const TOOLS: { id: Panel; icon: string; label: string }[] = [
+const TOOLS: { id: Panel; icon: string; label: string; role?: Role }[] = [
   { id: 'bolsa', icon: '📈', label: 'Bolsa' },
   { id: 'agenda', icon: '📋', label: 'Agenda' },
   { id: 'mejora', icon: '⬆', label: 'Mejora' },
+  { id: 'obras', icon: '🏗', label: 'Solar', role: 'inmigrante' },
+  { id: 'obras', icon: '🏗', label: 'Obras', role: 'alcalde' },
+  { id: 'radio', icon: '📻', label: 'Radio', role: 'inmigrante' },
+  { id: 'negocio', icon: '🥤', label: 'Negocio', role: 'inmigrante' },
+  { id: 'turismo', icon: '📸', label: 'Turismo', role: 'alcalde' },
   { id: 'logros', icon: '🏆', label: 'Logros' },
   { id: 'diario', icon: '📖', label: 'Diario' },
   { id: 'menu', icon: '☰', label: 'Menú' },
@@ -303,6 +311,7 @@ export function MenuModal({
 }) {
   const [confirm, setConfirm] = useState(false);
   const [sound, setSound] = useState(audio.getPrefs());
+  const [low, setLow] = useState(lowFx());
   const toggle = (k: 'sfx' | 'music') => {
     audio.unlock();
     audio.setPrefs({ [k]: !sound[k] });
@@ -340,6 +349,15 @@ export function MenuModal({
           </button>
           <button class={`btn secondary ${sound.music ? 'on' : ''}`} onClick={() => toggle('music')}>
             {sound.music ? '🎵 Música' : '🔇 Música'}
+          </button>
+          <button
+            class={`btn secondary ${low ? '' : 'on'}`}
+            onClick={() => {
+              setLowFx(!low);
+              setLow(!low);
+            }}
+          >
+            {low ? '🔋 Ahorro' : '✨ Efectos'}
           </button>
         </div>
         <div class="stack">

@@ -4,7 +4,10 @@ import {
   COLS,
   generateCityMap,
   BLOCK_H,
+  BLOCK_W,
+  blockX,
   blockY,
+  lotRect,
   placeBounds,
   AVE_W,
   ST_H,
@@ -25,9 +28,17 @@ import {
 import { lightAt, type Light } from '../art/daynight';
 import { CAR_COLORS, drawCarFront, drawCarSide, drawMini, MINI_H, MINI_W } from '../art/sprites';
 import { mulberry32 } from '../core/rng';
+import { LOTS } from '../core/lots';
 import type { Look } from '../core/types';
 import { randomLook } from '../art/character';
 import { bridge, type SceneModel, type Spot } from './bridge';
+import { drawPet, drawVending } from '../art/sprites';
+
+/** Cambia la profundidad solo si varía: cada cambio obliga a reordenar la capa. */
+function depthOf(o: Phaser.GameObjects.Components.Depth & { depth: number }, d: number) {
+  const v = Math.round(d * 2) / 2;
+  if (o.depth !== v) o.setDepth(v);
+}
 
 /** Ancho lógico de la vista: la ciudad se ve en vertical, como en un móvil. */
 export const VIEW_W = 180;
@@ -64,14 +75,29 @@ export class CityScene extends Phaser.Scene {
   private world!: Phaser.GameObjects.Layer;
   /** Imágenes del mapa por tipo: se tiñen o se encienden según la hora. */
   private bases: Phaser.GameObjects.Image[] = [];
-  private snows: Phaser.GameObjects.Image[] = [];
   private lightImgs: Phaser.GameObjects.Image[] = [];
   private neons: Phaser.GameObjects.Image[] = [];
   private tops: Record<string, number> = {};
   private signals!: Phaser.GameObjects.Graphics;
   private signalPhase = -1;
-  private clouds!: Phaser.GameObjects.Graphics;
-  private weatherFx!: Phaser.GameObjects.Graphics;
+  private clouds: Phaser.GameObjects.Image[] = [];
+  // Gotas y copos: un único Blitter (un solo lote de dibujo y solo los píxeles de cada gota).
+  // Nada de capas a pantalla completa: en móviles modestos el coste es el relleno de píxeles.
+  private precip!: Phaser.GameObjects.Blitter;
+  private drops: { bob: Phaser.GameObjects.Bob; s: number }[] = [];
+  private weatherShown = '';
+  private mapSig = '\u0000';
+  private mapImgs: Phaser.GameObjects.Image[] = [];
+  /** Lienzos de cada capa del mapa, para hornear la nieve en la base. */
+  private mapSets: { key: string; base: HTMLCanvasElement; snow: HTMLCanvasElement; img: Phaser.GameObjects.Image }[] = [];
+  private snowBaked = false;
+  private pet: Phaser.GameObjects.Sprite | null = null;
+  private petKind = '';
+  private petTrail: { x: number; y: number }[] = [];
+  private machines: Phaser.GameObjects.Image[] = [];
+  /** Medición de fluidez para bajar la calidad sola en móviles lentos. */
+  private perf = { t: 0, frames: 0, slow: 0, warm: 0 };
+  private low = lowFx();
   private flash!: Phaser.GameObjects.Rectangle;
   private uiCam!: Phaser.Cameras.Scene2D.Camera;
   private cars: Car[] = [];
@@ -92,7 +118,6 @@ export class CityScene extends Phaser.Scene {
   private lastLightAt = 0;
   private drift = 0;
   private userPannedAt = -99999;
-  private drops: { x: number; y: number; s: number }[] = [];
   private nextLightning = 0;
   private drag: { x: number; y: number; sx: number; sy: number; moved: boolean } | null = null;
   private pinch: { d: number; zoom: number } | null = null;
@@ -102,28 +127,14 @@ export class CityScene extends Phaser.Scene {
   }
 
   create() {
-    const art = generateCityMap();
-    this.tops = art.tops;
     this.makeCarTextures();
     this.makeHeadlight();
+    this.makeFxTextures();
 
     // El mapa: suelo abajo y una capa por fila de manzanas, ordenadas por profundidad
     // para que los edificios tapen a lo que pasa por detrás.
     this.world = this.add.layer();
-    const addSet = (key: string, set: { base: HTMLCanvasElement; lights: HTMLCanvasElement; neon: HTMLCanvasElement; snow: HTMLCanvasElement }, y: number, depth: number) => {
-      for (const kind of ['base', 'snow', 'lights', 'neon'] as const) this.textures.addCanvas(`${key}-${kind}`, set[kind]);
-      const base = this.add.image(0, y, `${key}-base`).setOrigin(0).setDepth(depth);
-      const snow = this.add.image(0, y, `${key}-snow`).setOrigin(0).setDepth(depth + 0.01).setAlpha(0);
-      const lights = this.add.image(0, y, `${key}-lights`).setOrigin(0).setDepth(depth + 0.02).setBlendMode(Phaser.BlendModes.ADD);
-      const neon = this.add.image(0, y, `${key}-neon`).setOrigin(0).setDepth(depth + 0.03).setBlendMode(Phaser.BlendModes.ADD);
-      this.bases.push(base);
-      this.snows.push(snow);
-      this.lightImgs.push(lights);
-      this.neons.push(neon);
-      this.world.add([base, snow, lights, neon]);
-    };
-    addSet('map-ground', art.ground, 0, -100);
-    art.rows.forEach((r, i) => addSet(`map-row${i}`, r, r.y, r.depth));
+    this.buildMap(bridge.get());
     this.signals = this.add.graphics().setDepth(-50);
     this.world.add(this.signals);
 
@@ -141,14 +152,18 @@ export class CityScene extends Phaser.Scene {
     this.makeLabels();
 
     // Nubes (sombras que pasan de día) y clima, en una cámara aparte sin zoom.
-    this.clouds = this.add.graphics();
-    this.world.add(this.clouds);
-    this.weatherFx = this.add.graphics();
-    this.flash = this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0);
+    // Todo son imágenes precalculadas que solo se desplazan: nada se redibuja por fotograma.
+    for (let i = 0; i < 4; i++) {
+      const c = this.add.image(0, 0, 'cloud').setDepth(200000).setVisible(false);
+      this.clouds.push(c);
+      this.world.add(c);
+    }
+    this.precip = this.add.blitter(0, 0, 'fx-drops').setVisible(false);
+    this.flash = this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0).setVisible(false);
     this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
     // La cámara del clima no dibuja el mapa.
     this.world.cameraFilter |= this.uiCam.id;
-    this.cameras.main.ignore([this.weatherFx, this.flash]);
+    this.cameras.main.ignore([this.precip, this.flash]);
 
     const cam = this.cameras.main;
     cam.setBackgroundColor('#120c24');
@@ -158,6 +173,7 @@ export class CityScene extends Phaser.Scene {
     this.scale.on('resize', () => this.applyBounds());
     this.setupInput();
 
+    if (import.meta.env.DEV) (window as any).__city = this;
     const unsub = bridge.subscribe((m) => this.onModel(m));
     this.events.once('shutdown', () => unsub());
     this.onModel(bridge.get(), true);
@@ -171,8 +187,10 @@ export class CityScene extends Phaser.Scene {
     const top = 150 / 2.2 / zoom;
     const bottom = 230 / 2.2 / zoom;
     cam.setBounds(-8, -top, MAP_W + 16, MAP_H + top + bottom);
-    this.uiCam?.setSize(this.scale.width, this.scale.height);
-    this.flash?.setSize(this.scale.width, this.scale.height);
+    const W = this.scale.width;
+    const H = this.scale.height;
+    this.uiCam?.setSize(W, H);
+    this.flash?.setSize(W, H);
   }
 
   // ---------------------------------------------------------------- texturas
@@ -206,6 +224,145 @@ export class CityScene extends Phaser.Scene {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 24, 24);
     this.textures.addCanvas('headlight', c);
+  }
+
+  /** Lluvia, nieve y nubes: texturas que se repiten y solo se desplazan. */
+  private makeFxTextures() {
+    const tex = (key: string, w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void) => {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      draw(c.getContext('2d')!);
+      this.textures.addCanvas(key, c);
+    };
+    // Atlas de gotas: lluvia cercana y lejana, copos grande y pequeño.
+    const dc = document.createElement('canvas');
+    dc.width = 16;
+    dc.height = 8;
+    const d = dc.getContext('2d')!;
+    d.fillStyle = 'rgba(207,230,255,0.75)';
+    d.fillRect(0, 0, 1, 7);
+    d.fillStyle = 'rgba(207,230,255,0.35)';
+    d.fillRect(1, 5, 1, 3);
+    d.fillStyle = 'rgba(207,230,255,0.45)';
+    d.fillRect(4, 0, 1, 5);
+    d.fillStyle = 'rgba(255,255,255,0.95)';
+    d.fillRect(8, 0, 3, 3);
+    d.fillStyle = 'rgba(191,216,255,0.6)';
+    d.fillRect(11, 1, 1, 1);
+    d.fillStyle = 'rgba(255,255,255,0.95)';
+    d.fillRect(13, 0, 2, 2);
+    const dt = this.textures.addCanvas('fx-drops', dc)!;
+    dt.add('rain', 0, 0, 0, 2, 8);
+    dt.add('rain-far', 0, 4, 0, 1, 5);
+    dt.add('snow', 0, 8, 0, 4, 3);
+    dt.add('snow-s', 0, 13, 0, 2, 2);
+    tex('cloud', 90, 50, (ctx) => {
+      ctx.fillStyle = '#0a0818';
+      ctx.beginPath();
+      ctx.ellipse(45, 25, 45, 25, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    for (const kind of ['gato', 'perro'] as const) {
+      const c = document.createElement('canvas');
+      c.width = 6 * 2;
+      c.height = 5;
+      drawPet(c.getContext('2d')!, kind, 0, 0);
+      drawPet(c.getContext('2d')!, kind, 6, 1);
+      const t = this.textures.addCanvas(`pet-${kind}`, c)!;
+      t.add('0', 0, 0, 0, 6, 5);
+      t.add('1', 0, 6, 0, 6, 5);
+    }
+    tex('vending', 4, 7, (ctx) => drawVending(ctx, 0, 0));
+  }
+
+  /** (Re)dibuja el mapa con los solares y obras de la partida. */
+  private buildMap(m: SceneModel) {
+    if (m.citySig === this.mapSig) return;
+    this.mapSig = m.citySig;
+    for (const img of this.mapImgs) img.destroy();
+    this.mapImgs = [];
+    this.mapSets = [];
+    this.snowBaked = false;
+    this.bases = [];
+    this.lightImgs = [];
+    this.neons = [];
+    const art = generateCityMap(1985, m.city);
+    this.tops = art.tops;
+    const addSet = (key: string, set: { base: HTMLCanvasElement; lights: HTMLCanvasElement; neon: HTMLCanvasElement; snow: HTMLCanvasElement }, y: number, depth: number) => {
+      for (const kind of ['base', 'lights', 'neon'] as const) {
+        if (this.textures.exists(`${key}-${kind}`)) this.textures.remove(`${key}-${kind}`);
+        this.textures.addCanvas(`${key}-${kind}`, set[kind]);
+      }
+      if (this.textures.exists(`${key}-nieve`)) this.textures.remove(`${key}-nieve`);
+      const base = this.add.image(0, y, `${key}-base`).setOrigin(0).setDepth(depth);
+      this.mapSets.push({ key, base: set.base, snow: set.snow, img: base });
+      const lights = this.add.image(0, y, `${key}-lights`).setOrigin(0).setDepth(depth + 0.02).setBlendMode(Phaser.BlendModes.ADD);
+      const neon = this.add.image(0, y, `${key}-neon`).setOrigin(0).setDepth(depth + 0.03).setBlendMode(Phaser.BlendModes.ADD);
+      this.bases.push(base);
+      this.lightImgs.push(lights);
+      this.neons.push(neon);
+      this.mapImgs.push(base, lights, neon);
+      this.world.add([base, lights, neon]);
+    };
+    addSet('map-ground', art.ground, 0, -100);
+    art.rows.forEach((r, i) => addSet(`map-row${i}`, r, r.y, r.depth));
+    if (this.labels.length) this.repositionLabels();
+    this.lastLightAt = 0;
+  }
+
+  /** Días de nieve: la nieve se pinta dentro de la textura base (una capa menos que dibujar). */
+  private bakeSnow(on: boolean) {
+    if (on === this.snowBaked) return;
+    this.snowBaked = on;
+    for (const m of this.mapSets) {
+      const key = `${m.key}-nieve`;
+      if (on && !this.textures.exists(key)) {
+        const c = document.createElement('canvas');
+        c.width = m.base.width;
+        c.height = m.base.height;
+        const ctx = c.getContext('2d')!;
+        ctx.drawImage(m.base, 0, 0);
+        ctx.globalAlpha = 0.85;
+        ctx.drawImage(m.snow, 0, 0);
+        this.textures.addCanvas(key, c);
+      }
+      m.img.setTexture(on ? key : `${m.key}-base`);
+    }
+  }
+
+  private repositionLabels() {
+    for (const t of this.labels) {
+      const r = placeBounds(PLACE_BY_ID[t.getData('place') as PlaceId], this.tops);
+      t.setPosition(r.x + r.w / 2, r.y - 1);
+    }
+  }
+
+  /** La mascota sigue al personaje; las máquinas expendedoras, en las aceras. */
+  private syncExtras(m: SceneModel) {
+    const kind = m.role === 'inmigrante' ? m.pet ?? '' : '';
+    if (kind !== this.petKind) {
+      this.petKind = kind;
+      this.pet?.destroy();
+      this.pet = null;
+      if (kind) {
+        this.pet = this.add.sprite(0, 0, `pet-${kind}`, '0').setOrigin(0.5, 1);
+        this.world.add(this.pet);
+        this.petTrail = [];
+      }
+    }
+    const n = m.role === 'inmigrante' ? Math.min(5, m.vending) : 0;
+    if (n !== this.machines.length) {
+      for (const mm of this.machines) mm.destroy();
+      this.machines = [];
+      const spots: PlaceId[] = ['diner', 'casa', 'bar', 'pizza', 'hotel'];
+      for (let i = 0; i < n; i++) {
+        const e = placeEntrance(PLACE_BY_ID[spots[i]]);
+        const img = this.add.image(e.x + 9, e.y - 1, 'vending').setOrigin(0.5, 1).setDepth(e.y - 0.6);
+        this.machines.push(img);
+        this.world.add(img);
+      }
+    }
   }
 
   private ensureMini(look: Look): string {
@@ -249,7 +406,7 @@ export class CityScene extends Phaser.Scene {
 
   private spawnTraffic() {
     const rand = mulberry32(42);
-    for (let k = 0; k < 30; k++) {
+    for (let k = 0; k < (this.low ? 18 : 30); k++) {
       const police = rand() < 0.08;
       const ci = Math.floor(rand() * CAR_COLORS.length);
       const axis: 'v' | 'h' = k % 2 === 0 ? 'v' : 'h';
@@ -301,6 +458,12 @@ export class CityScene extends Phaser.Scene {
     if (phase !== this.signalPhase) this.drawSignals(phase);
     this.signalPhase = phase;
     const limit = (c: Car) => (c.axis === 'v' ? MAP_H : MAP_W);
+    const lanes = new Map<string, Car[]>();
+    for (const c of this.cars) {
+      const l = lanes.get(c.lane);
+      if (l) l.push(c);
+      else lanes.set(c.lane, [c]);
+    }
     for (const c of this.cars) {
       const pos = this.along(c);
       // la parte delantera del coche
@@ -319,15 +482,15 @@ export class CityScene extends Phaser.Scene {
         }
       }
       // no chocar con el de delante en el mismo carril
-      for (const o of this.cars) {
-        if (o === c || o.lane !== c.lane) continue;
+      for (const o of lanes.get(c.lane)!) {
+        if (o === c) continue;
         const gap = (this.along(o) - pos) * c.dir;
         if (gap > 0 && gap < c.len + 5) next = pos + c.dir * Math.max(0, gap - c.len - 5) * 0.5;
       }
       this.setAlong(c, next);
       if (next > limit(c) + 12) this.setAlong(c, -12);
       if (next < -12) this.setAlong(c, limit(c) + 12);
-      c.img.setDepth(c.img.y);
+      depthOf(c.img, c.img.y);
       c.light.setPosition(c.img.x + (c.axis === 'h' ? c.dir * 9 : 0), c.img.y + (c.axis === 'v' ? (c.dir > 0 ? 6 : -14) : -3));
     }
   }
@@ -349,7 +512,7 @@ export class CityScene extends Phaser.Scene {
 
   private spawnPedestrians() {
     const rand = mulberry32(1985);
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < (this.low ? 9 : 18); i++) {
       const look = randomLook(rand() < 0.5 ? 'inmigrante' : 'alcalde', rand);
       const key = this.ensureMini(look);
       const c = Math.floor(rand() * COLS);
@@ -363,6 +526,7 @@ export class CityScene extends Phaser.Scene {
   }
 
   private wander(w: Walker) {
+    if (!w.sprite.active) return;
     const opts: [number, number][] = [];
     if (w.c > 0) opts.push([w.c - 1, w.r]);
     if (w.c < COLS - 1) opts.push([w.c + 1, w.r]);
@@ -386,6 +550,7 @@ export class CityScene extends Phaser.Scene {
       duration: (dist / (WALK_SPEED * 0.6)) * 1000,
       onComplete: () => {
         anim.remove();
+        if (!w.sprite.active) return;
         w.sprite.setFrame('0');
         w.c = c;
         w.r = r;
@@ -397,6 +562,8 @@ export class CityScene extends Phaser.Scene {
   // ---------------------------------------------------------------- personaje
 
   private onModel(m: SceneModel, initial = false) {
+    this.buildMap(m);
+    this.syncExtras(m);
     this.syncOther(m);
     if (!m.role || !m.look) {
       this.walkTween?.stop();
@@ -614,7 +781,24 @@ export class CityScene extends Phaser.Scene {
     const hits = PLACES_MAP.map((p) => ({ p, b: placeBounds(p, this.tops) }))
       .filter(({ b }) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)
       .sort((a, b) => b.b.y + b.b.h - (a.b.y + a.b.h));
-    if (hits.length) bridge.tap(hits[0].p.id);
+    if (hits.length) return bridge.tap(hits[0].p.id);
+    // Manzanas y solares: el de más al sur cuya altura cubra el toque.
+    const special = new Set<string>();
+    for (const p of PLACES_MAP)
+      for (let c = p.c; c < p.c + (p.cw ?? 1); c++) for (let r = p.r; r < p.r + (p.rh ?? 1); r++) special.add(`${c},${r}`);
+    for (let r = ROWS - 1; r >= 0; r--)
+      for (let c = 0; c < COLS; c++) {
+        const bx = blockX(c);
+        const by = blockY(r);
+        const top = Math.min(by, this.tops[`${c},${r}`] ?? by);
+        if (x < bx || x > bx + BLOCK_W || y < top || y > by + BLOCK_H || special.has(`${c},${r}`)) continue;
+        const lot = LOTS.find((l) => l.c === c && l.r === r);
+        if (lot) {
+          const lr = lotRect(lot);
+          if (x >= lr.x && x <= lr.x + lr.w) return bridge.tap(`lot:${lot.id}`);
+        }
+        return bridge.tap(`block:${c},${r}`);
+      }
   }
 
   // ---------------------------------------------------------------- luz y clima
@@ -627,14 +811,12 @@ export class CityScene extends Phaser.Scene {
     const w = bridge.get().weather;
     let ambient = l.ambient;
     if (w === 'lluvia' || w === 'tormenta' || w === 'nublado') {
-      ambient = Phaser.Display.Color.GetColor(
-        ((ambient >> 16) & 255) * 0.82,
-        ((ambient >> 8) & 255) * 0.85,
-        (ambient & 255) * 0.95,
-      );
+      // Cielo cubierto: más oscuro y azulado (sustituye al velo a pantalla completa).
+      const k = w === 'nublado' ? [0.86, 0.87, 0.92] : w === 'tormenta' ? [0.68, 0.73, 0.86] : [0.74, 0.79, 0.92];
+      ambient = Phaser.Display.Color.GetColor(((ambient >> 16) & 255) * k[0], ((ambient >> 8) & 255) * k[1], (ambient & 255) * k[2]);
     }
     for (const b of this.bases) b.setTint(ambient);
-    for (const sn of this.snows) sn.setTint(ambient).setAlpha(w === 'nieve' ? 0.85 : 0);
+    this.bakeSnow(w === 'nieve');
     const nightA = Math.max(0, (l.night - 0.1) / 0.9);
     for (const li of this.lightImgs) li.setAlpha(Math.max(nightA, w === 'tormenta' ? 0.35 : 0));
     for (const c of this.cars) {
@@ -642,6 +824,8 @@ export class CityScene extends Phaser.Scene {
       c.light.setAlpha(nightA * 0.9);
     }
     for (const wk of this.walkers) wk.sprite.setTint(ambient);
+    this.pet?.setTint(ambient);
+    for (const mm of this.machines) mm.setTint(ambient);
     if (this.player) {
       const lift = (v: number) => Math.min(255, v + 50);
       this.player.setTint(Phaser.Display.Color.GetColor(lift((ambient >> 16) & 255), lift((ambient >> 8) & 255), lift(ambient & 255)));
@@ -649,70 +833,123 @@ export class CityScene extends Phaser.Scene {
   }
 
   private drawWeather(delta: number) {
-    const g = this.weatherFx;
     const w = bridge.get().weather;
     const W = this.scale.width;
     const H = this.scale.height;
-    g.clear();
-    if (w === 'lluvia' || w === 'tormenta' || w === 'nieve') {
-      const n = w === 'nieve' ? 110 : w === 'tormenta' ? 170 : 110;
-      while (this.drops.length < n) this.drops.push({ x: Math.random() * W, y: Math.random() * H, s: 0.6 + Math.random() * 0.8 });
-      this.drops.length = n;
-      for (const d of this.drops) {
-        if (w === 'nieve') {
-          d.y += delta * 0.012 * d.s;
-          d.x += Math.sin((d.y + d.s * 100) / 18) * 0.2;
-          const sz = d.s > 1.1 ? 3 : 2;
-          g.fillStyle(0xffffff, 0.95).fillRect(Math.round(d.x), Math.round(d.y), sz, sz);
-          g.fillStyle(0xbfd8ff, 0.6).fillRect(Math.round(d.x) + sz, Math.round(d.y) + 1, 1, 1);
-        } else {
-          d.y += delta * 0.22 * d.s;
-          d.x -= delta * 0.05 * d.s;
-          g.fillStyle(0xcfe6ff, 0.75).fillRect(Math.round(d.x), Math.round(d.y), 1, 7);
-          g.fillStyle(0xcfe6ff, 0.35).fillRect(Math.round(d.x) + 1, Math.round(d.y) + 5, 1, 3);
-        }
-        if (d.y > H) {
-          d.y = -4;
-          d.x = Math.random() * (W + 30);
-        }
-        if (d.x < -4) d.x = W;
+    if (w !== this.weatherShown) {
+      this.weatherShown = w;
+      this.precip.clear();
+      this.drops = [];
+      const snow = w === 'nieve';
+      const n = w === 'tormenta' ? 140 : snow ? 90 : w === 'lluvia' ? 95 : 0;
+      for (let i = 0; i < (this.low ? n / 2 : n); i++) {
+        const s = 0.6 + Math.random() * 0.8;
+        const frame = snow ? (s > 1.1 ? 'snow' : 'snow-s') : s > 1 ? 'rain' : 'rain-far';
+        this.drops.push({ bob: this.precip.create(Math.random() * W, Math.random() * H, frame), s });
       }
-      if (w !== 'nieve') g.fillStyle(0x1a2a44, 0.16).fillRect(0, 0, W, H);
-    } else if (w === 'nublado') {
-      g.fillStyle(0x2a2a3a, 0.1).fillRect(0, 0, W, H);
+      this.precip.setVisible(n > 0);
+      // La cámara del clima solo trabaja si hay algo que dibujar.
+      this.uiCam.setVisible(n > 0 || w === 'tormenta');
+      this.lastLightAt = 0;
+    }
+    if (this.drops.length) {
+      const snow = w === 'nieve';
+      for (const d of this.drops) {
+        const b = d.bob;
+        if (snow) {
+          b.y += delta * 0.012 * d.s;
+          b.x += Math.sin((b.y + d.s * 100) / 18) * 0.2;
+        } else {
+          b.y += delta * 0.22 * d.s;
+          b.x -= delta * 0.05 * d.s;
+        }
+        if (b.y > H) {
+          b.y = -8;
+          b.x = Math.random() * (W + 30);
+        }
+        if (b.x < -4) b.x = W;
+      }
     }
     // relámpagos
-    if (w === 'tormenta') {
-      if (this.time.now > this.nextLightning) {
-        this.nextLightning = this.time.now + 5000 + Math.random() * 9000;
-        this.flash.setFillStyle(0xffffff, 0.75);
-        this.tweens.add({ targets: this.flash, fillAlpha: 0, duration: 450, ease: 'Expo.Out' });
-      }
+    if (w === 'tormenta' && this.time.now > this.nextLightning) {
+      this.nextLightning = this.time.now + 5000 + Math.random() * 9000;
+      this.flash.setFillStyle(0xffffff, 0.75).setVisible(true);
+      this.tweens.add({ targets: this.flash, fillAlpha: 0, duration: 450, ease: 'Expo.Out', onComplete: () => this.flash.setVisible(false) });
     }
     // sombras de nubes que cruzan la ciudad de día
-    this.clouds.clear();
-    if (this.light.night < 0.5) {
-      const t = this.time.now / 1000;
-      this.clouds.fillStyle(0x0a0818, w === 'despejado' ? 0.08 : 0.14);
-      for (let i = 0; i < 4; i++) {
-        const cx = ((t * 3 + i * 140) % (MAP_W + 160)) - 80;
-        const cy = (i * 197) % MAP_H;
-        this.clouds.fillEllipse(cx, cy, 90, 50);
-      }
+    const day = this.light.night < 0.5 && !this.low;
+    const t = this.time.now / 1000;
+    this.clouds.forEach((c, i) => {
+      c.setVisible(day);
+      if (!day) return;
+      c.setAlpha(w === 'despejado' ? 0.08 : 0.14);
+      c.setPosition(((t * 3 + i * 140) % (MAP_W + 160)) - 80, (i * 197) % MAP_H);
+    });
+  }
+
+  /** La mascota va detrás del personaje, con un poco de retraso. */
+  private followPet(delta: number) {
+    const p = this.player!;
+    const pet = this.pet!;
+    pet.setVisible(p.visible);
+    if (!p.visible) return;
+    if (!pet.x && !pet.y) pet.setPosition(p.x - 6, p.y);
+    const last = this.petTrail[this.petTrail.length - 1];
+    if (!last || Math.abs(last.x - p.x) + Math.abs(last.y - p.y) > 0.5) this.petTrail.push({ x: p.x, y: p.y });
+    const target = this.petTrail.length > 14 ? this.petTrail.shift()! : this.petTrail[0] ?? { x: p.x, y: p.y };
+    const tx = this.walkTween ? target.x : p.x - 6;
+    const ty = this.walkTween ? target.y : p.y;
+    const k = Math.min(1, delta * 0.01);
+    const moving = Math.abs(tx - pet.x) + Math.abs(ty - pet.y) > 0.3;
+    if (Math.abs(tx - pet.x) > 0.2) pet.setFlipX(tx < pet.x);
+    pet.setPosition(pet.x + (tx - pet.x) * k, pet.y + (ty - pet.y) * k);
+    if (moving && Math.floor(this.time.now / 140) % 2) pet.setFrame('1');
+    else pet.setFrame('0');
+    depthOf(pet, pet.y + 0.25);
+  }
+
+  /** Si el móvil no llega a ~40 fps, quita adornos: nubes, la mitad de peatones y coches, y efectos de la interfaz. */
+  private checkPerf(delta: number) {
+    if (this.low) return;
+    const p = this.perf;
+    p.warm += delta;
+    if (p.warm < 6000 || document.visibilityState !== 'visible') return;
+    p.t += delta;
+    p.frames++;
+    if (p.t < 4000) return;
+    const fps = (p.frames * 1000) / p.t;
+    p.slow = fps < 40 ? p.slow + 1 : 0;
+    p.t = 0;
+    p.frames = 0;
+    if (p.slow >= 2) this.lowQuality();
+  }
+
+  private lowQuality() {
+    this.low = true;
+    setLowFx(true);
+    for (const c of this.clouds) c.setVisible(false);
+    for (const w of this.walkers.splice(this.walkers.length / 2)) {
+      this.tweens.killTweensOf(w.sprite);
+      w.sprite.destroy();
+    }
+    for (const c of this.cars.splice(this.cars.length * 0.6)) {
+      c.img.destroy();
+      c.light.destroy();
     }
   }
 
   update(time: number, delta: number) {
+    this.checkPerf(delta);
     this.updateLight();
     const neonA = (0.55 + this.light.night * 0.45) * (Math.random() < 0.012 ? 0.5 : 1);
-    for (const n of this.neons) n.setAlpha(neonA);
+    if (neonA !== this.neons[0]?.alpha) for (const n of this.neons) n.setAlpha(neonA);
     this.drawWeather(delta);
 
     // tráfico y profundidad de peatones
     this.moveTraffic(delta / 1000, time);
-    for (const wk of this.walkers) wk.sprite.setDepth(wk.sprite.y);
+    for (const wk of this.walkers) depthOf(wk.sprite, wk.sprite.y);
     if (this.otherSprite && this.otherLabel) {
-      this.otherSprite.setDepth(this.otherSprite.y);
+      depthOf(this.otherSprite, this.otherSprite.y);
       this.otherLabel.setPosition(this.otherSprite.x, this.otherSprite.y - 12);
     }
 
@@ -726,8 +963,10 @@ export class CityScene extends Phaser.Scene {
         this.player.setFrame(String((this.facingBack ? 3 : 0) + this.stepFrame));
       }
       if (!moving && this.player.frame.name !== '0' && this.player.frame.name !== '3') this.player.setFrame('0');
-      this.player.setDepth(this.player.y + 0.1);
-      this.ring.setVisible(this.player.visible).setPosition(this.player.x, this.player.y - 1).setDepth(this.player.y);
+      depthOf(this.player, this.player.y + 0.5);
+      this.ring.setVisible(this.player.visible).setPosition(this.player.x, this.player.y - 1);
+      depthOf(this.ring, this.player.y);
+      if (this.pet) this.followPet(delta);
     }
 
     // cámara: sigue al personaje salvo que el jugador haya movido el mapa
@@ -755,6 +994,24 @@ export class CityScene extends Phaser.Scene {
   }
 }
 
+const LOWFX_KEY = 'laciudad.lowfx';
+export function lowFx(): boolean {
+  try {
+    return localStorage.getItem(LOWFX_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+export function setLowFx(on: boolean) {
+  document.documentElement.classList.toggle('lowfx', on);
+  try {
+    if (on) localStorage.setItem(LOWFX_KEY, '1');
+    else localStorage.removeItem(LOWFX_KEY);
+  } catch {
+    /* sin almacenamiento */
+  }
+}
+
 /** Alto lógico según la proporción del contenedor (pantalla del móvil). */
 export function viewHeight(parent: HTMLElement): number {
   const ratio = parent.clientHeight / Math.max(1, parent.clientWidth);
@@ -762,6 +1019,7 @@ export function viewHeight(parent: HTMLElement): number {
 }
 
 export function createGame(parent: HTMLElement): Phaser.Game {
+  if (lowFx()) document.documentElement.classList.add('lowfx');
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,
@@ -769,6 +1027,8 @@ export function createGame(parent: HTMLElement): Phaser.Game {
     height: viewHeight(parent),
     pixelArt: true,
     backgroundColor: '#120c24',
+    render: { antialias: false, roundPixels: true, powerPreference: 'high-performance', batchSize: 4096 },
+    fps: { target: 60, smoothStep: true },
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     scene: [CityScene],
     banner: false,

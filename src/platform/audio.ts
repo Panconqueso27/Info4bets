@@ -93,12 +93,20 @@ function tone(freq: number, start: number, dur: number, type: OscillatorType, vo
   o.stop(start + dur + 0.05);
 }
 
+/** Un único búfer de ruido (1 s) reutilizado: no se generan búferes nuevos en cada golpe. */
+let noiseBuf: AudioBuffer | null = null;
+function noiseBuffer(): AudioBuffer {
+  if (noiseBuf) return noiseBuf;
+  const len = ctx!.sampleRate;
+  noiseBuf = ctx!.createBuffer(1, len, ctx!.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return noiseBuf;
+}
+
 function noise(start: number, dur: number, vol: number, freq = 2000, q = 1, out?: AudioNode) {
   if (!ctx || !master) return;
-  const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const buf = noiseBuffer();
   const src = ctx.createBufferSource();
   src.buffer = buf;
   const f = ctx.createBiquadFilter();
@@ -109,7 +117,7 @@ function noise(start: number, dur: number, vol: number, freq = 2000, q = 1, out?
   g.gain.setValueAtTime(vol, start);
   g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
   src.connect(f).connect(g).connect(out ?? master);
-  src.start(start);
+  src.start(start, Math.random() * Math.max(0, 1 - dur), Math.min(1, dur));
 }
 
 function sfx(fn: (t: number) => void) {
@@ -281,9 +289,33 @@ function scheduleStep(t: number) {
   nextTime = t + beat;
 }
 
+/** Prepara las cuerdas de las dos canciones poco a poco, en ratos libres, para que no haya tirones. */
+let warmed = false;
+function warmUp() {
+  if (warmed || !ctx) return;
+  warmed = true;
+  const jobs: [number, number, number][] = [];
+  for (const song of Object.values(SONGS)) {
+    song.bass.forEach((b) => jobs.push([N(b), 1.2, 0.25], [N(b + 7), 1.2, 0.25]));
+    for (const chord of song.chords)
+      for (const n of chord) jobs.push([N(n - 12), 2.4, 0.55], [N(n), 1.4, 0.6], [N(n + 12), 1.4, 0.6]);
+  }
+  const idle: (cb: () => void) => void = (cb) =>
+    'requestIdleCallback' in window ? (window as any).requestIdleCallback(cb, { timeout: 500 }) : setTimeout(cb, 30);
+  const next = () => {
+    const j = jobs.shift();
+    if (!j) return;
+    pluckBuffer(...j);
+    idle(next);
+  };
+  noiseBuffer();
+  idle(next);
+}
+
 function startMusic() {
   if (!ctx || timer !== null) return;
   makeRoom();
+  warmUp();
   nextTime = ctx.currentTime + 0.1;
   timer = window.setInterval(() => {
     if (!ctx) return;

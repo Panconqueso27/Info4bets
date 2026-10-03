@@ -455,9 +455,20 @@ button {
 }
 .dock-tools {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 25px) / 6);
   gap: 5px;
   margin-top: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+  scroll-snap-type: x proximity;
+}
+.dock-tools::-webkit-scrollbar {
+  display: none;
+}
+.dock-tools .tool {
+  scroll-snap-align: start;
 }
 .tool {
   border: 2px solid #000;
@@ -1057,8 +1068,8 @@ button {
   letter-spacing: 1px;
 }
 .modal-wrap {
-  background: radial-gradient(ellipse at 50% 70%, rgba(40, 10, 60, 0.55), rgba(3, 1, 10, 0.78));
-  backdrop-filter: blur(2px);
+  /* sin backdrop-filter: el desenfoque sobre el mapa animado cuesta mucho en móviles */
+  background: radial-gradient(ellipse at 50% 70%, rgba(40, 10, 60, 0.62), rgba(3, 1, 10, 0.84));
 }
 
 /* ---- botones */
@@ -1106,7 +1117,24 @@ button {
 .minigame-btn {
   background: linear-gradient(180deg, #7ff6ff, #2fc8e0 60%, #1b8fb0);
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 4px 0 #000, 0 0 18px rgba(79, 240, 255, 0.55);
-  animation: glowPulse 1.6s ease-in-out infinite;
+  position: relative;
+}
+/* El brillo late con opacidad (lo mueve la GPU), no repintando la sombra. */
+.minigame-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 28px rgba(79, 240, 255, 0.9);
+  opacity: 0;
+  pointer-events: none;
+  animation: glowFade 1.6s ease-in-out infinite;
+  will-change: opacity;
+}
+@keyframes glowFade {
+  50% {
+    opacity: 1;
+  }
 }
 .minigame-btn small {
   display: block;
@@ -1209,8 +1237,7 @@ button {
   flex-direction: column;
   align-items: center;
   padding: calc(10px + var(--safe-top)) 16px calc(14px + var(--safe-bottom));
-  background: radial-gradient(ellipse at 50% 45%, rgba(60, 20, 90, 0.55), rgba(4, 2, 12, 0.92) 75%);
-  backdrop-filter: blur(3px);
+  background: radial-gradient(ellipse at 50% 45%, rgba(60, 20, 90, 0.66), rgba(4, 2, 12, 0.94) 75%);
   overflow: hidden;
   touch-action: none;
   animation: deckIn 0.25s ease-out;
@@ -1476,6 +1503,7 @@ button {
   inset: -50%;
   background: conic-gradient(from 0deg, transparent 0 10deg, rgba(255, 220, 90, 0.18) 10deg 20deg, transparent 20deg 40deg);
   animation: rays 6s linear infinite;
+  will-change: transform;
   pointer-events: none;
 }
 @keyframes rays {
@@ -1892,7 +1920,7 @@ body {
 .dcard-title,
 .screen h2,
 .mg-overlay h3 {
-  animation: neonBreath 3.2s ease-in-out infinite;
+  animation: neonBreath 3.2s ease-in-out 2;
 }
 @keyframes neonBreath {
   50% {
@@ -2164,10 +2192,192 @@ body {
   line-height: 1;
   margin: 4px 0 8px;
   animation: firePulse 0.9s ease-in-out infinite;
+  will-change: transform;
   filter: drop-shadow(0 0 16px rgba(255, 140, 40, 0.9));
 }
 @keyframes firePulse {
   50% {
     transform: scale(1.15) rotate(-4deg);
   }
+}
+
+/* ---------- 0.5: solares, radio, negocio, turismo */
+.lot-card .phases {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+.phases li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  opacity: 0.65;
+}
+.phases li span {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #241a48;
+  font-size: 10px;
+}
+.phases li small {
+  margin-left: auto;
+  color: var(--muted, #a99fd0);
+}
+.phases li.done,
+.phases li.doing {
+  opacity: 1;
+}
+.phases li.done span {
+  background: #1d6b3f;
+}
+.phases li.doing span {
+  background: #8a6a12;
+}
+.progress.works > div {
+  background: repeating-linear-gradient(135deg, #ffcc33 0 6px, #14101f 6px 12px);
+}
+.good-text {
+  color: #7dffb0;
+}
+.civic-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+.civic {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 7px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.civic > div {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+.civic small {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.civic small.fx {
+  color: var(--neon-cyan);
+  opacity: 1;
+}
+.civic .btn {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 8px 10px;
+}
+.radio-dial {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px 14px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2a1a0e, #140a04);
+  box-shadow: inset 0 0 0 2px #6a4422, inset 0 0 18px rgba(255, 170, 60, 0.25);
+  font-family: var(--pixel);
+  font-size: 9px;
+  color: #c9a46a;
+}
+.radio-dial .on {
+  color: #ffcc33;
+  text-shadow: 0 0 6px rgba(255, 204, 51, 0.8);
+}
+.radio-dial i {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: #ff4a3a;
+  box-shadow: 0 0 6px #ff4a3a;
+}
+.radio-job .ad {
+  font-style: italic;
+  color: #ffe2a0;
+}
+.passive-total {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  margin: 2px 0 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(0, 255, 127, 0.18), rgba(0, 0, 0, 0.25));
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 127, 0.35);
+}
+.passive-total b {
+  font-family: var(--pixel);
+  font-size: 22px;
+  color: #7dffb0;
+}
+.passive-total small {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.vending-row {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+.vm {
+  width: 18px;
+  height: 28px;
+  border-radius: 3px;
+  background: #2a2340;
+  box-shadow: inset 0 0 0 2px #3a3060;
+}
+.vm.on {
+  background: linear-gradient(180deg, #e8414f 0 15%, #9fd3ff 15% 55%, #c0392b 55%);
+  box-shadow: inset 0 0 0 2px #7a1a22, 0 0 8px rgba(255, 80, 90, 0.5);
+}
+.vm.broken {
+  background: linear-gradient(180deg, #555 0 15%, #333 15% 55%, #444 55%);
+  box-shadow: inset 0 0 0 2px #222;
+}
+.factors {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.factors li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.factors b {
+  color: var(--neon-cyan);
+}
+
+/* ---------- Calidad reducida: se activa sola si el móvil va justo */
+.lowfx .anim-ch,
+.lowfx .modal h3,
+.lowfx .dcard-title,
+.lowfx .screen h2,
+.lowfx .minigame-btn::after,
+.lowfx .reward-fire,
+.lowfx .neon-line {
+  animation: none !important;
+}
+.lowfx .confetti,
+.lowfx .deck-result.is-good::before {
+  display: none;
+}
+.lowfx .dcard,
+.lowfx .modal,
+.lowfx .tool,
+.lowfx .btn {
+  box-shadow: 0 3px 0 #000 !important;
 }

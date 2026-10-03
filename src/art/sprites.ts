@@ -133,3 +133,48 @@ export function drawCarFront(ctx: CanvasRenderingContext2D, color: string, ox: n
     px(3, 0, 2, 1, '#3b7bff');
   }
 }
+
+/** Mascota (6x5): gato atigrado o perro canelo, dos fotogramas de paso. */
+export function drawPet(ctx: CanvasRenderingContext2D, kind: 'gato' | 'perro', ox: number, frame: number) {
+  const body = kind === 'gato' ? '#e08a3a' : '#a8743c';
+  const dark = kind === 'gato' ? '#9a5a1e' : '#6a4422';
+  const px = (x: number, y: number, c: string) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(ox + x, y, 1, 1);
+  };
+  // cabeza a la derecha
+  for (let x = 1; x <= 4; x++) px(x, 2, body);
+  for (let x = 1; x <= 4; x++) px(x, 3, body);
+  px(4, 1, body);
+  px(5, 1, body);
+  px(5, 2, body);
+  if (kind === 'gato') {
+    px(4, 0, dark);
+    px(5, 0, dark);
+    px(0, 1, body);
+    px(0, 0, body);
+    px(2, 2, dark);
+  } else {
+    px(4, 0, dark);
+    px(5, 2, '#14101f');
+    px(0, 2, body);
+    px(0, 1, body);
+  }
+  // patas
+  px(frame ? 2 : 1, 4, dark);
+  px(frame ? 3 : 4, 4, dark);
+}
+
+/** Máquina expendedora (4x7) para la acera. */
+export function drawVending(ctx: CanvasRenderingContext2D, ox: number, oy: number) {
+  ctx.fillStyle = '#c0392b';
+  ctx.fillRect(ox, oy, 4, 7);
+  ctx.fillStyle = '#9fd3ff';
+  ctx.fillRect(ox + 1, oy + 1, 2, 3);
+  ctx.fillStyle = '#ffd24a';
+  ctx.fillRect(ox + 1, oy + 2, 1, 1);
+  ctx.fillStyle = '#14101f';
+  ctx.fillRect(ox + 1, oy + 5, 2, 1);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(ox, oy, 4, 1);
+}

@@ -54,6 +54,10 @@ export interface ResolveContext {
   /** Suceso aleatorio anterior a este (para logros de "dos seguidos"). */
   previous: string | undefined;
   unlock: (id: string) => void;
+  /** Día de partida en que se resuelve. */
+  day: number;
+  /** Variables de texto sorteadas para esta instancia. */
+  vars: Record<string, string>;
 }
 
 export interface EventDef {
