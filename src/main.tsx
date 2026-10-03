@@ -4,6 +4,7 @@ import { render } from 'preact';
 import { restoreNativeSave } from './platform/save';
 import { createGame } from './scene/CityScene';
 import { App } from './ui/App';
+import './ui/fonts.css';
 import './ui/styles.css';
 
 const root = document.getElementById('app')!;

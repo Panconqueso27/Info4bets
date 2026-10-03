@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   advance,
+  applyMinigame,
+  buyCar,
   buyUpgrade,
+  startErrand,
   canStartShift,
   forceEvent,
   markNewsSeen,
@@ -25,7 +28,12 @@ import { bridge, type Spot } from '../scene/bridge';
 import { DevPanel } from './DevPanel';
 import { MarketTerminal } from './Market';
 import { AchievementsModal, AgendaModal, EndingModal, NewsModal, UpgradeModal } from './Panels';
-import { Dock, EventModal, GameOverModal, Hud, LogModal, MenuModal, OutcomeModal, Toast, eventNotification, type Panel } from './Play';
+import { Dock, GameOverModal, Hud, LogModal, MenuModal, Toast, eventNotification, type Panel } from './Play';
+import { DecisionCard, ResultCard } from './Cards';
+import { Dishwasher } from './Dishwasher';
+import { Paperwork } from './Paperwork';
+import * as audio from '../platform/audio';
+import { lightAt } from '../art/daynight';
 import { Customizer, IdentityForm, RoleSelect, TitleScreen } from './Setup';
 
 type Screen =
@@ -38,6 +46,7 @@ type Screen =
 function spotFor(s: GameState, now: number): Spot {
   if (s.gameOver) return 'home';
   if (s.detainedUntil > now) return 'away';
+  if (s.errand) return 'errand';
   if (s.shift && !s.shift.cancelled) return 'work';
   return 'home';
 }
@@ -56,6 +65,7 @@ export function App() {
   const [toast, setToast] = useState<{ title: string; text: string } | null>(null);
   const [devEnabled, setDevEnabled] = useState(() => clock.isDevEnabled());
   const [endingSeen, setEndingSeen] = useState(false);
+  const [minigame, setMinigame] = useState(false);
   const seenPending = useRef(new Set<string>());
 
   const state = game.current;
@@ -84,6 +94,19 @@ export function App() {
     };
   }, []);
 
+  // Audio: se activa con el primer toque; la música cambia de día a noche y se pausa en segundo plano.
+  useEffect(() => {
+    const unlock = () => audio.unlock();
+    window.addEventListener('pointerdown', unlock);
+    const onVis = () => audio.setPaused(document.visibilityState !== 'visible');
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+  useEffect(() => audio.setMood(lightAt(now).night > 0.5 ? 'noche' : 'dia'), [Math.floor(now / 60_000)]);
+
   // La escena refleja dónde está el personaje.
   useEffect(() => {
     if (playing) bridge.set({ role: state.character.role, look: state.character.look, spot: spotFor(state, now) });
@@ -97,12 +120,14 @@ export function App() {
       if (seenPending.current.has(p.instanceId)) continue;
       seenPending.current.add(p.instanceId);
       if (EVENTS[p.eventId].kind === 'accion') continue;
-      setToast({ title: 'NOTIFICACION', text: eventNotification(p.eventId) });
+      setToast({ title: 'NOTIFICACIÓN', text: eventNotification(p.eventId) });
       if (!panel) setShowEvent(true);
     }
     if (!toast && state.notices.length) {
       const n = takeNotice(state)!;
       setToast({ title: n.title, text: n.text });
+      if (n.kind === 'logro' || n.kind === 'final') audio.play.achievement();
+      else audio.play.notify();
       commit();
     }
   });
@@ -121,13 +146,14 @@ export function App() {
     const list = [];
     if (s.shift && !s.shift.cancelled) {
       for (const sl of s.shift.slots)
-        if (!sl.fired) list.push({ id: `ev-${sl.at}`, at: sl.at, title: EVENTS[sl.eventId].title, body: EVENTS[sl.eventId].notification });
+        if (!sl.fired && sl.at < s.shift.endsAt) list.push({ id: `ev-${sl.at}`, at: sl.at, title: EVENTS[sl.eventId].title, body: EVENTS[sl.eventId].notification });
       list.push({ id: `end-${s.shift.endsAt}`, at: s.shift.endsAt, title: 'Jornada terminada', body: `${s.character.name} ya puede ${role.retire.toLowerCase()} y cobrar.` });
     }
+    if (s.errand) list.push({ id: `errand-${s.errand.endsAt}`, at: s.errand.endsAt, title: 'Reparto terminado', body: `${s.character.name} volvió del reparto con el dinero.` });
     const tomorrow = startOfDay(addDays(s.today.date, 1)) + REMINDER_HOUR * 3_600_000;
     list.push({ id: `rem-${tomorrow}`, at: tomorrow, title: `🔥 Racha de ${s.streak} días`, body: `No olvides ir ${role.toWorkplace} hoy o perderás la racha.` });
     notify.scheduleAll(list, clock.now(), clock.getSpeed());
-  }, [state?.shift?.startedAt, state?.shift?.cancelled, state?.gameOver, state?.today.date, state?.streak, clock.getSpeed()]);
+  }, [state?.shift?.startedAt, state?.shift?.endsAt, state?.errand?.endsAt, state?.shift?.cancelled, state?.gameOver, state?.today.date, state?.streak, clock.getSpeed()]);
 
   const begin = (c: Character) => {
     deleteGame();
@@ -194,7 +220,14 @@ export function App() {
   // Un solo panel a la vez, por orden de prioridad.
   let overlay = null;
   if (state.gameOver && !outcome) overlay = <GameOverModal state={state} onNew={quit} />;
-  else if (outcome) overlay = <OutcomeModal state={state} outcome={outcome} onClose={() => setOutcome(null)} />;
+  else if (outcome) overlay = <ResultCard state={state} outcome={outcome} onClose={() => setOutcome(null)} />;
+  else if (minigame)
+    overlay =
+      state.character.role === 'inmigrante' ? (
+        <Dishwasher onClose={() => setMinigame(false)} onFinish={(n) => { setMinigame(false); act((s, t) => applyMinigame(s, n, t)); }} />
+      ) : (
+        <Paperwork onClose={() => setMinigame(false)} onFinish={(n) => { setMinigame(false); act((s, t) => applyMinigame(s, n, t)); }} />
+      );
   else if (state.ending && !endingSeen && !state.flags.endingShown)
     overlay = (
       <EndingModal
@@ -209,10 +242,11 @@ export function App() {
     );
   else if (pending && showEvent)
     overlay = (
-      <EventModal
+      <DecisionCard
+        key={pending.instanceId}
         state={state}
         pending={pending}
-        onChoose={(choiceId) =>
+        onDecide={(choiceId) =>
           act((s, t) => {
             setOutcome(resolveEvent(s, pending.instanceId, choiceId, t));
             if (s.pending.length === 0) setShowEvent(false);
@@ -237,7 +271,7 @@ export function App() {
         }
       />
     );
-  else if (panel === 'mejora') overlay = <UpgradeModal state={state} onBuy={() => act(buyUpgrade)} onClose={closePanel} />;
+  else if (panel === 'mejora') overlay = <UpgradeModal state={state} onBuy={() => act(buyUpgrade)} onBuyCar={() => act(buyCar)} onClose={closePanel} />;
   else if (panel === 'logros') overlay = <AchievementsModal state={state} onClose={closePanel} />;
   else if (panel === 'diario') overlay = <LogModal state={state} onClose={closePanel} />;
   else if (panel === 'menu')
@@ -273,6 +307,12 @@ export function App() {
           setShowEvent(true);
         }}
         onPanel={setPanel}
+        onMinigame={() => {
+          audio.play.click();
+          setPanel(null);
+          setMinigame(true);
+        }}
+        onErrand={() => act(startErrand)}
       />
       {overlay}
       {toast && <Toast title={toast.title} text={toast.text} />}

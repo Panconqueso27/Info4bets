@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { Letters } from './AnimText';
 import { defaultLook, HAIR_COLORS, HAIRS, OUTFIT_COLORS, OUTFITS, randomLook, SKINS, type Option } from '../art/character';
 import { ROLES } from '../core/roles';
 import type { Character, Look, Role } from '../core/types';
@@ -8,7 +9,10 @@ export function TitleScreen({ hasSave, onContinue, onNew }: { hasSave: boolean; 
   return (
     <div class="screen title-screen">
       <div class="logo">
-        <h1>LA<br />CIUDAD</h1>
+        <h1>
+          <span class="neon-line">LA</span>
+          <span class="neon-line">CIUDAD</span>
+        </h1>
         <div class="sub">NUEVA YORK · 1985</div>
         <div class="note">(título provisional)</div>
       </div>
@@ -29,7 +33,7 @@ export function TitleScreen({ hasSave, onContinue, onNew }: { hasSave: boolean; 
 export function RoleSelect({ onPick, onBack }: { onPick: (r: Role) => void; onBack: () => void }) {
   return (
     <div class="screen">
-      <h2>¿Quién eres en esta ciudad?</h2>
+      <h2><Letters text="¿Quién eres en esta ciudad?" /></h2>
       <div class="stack">
         {(Object.keys(ROLES) as Role[]).map((id) => {
           const r = ROLES[id];
@@ -87,7 +91,7 @@ export function IdentityForm({
 
   return (
     <form class="screen" onSubmit={submit}>
-      <h2>{def.title}</h2>
+      <h2><Letters text={def.title} /></h2>
       <label class="field">
         <span>NOMBRE</span>
         <input value={name} maxLength={16} autoFocus onInput={(e) => setName(e.currentTarget.value)} placeholder="Escribe un nombre" />

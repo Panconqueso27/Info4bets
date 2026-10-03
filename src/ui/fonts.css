@@ -1,0 +1,35 @@
+/*
+ * Tipografía del juego (empaquetada, funciona sin conexión):
+ * - LC Display (Bungee): letreros de calle de Nueva York. Títulos y botones.
+ * - LC Neon (Monoton): neón de los 80, solo para el logo.
+ * - LC Body (Rubik): texto corrido, redondeado y legible.
+ * size-adjust iguala los tamaños a los que ya usa la interfaz.
+ */
+@font-face {
+  font-family: 'LC Display';
+  src: url('../../node_modules/@fontsource/bungee/files/bungee-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  size-adjust: 128%;
+}
+@font-face {
+  font-family: 'LC Neon';
+  src: url('../../node_modules/@fontsource/monoton/files/monoton-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'LC Body';
+  src: url('../../node_modules/@fontsource-variable/rubik/files/rubik-latin-wght-normal.woff2') format('woff2-variations');
+  font-weight: 300 900;
+  font-display: swap;
+  size-adjust: 80%;
+}
+@font-face {
+  font-family: 'LC Body';
+  src: url('../../node_modules/@fontsource-variable/rubik/files/rubik-latin-ext-wght-normal.woff2') format('woff2-variations');
+  font-weight: 300 900;
+  font-display: swap;
+  size-adjust: 80%;
+  unicode-range: U+0100-024F, U+1E00-1EFF, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}

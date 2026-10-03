@@ -6,6 +6,7 @@ export const TERM_DAYS = 30;
 
 const huelga: EventDef = {
   id: 'huelga',
+  icon: 'megafono',
   role: 'alcalde',
   kind: 'aleatorio',
   title: 'Huelga municipal',
@@ -74,6 +75,7 @@ const huelga: EventDef = {
 
 const corrupcion: EventDef = {
   id: 'corrupcion',
+  icon: 'periodico',
   role: 'alcalde',
   kind: 'aleatorio',
   title: 'Escándalo de corrupción',
@@ -137,6 +139,7 @@ const corrupcion: EventDef = {
 
 const desastre: EventDef = {
   id: 'desastre',
+  icon: 'tormenta',
   role: 'alcalde',
   kind: 'aleatorio',
   title: 'Desastre natural',
@@ -198,6 +201,7 @@ const desastre: EventDef = {
 
 const protesta: EventDef = {
   id: 'protesta',
+  icon: 'megafono',
   role: 'alcalde',
   kind: 'aleatorio',
   title: 'Manifestación ciudadana',
@@ -230,6 +234,7 @@ const protesta: EventDef = {
 
 const elecciones: EventDef = {
   id: 'elecciones',
+  icon: 'urna',
   role: 'alcalde',
   kind: 'diario',
   title: 'Elecciones municipales',
@@ -272,6 +277,7 @@ const elecciones: EventDef = {
 
 const crimen: EventDef = {
   id: 'crimen',
+  icon: 'placa',
   role: 'alcalde',
   kind: 'accion',
   title: 'Reducir la criminalidad',
@@ -296,6 +302,7 @@ const crimen: EventDef = {
 
 const prensa: EventDef = {
   id: 'prensa',
+  icon: 'micro',
   role: 'alcalde',
   kind: 'accion',
   title: 'Mejorar relación con la prensa',
@@ -318,6 +325,7 @@ const prensa: EventDef = {
 
 const obra: EventDef = {
   id: 'obra',
+  icon: 'cinta',
   role: 'alcalde',
   kind: 'accion',
   title: 'Inaugurar una obra pública',
@@ -342,6 +350,7 @@ const obra: EventDef = {
 
 const descanso: EventDef = {
   id: 'descanso',
+  icon: 'playa',
   role: 'alcalde',
   kind: 'accion',
   title: 'Tiempo de descanso',
@@ -364,6 +373,7 @@ const descanso: EventDef = {
 
 const concejales: EventDef = {
   id: 'concejales',
+  icon: 'manos',
   role: 'alcalde',
   kind: 'accion',
   title: 'Ganarse a los concejales',

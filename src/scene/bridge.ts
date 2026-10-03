@@ -1,7 +1,7 @@
 import type { Look, Role } from '../core/types';
 
 /** Estado que la interfaz (Preact) comparte con la escena (Phaser). */
-export type Spot = 'home' | 'work' | 'away';
+export type Spot = 'home' | 'work' | 'away' | 'errand';
 
 export interface SceneModel {
   role: Role | null;

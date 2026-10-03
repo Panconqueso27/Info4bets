@@ -145,4 +145,6 @@ export interface GameState {
   ending: Ending | null;
   /** Mandato actual del alcalde (empieza en 1). */
   term: number;
+  /** Reparto de paquetes en curso (trabajo extra del inmigrante). */
+  errand?: { startedAt: number; endsAt: number } | null;
 }

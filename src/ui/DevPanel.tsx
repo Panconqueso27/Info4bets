@@ -29,7 +29,7 @@ export function DevPanel({
       </button>
     );
   return (
-    <div class="modal-wrap" onClick={() => setOpen(false)}>
+    <div class="modal-wrap dev-wrap" onClick={() => setOpen(false)}>
       <div class="modal dev-panel" onClick={(e) => e.stopPropagation()}>
         <h3>Modo desarrollo</h3>
         <div class="kicker">VELOCIDAD DEL RELOJ</div>

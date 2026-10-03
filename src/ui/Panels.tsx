@@ -1,5 +1,6 @@
 import { achievementsFor } from '../core/achievements';
-import { actionsFor, actionStatus, todayNews } from '../core/game';
+import { Letters } from './AnimText';
+import { actionsFor, actionStatus, CAR_COST, todayNews } from '../core/game';
 import { COMPANIES } from '../core/market';
 import { ROLES } from '../core/roles';
 import type { GameState } from '../core/types';
@@ -11,7 +12,7 @@ function Modal({ title, onClose, children, kicker }: { title: string; onClose: (
     <div class="modal-wrap" onClick={onClose}>
       <div class="modal" onClick={(e) => e.stopPropagation()}>
         {kicker && <div class="kicker">{kicker}</div>}
-        <h3>{title}</h3>
+        <h3><Letters text={title} /></h3>
         {children}
         <button class="btn secondary" style={{ marginTop: 12 }} onClick={onClose}>
           Cerrar
@@ -43,7 +44,7 @@ export function AgendaModal({ state, now, onPick, onClose }: { state: GameState;
   );
 }
 
-export function UpgradeModal({ state, onBuy, onClose }: { state: GameState; onBuy: () => void; onClose: () => void }) {
+export function UpgradeModal({ state, onBuy, onBuyCar, onClose }: { state: GameState; onBuy: () => void; onBuyCar: () => void; onClose: () => void }) {
   const role = ROLES[state.character.role];
   const up = UPGRADES[state.character.role];
   const money = state.bars.dinero ?? 0;
@@ -75,6 +76,23 @@ export function UpgradeModal({ state, onBuy, onClose }: { state: GameState; onBu
             </div>
           );
         })}
+        {state.character.role === 'inmigrante' && (
+          <div class={`card ${state.flags.auto ? 'owned' : ''}`}>
+            <b>🚗 Auto usado {state.flags.auto && '✔'}</b>
+            <div class="card-text">Un sedán del 79. El reparto de paquetes pasa de 4 a 2 horas.</div>
+            <div class="card-text muted">Precio: {role.formatMoney(CAR_COST)}</div>
+            {!state.flags.auto && (
+              <>
+                <div class="progress small">
+                  <div style={{ width: `${Math.min(1, money / CAR_COST) * 100}%` }} />
+                </div>
+                <button class="btn small good" disabled={money < CAR_COST} onClick={onBuyCar}>
+                  {money >= CAR_COST ? 'Comprar' : `Faltan ${role.formatMoney(CAR_COST - money)}`}
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <div class="card-text muted">
           {state.character.role === 'inmigrante'
             ? 'Cada nivel de la casa sube tu salud al comprarlo y te hace recuperar más salud cada noche.'
@@ -139,7 +157,7 @@ export function EndingModal({ state, onClose }: { state: GameState; onClose: () 
     <div class="modal-wrap">
       <div class="modal ending">
         <div class="kicker">OBJETIVO FINAL CUMPLIDO · DÍA {e.day}</div>
-        <h3>{e.title}</h3>
+        <h3><Letters text={e.title} /></h3>
         <p>{e.text}</p>
         <div class="stats">
           <div class="stat">

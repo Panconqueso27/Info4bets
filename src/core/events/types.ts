@@ -62,8 +62,11 @@ export interface EventDef {
    * personal: mini-evento ocasional durante la jornada.
    * diario: se revisa una vez al día al abrir el juego.
    * accion: decisión que el jugador toma desde la agenda.
+   * apertura: suceso ligero de los primeros 2 minutos de la jornada.
    */
-  kind: 'aleatorio' | 'personal' | 'diario' | 'accion';
+  kind: 'aleatorio' | 'personal' | 'diario' | 'accion' | 'apertura';
+  /** Ilustración de la tarjeta (ver art/icons.ts). */
+  icon?: string;
   title: string;
   /** Texto de la notificación push. */
   notification: string;

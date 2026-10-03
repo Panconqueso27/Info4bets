@@ -1,10 +1,12 @@
+import * as audio from '../platform/audio';
+import { Letters, Words } from './AnimText';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { EVENTS } from '../core/events/catalog';
-import { canRetire, canStartShift, dayNumber, marketSession, viewEvent, type ResolvedOutcome } from '../core/game';
+import { canRetire, canStartErrand, canStartShift, dayNumber, ERRAND_PAY, errandHours, marketSession, MINUTES_PER_POINT } from '../core/game';
 import { TERM_DAYS } from '../core/events/alcalde';
 import { ROLES, type BarDef } from '../core/roles';
 import { formatDuration } from '../core/time';
-import type { BarId, Bars, GameState, PendingEvent, Role } from '../core/types';
+import type { BarId, Bars, GameState, Role } from '../core/types';
 import { lightAt } from '../art/daynight';
 
 /** La fuente de píxeles no tiene mayúsculas con tilde. */
@@ -59,7 +61,7 @@ export function Hud({ state, now }: { state: GameState; now: number }) {
             {state.character.role === 'alcalde' && ` · mandato ${state.term} (${TERM_DAYS - ((dayNumber(state, now) - 1) % TERM_DAYS)}d)`}
           </small>
         </div>
-        <div class="badge day">DIA {dayNumber(state, now)}</div>
+        <div class="badge day">DÍA {dayNumber(state, now)}</div>
         <div class={`badge streak ${state.streak ? '' : 'off'}`} title="Racha de días yendo a trabajar">
           🔥{state.streak}
         </div>
@@ -84,6 +86,8 @@ export function Dock({
   onRetire,
   onOpenEvent,
   onPanel,
+  onMinigame,
+  onErrand,
 }: {
   state: GameState;
   now: number;
@@ -91,13 +95,37 @@ export function Dock({
   onRetire: () => void;
   onOpenEvent: () => void;
   onPanel: (p: Panel) => void;
+  onMinigame: () => void;
+  onErrand: () => void;
 }) {
   const role = ROLES[state.character.role];
   const shift = state.shift;
   const block = canStartShift(state, now);
+  const isImm = state.character.role === 'inmigrante';
+  const errandOk = canStartErrand(state, now) === null;
+  const errandBtn = errandOk && (
+    <button class="btn secondary errand-btn" onClick={onErrand}>
+      📦 Repartir paquetes · {errandHours(state)}h · +{role.formatMoney(ERRAND_PAY)}
+    </button>
+  );
   let body;
 
-  if (shift) {
+  if (state.errand) {
+    const e = state.errand;
+    body = (
+      <>
+        <div class="status">
+          <span>📦 Repartiendo paquetes por la ciudad · vuelve en <b>{formatDuration(e.endsAt - now)}</b></span>
+        </div>
+        <div class="progress errand">
+          <div style={{ width: `${Math.min(1, (now - e.startedAt) / (e.endsAt - e.startedAt)) * 100}%` }} />
+        </div>
+        <button class="btn" disabled>
+          {role.goToWork} (al volver)
+        </button>
+      </>
+    );
+  } else if (shift) {
     const total = shift.endsAt - shift.startedAt;
     const done = Math.min(1, (now - shift.startedAt) / total);
     const ready = canRetire(state, now);
@@ -119,9 +147,21 @@ export function Dock({
             <div style={{ width: `${done * 100}%` }} />
           </div>
         )}
-        <button class={`btn ${ready ? 'good' : ''}`} disabled={!ready} onClick={onRetire}>
-          {shift.cancelled ? 'Volver a casa' : ready ? `${role.retire} (+${role.formatMoney(role.shiftPay)})` : role.retire}
-        </button>
+        {ready || shift.cancelled ? (
+          <button class={`btn ${ready ? 'good' : ''}`} onClick={onRetire}>
+            {shift.cancelled ? 'Volver a casa' : `${role.retire} (+${role.formatMoney(role.shiftPay)})`}
+          </button>
+        ) : (
+          <div class="row">
+            <button class="btn minigame-btn" onClick={onMinigame}>
+              {isImm ? '🍽 Lavar platos' : '🖋 Papeleo'}
+              <small>−{MINUTES_PER_POINT} min por {isImm ? 'plato' : 'acierto'}</small>
+            </button>
+            <button class="btn secondary" disabled>
+              {role.retire}
+            </button>
+          </div>
+        )}
       </>
     );
   } else if (block === 'detained') {
@@ -142,9 +182,11 @@ export function Dock({
         <div class="status">
           <span>Jornada de hoy cumplida.</span> <span class="hint">Vuelve mañana para mantener la racha 🔥</span>
         </div>
-        <button class="btn" disabled>
-          Hasta mañana
-        </button>
+        {errandBtn || (
+          <button class="btn" disabled>
+            Hasta mañana
+          </button>
+        )}
       </>
     );
   } else {
@@ -157,6 +199,7 @@ export function Dock({
         <button class="btn" onClick={onStart}>
           {role.goToWork} · 8h
         </button>
+        {errandBtn}
       </>
     );
   }
@@ -213,66 +256,11 @@ function Deltas({ deltas, state }: { deltas: Bars; state: GameState }) {
   );
 }
 
-export function EventModal({
-  state,
-  pending,
-  onChoose,
-}: {
-  state: GameState;
-  pending: PendingEvent;
-  onChoose: (choiceId: string) => void;
-}) {
-  const view = viewEvent(state, pending);
-  const time = new Date(pending.firedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
-  return (
-    <div class="modal-wrap">
-      <div class="modal">
-        <div class="kicker">{KIND_LABEL[view.def.kind]} · {time}</div>
-        <h3>{view.def.title}</h3>
-        <p>{view.intro}</p>
-        <div class="stack">
-          {view.def.choices.map((c) => {
-            const blocked = c.requires && !c.requires.check(state);
-            return (
-              <div key={c.id}>
-                <button class="btn" disabled={blocked} onClick={() => onChoose(c.id)}>
-                  {c.label}
-                </button>
-                {(blocked || c.hint) && <div class="choice-hint">{blocked ? `🔒 ${c.requires!.label}` : c.hint}</div>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const KIND_LABEL = { aleatorio: 'SUCESO', personal: 'SUCESO PERSONAL', diario: 'HOY', accion: 'DECISION' } as const;
-
-export function OutcomeModal({ state, outcome, onClose }: { state: GameState; outcome: ResolvedOutcome; onClose: () => void }) {
-  const kind = outcome.outcome.result;
-  return (
-    <div class="modal-wrap">
-      <div class="modal">
-        <div class="kicker">{caps(outcome.event.title)}</div>
-        <div class={`result ${kind}`}>{kind === 'bueno' ? '✔ SALIO BIEN' : '✖ SALIO MAL'}</div>
-        <h3>{outcome.outcome.title}</h3>
-        <p>{outcome.message}</p>
-        <Deltas deltas={outcome.deltas} state={state} />
-        <button class="btn" onClick={onClose}>
-          Continuar
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function LogModal({ state, onClose }: { state: GameState; onClose: () => void }) {
   return (
     <div class="modal-wrap" onClick={onClose}>
       <div class="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Diario</h3>
+        <h3><Letters text="Diario" /></h3>
         <ul class="log-list">
           {state.log.map((e, i) => (
             <li key={i} class={e.kind}>
@@ -307,11 +295,17 @@ export function MenuModal({
   onQuit: () => void;
 }) {
   const [confirm, setConfirm] = useState(false);
+  const [sound, setSound] = useState(audio.getPrefs());
+  const toggle = (k: 'sfx' | 'music') => {
+    audio.unlock();
+    audio.setPrefs({ [k]: !sound[k] });
+    setSound(audio.getPrefs());
+  };
   const r = ROLES[role];
   return (
     <div class="modal-wrap" onClick={onClose}>
       <div class="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Cómo se juega</h3>
+        <h3><Letters text="Cómo se juega" /></h3>
         <ul class="help">
           <li>Cada día manda a tu personaje {r.toWorkplace}: son 8 horas reales. Al terminar, sácalo para cobrar.</li>
           <li>Si un día no vas, pierdes la racha 🔥 y el sueldo. Los gastos se cobran igual.</li>
@@ -319,6 +313,14 @@ export function MenuModal({
           <li>En la 📋 Agenda tomas decisiones personales; con ⬆ Mejora inviertes tus ahorros.</li>
           <li>☠ {r.loseConditions}</li>
         </ul>
+        <div class="row" style={{ marginBottom: 12 }}>
+          <button class={`btn secondary ${sound.sfx ? 'on' : ''}`} onClick={() => toggle('sfx')}>
+            {sound.sfx ? '🔊 Sonido' : '🔇 Sonido'}
+          </button>
+          <button class={`btn secondary ${sound.music ? 'on' : ''}`} onClick={() => toggle('music')}>
+            {sound.music ? '🎵 Música' : '🔇 Música'}
+          </button>
+        </div>
         <div class="stack">
           <button class="btn secondary" onClick={onToggleDev}>
             {devEnabled ? '✔ Modo pruebas activado' : 'Activar modo pruebas (acelerar el tiempo)'}
@@ -350,7 +352,7 @@ export function GameOverModal({ state, onNew }: { state: GameState; onNew: () =>
     <div class="modal-wrap">
       <div class="modal gameover">
         <div class="kicker">FIN DE LA PARTIDA</div>
-        <h3>{over.title}</h3>
+        <h3><Letters text={over.title} /></h3>
         <p>{over.text}</p>
         <div class="stats">
           <div class="stat">
@@ -376,9 +378,9 @@ export function GameOverModal({ state, onNew }: { state: GameState; onNew: () =>
 
 export function Toast({ title, text }: { title: string; text: string }) {
   return (
-    <div class="toast">
+    <div class="toast" key={title + text}>
       <small>{title}</small>
-      {text}
+      <Words text={text} delay={80} />
     </div>
   );
 }

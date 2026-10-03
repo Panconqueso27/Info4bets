@@ -19,6 +19,8 @@ const EVENT_WINDOWS: Array<[number, number]> = [
   [5.5, 7.5],
 ];
 const EVENT_WINDOW_CHANCE = 0.45;
+/** El suceso de apertura llega entre 20 s y 2 min después de empezar la jornada. */
+const OPENING_WINDOW: [number, number] = [20_000, 110_000];
 export const MAX_BETS_PER_SHIFT = 3;
 
 export const STAKES: Record<Role, number[]> = {
@@ -158,6 +160,11 @@ export function advance(state: GameState, now: number): boolean {
     }
   }
 
+  if (state.errand && now >= state.errand.endsAt) {
+    finishErrand(state, state.errand.endsAt);
+    changed = true;
+  }
+
   if (state.detainedUntil && now >= state.detainedUntil) {
     state.detainedUntil = 0;
     log(state, now, 'info', 'Libertad', `${state.character.name} sale del centro de detención.`);
@@ -281,12 +288,13 @@ function closeDay(state: GameState, now: number) {
 // Rutina diaria
 // ---------------------------------------------------------------------------
 
-export type StartBlock = 'game-over' | 'already-worked' | 'in-shift' | 'detained';
+export type StartBlock = 'game-over' | 'already-worked' | 'in-shift' | 'detained' | 'on-errand';
 
 export function canStartShift(state: GameState, now: number): StartBlock | null {
   if (state.gameOver) return 'game-over';
   if (state.shift) return 'in-shift';
   if (state.detainedUntil > now) return 'detained';
+  if (state.errand) return 'on-errand';
   if (state.today.worked && state.today.date === dateKey(now)) return 'already-worked';
   return null;
 }
@@ -304,6 +312,12 @@ export function startShift(state: GameState, now: number): void {
   const pool = eventsFor(state.character.role, 'aleatorio', 'personal').filter((e) => eligible(state, e, day));
   const used = new Set<string>();
   const slots = [];
+  // Siempre hay un suceso ligero en los primeros 2 minutos, para enganchar.
+  const opening = eventsFor(state.character.role, 'apertura').filter((e) => eligible(state, e, day));
+  if (opening.length) {
+    const ev = pickWeighted(opening, rand);
+    slots.push({ at: Math.round(now + randRange(rand, OPENING_WINDOW[0], OPENING_WINDOW[1])), eventId: ev.id, fired: false });
+  }
   for (const [from, to] of EVENT_WINDOWS) {
     const available = pool.filter((e) => !used.has(e.id));
     if (!available.length || rand() >= EVENT_WINDOW_CHANCE) continue;
@@ -363,7 +377,7 @@ export function marketSession(state: GameState, now: number): Session | null {
   if (!s || s.cancelled || state.gameOver) return null;
   return {
     date: dateKey(s.startedAt),
-    p: Math.max(0, Math.min(1, (now - s.startedAt) / (s.endsAt - s.startedAt))),
+    p: Math.max(0, Math.min(1, (now - s.startedAt) / (SHIFT_HOURS * HOUR))),
     open: s.marketOpen,
   };
 }
@@ -619,6 +633,7 @@ function endGame(state: GameState, now: number, title: string, text: string) {
   state.shift = null;
   state.pending = [];
   state.market.bets = [];
+  state.errand = null;
   log(state, now, 'malo', title, text);
 }
 
@@ -676,4 +691,85 @@ export function forceEvent(state: GameState, eventId: string, now: number): void
 /** Saca el siguiente aviso pendiente (logros, bolsa...). */
 export function takeNotice(state: GameState) {
   return state.notices.shift();
+}
+
+// ---------------------------------------------------------------------------
+// Minijuegos (lavaplatos / papeleo): adelantan la jornada
+// ---------------------------------------------------------------------------
+
+export const MINUTES_PER_POINT = 10;
+const MAX_POINTS_PER_GAME = 80;
+
+export function canPlayMinigame(state: GameState, now: number): boolean {
+  const s = state.shift;
+  return !!s && !s.cancelled && !state.gameOver && now < s.endsAt;
+}
+
+/** Aplica el resultado de un minijuego: cada acierto descuenta 10 minutos de la jornada. */
+export function applyMinigame(state: GameState, points: number, now: number): number {
+  advance(state, now);
+  if (!canPlayMinigame(state, now)) throw new Error('Solo puedes hacerlo durante tu jornada.');
+  const n = Math.max(0, Math.min(MAX_POINTS_PER_GAME, Math.floor(points)));
+  const shift = state.shift!;
+  const before = shift.endsAt;
+  shift.endsAt = Math.max(now, shift.endsAt - n * MINUTES_PER_POINT * 60_000);
+  const saved = Math.round((before - shift.endsAt) / 60_000);
+  const roleId = state.character.role;
+  const counter = roleId === 'inmigrante' ? 'platosLavados' : 'documentosFirmados';
+  state.flags[counter] = Number(state.flags[counter] ?? 0) + n;
+  const what = roleId === 'inmigrante' ? `Lavaste ${n} plato${n === 1 ? '' : 's'}` : `Despachaste ${n} documento${n === 1 ? '' : 's'}`;
+  log(state, now, n > 0 ? 'bueno' : 'info', roleId === 'inmigrante' ? 'Lavaplatos' : 'Papeleo', `${what}: la jornada avanza ${saved} min.`);
+  return saved;
+}
+
+// ---------------------------------------------------------------------------
+// Reparto de paquetes (trabajo extra del inmigrante)
+// ---------------------------------------------------------------------------
+
+export const ERRAND_PAY = 110;
+export const ERRAND_WEAR: Bars = { salud: -3, estres: 3 };
+export const CAR_COST = 1500;
+
+export function errandHours(state: GameState): number {
+  return state.flags.auto ? 2 : 4;
+}
+
+export type ErrandBlock = 'rol' | 'game-over' | 'in-shift' | 'detained' | 'done-today' | 'on-errand';
+
+export function canStartErrand(state: GameState, now: number): ErrandBlock | null {
+  if (state.character.role !== 'inmigrante') return 'rol';
+  if (state.gameOver) return 'game-over';
+  if (state.errand) return 'on-errand';
+  if (state.shift) return 'in-shift';
+  if (state.detainedUntil > now) return 'detained';
+  if (state.flags.repartoDia === dayNumber(state, now)) return 'done-today';
+  return null;
+}
+
+export function startErrand(state: GameState, now: number) {
+  advance(state, now);
+  const block = canStartErrand(state, now);
+  if (block) throw new Error(block === 'done-today' ? 'Hoy ya hiciste el reparto.' : 'Ahora no puedes salir a repartir.');
+  state.errand = { startedAt: now, endsAt: now + errandHours(state) * HOUR };
+  state.flags.repartoDia = dayNumber(state, now);
+  log(state, now, 'info', 'Reparto', `${state.character.name} sale a repartir paquetes por la ciudad (${errandHours(state)} h).`);
+}
+
+function finishErrand(state: GameState, at: number) {
+  state.errand = null;
+  const deltas = mergeDeltas(applyBars(state, { dinero: ERRAND_PAY }), applyBars(state, ERRAND_WEAR));
+  state.flags.repartos = Number(state.flags.repartos ?? 0) + 1;
+  log(state, at, 'bueno', 'Reparto terminado', `${state.character.name} vuelve con los pies molidos y ${ROLES.inmigrante.formatMoney(ERRAND_PAY)} en el bolsillo.`, deltas);
+  state.notices.push({ kind: 'aviso', title: 'REPARTO', text: `Reparto terminado: +${ROLES.inmigrante.formatMoney(ERRAND_PAY)}` });
+}
+
+export function buyCar(state: GameState, now: number) {
+  advance(state, now);
+  if (state.character.role !== 'inmigrante' || state.flags.auto) throw new Error('Ya tienes auto.');
+  const money = state.bars.dinero ?? 0;
+  if (money < CAR_COST) throw new Error(`Te faltan ${ROLES.inmigrante.formatMoney(CAR_COST - money)}.`);
+  const deltas = applyBars(state, { dinero: -CAR_COST });
+  state.flags.auto = true;
+  log(state, now, 'bueno', 'Auto propio', 'Un sedán usado del 79, con la radio que solo coge una emisora. Ahora el reparto dura 2 horas.', deltas);
+  evaluateAchievements(state, now);
 }

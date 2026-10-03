@@ -4,6 +4,7 @@ import type { EventDef } from './types';
 
 const redada: EventDef = {
   id: 'redada',
+  icon: 'sirena',
   role: 'inmigrante',
   kind: 'aleatorio',
   title: 'Redada de inmigración',
@@ -92,6 +93,7 @@ const redada: EventDef = {
 
 const manifestacion: EventDef = {
   id: 'manifestacion',
+  icon: 'megafono',
   role: 'inmigrante',
   kind: 'aleatorio',
   title: 'Manifestación',
@@ -178,6 +180,7 @@ const manifestacion: EventDef = {
 
 const vecino: EventDef = {
   id: 'vecino',
+  icon: 'puerta',
   role: 'inmigrante',
   kind: 'aleatorio',
   title: 'Un vecino en problemas',
@@ -235,6 +238,7 @@ const vecino: EventDef = {
 
 const emergencia: EventDef = {
   id: 'emergencia',
+  icon: 'cruz',
   role: 'inmigrante',
   kind: 'personal',
   title: 'Emergencia médica',
@@ -294,6 +298,7 @@ const emergencia: EventDef = {
 
 const asesoria: EventDef = {
   id: 'asesoria',
+  icon: 'balanza',
   role: 'inmigrante',
   kind: 'personal',
   title: 'Oferta de asesoría legal',
@@ -340,6 +345,7 @@ const asesoria: EventDef = {
 
 const grupo: EventDef = {
   id: 'grupo',
+  icon: 'manos',
   role: 'inmigrante',
   kind: 'personal',
   title: 'Grupo de apoyo comunitario',
@@ -385,6 +391,7 @@ const grupo: EventDef = {
 
 const remesa: EventDef = {
   id: 'remesa',
+  icon: 'telefono',
   role: 'inmigrante',
   kind: 'diario',
   title: 'Enviar dinero a la familia',
@@ -424,6 +431,7 @@ const remesa: EventDef = {
 
 const reunificacion: EventDef = {
   id: 'reunificacion',
+  icon: 'avion',
   role: 'inmigrante',
   kind: 'diario',
   title: 'Reunificación familiar',
@@ -469,6 +477,7 @@ const reunificacion: EventDef = {
 
 const idioma: EventDef = {
   id: 'idioma',
+  icon: 'libro',
   role: 'inmigrante',
   kind: 'accion',
   title: 'Clase de inglés',

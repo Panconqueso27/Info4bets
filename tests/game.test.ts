@@ -83,16 +83,16 @@ describe('jornada de 8 horas', () => {
     for (let seed = 0; seed < 50; seed++) {
       s = newGame(char('inmigrante'), at(1), seed);
       startShift(s, at(1, 8));
-      if (s.shift!.slots.length) break;
+      if (s.shift!.slots.some((x) => x.eventId === 'redada')) break;
     }
-    const slot = s.shift!.slots[0];
+    const slot = s.shift!.slots.find((x) => x.eventId === 'redada')!;
     expect(slot.at).toBeGreaterThan(at(1, 8));
     expect(slot.at).toBeLessThan(at(1, 16));
     advance(s, slot.at - 1);
-    expect(s.pending).toHaveLength(0);
+    expect(s.pending.some((p) => p.eventId === 'redada')).toBe(false);
+    s.pending = [];
     advance(s, slot.at);
-    expect(s.pending).toHaveLength(1);
-    expect(s.pending[0].eventId).toBe('redada');
+    expect(s.pending.map((p) => p.eventId)).toContain('redada');
   });
 });
 
