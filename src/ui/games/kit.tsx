@@ -101,6 +101,7 @@ export function MiniFrame({
   onFinish,
   onClose,
   children,
+  pays,
 }: {
   mini: ReturnType<typeof useMini>;
   title: string;
@@ -109,6 +110,8 @@ export function MiniFrame({
   intro: ComponentChildren;
   unit: string;
   children: ComponentChildren;
+  /** Si el minijuego paga dinero en vez de acortar la jornada. */
+  pays?: { per: number; fmt: (n: number) => string };
 } & MiniProps) {
   const best = records();
   return (
@@ -117,7 +120,7 @@ export function MiniFrame({
         <span class="mg-title">{title}</span>
         <span class={`mg-timer ${mini.left <= 10 ? 'hot' : ''}`}>⏱ {mini.left}s</span>
         <span class="mg-score">
-          ✔ {mini.score} · −{mini.score * MINUTES_PER_POINT} min
+          ✔ {mini.score} · {pays ? `+${pays.fmt(mini.score * pays.per)}` : `−${mini.score * MINUTES_PER_POINT} min`}
         </span>
       </div>
       {mini.combo >= 3 && mini.playing && (
@@ -134,7 +137,15 @@ export function MiniFrame({
           <p>
             {intro}
             <br />
-            Cada acierto descuenta <b>{MINUTES_PER_POINT} minutos</b> de tu jornada.
+            {pays ? (
+              <>
+                Cada acierto te deja <b>{pays.fmt(pays.per)}</b> en la caja.
+              </>
+            ) : (
+              <>
+                Cada acierto descuenta <b>{MINUTES_PER_POINT} minutos</b> de tu jornada.
+              </>
+            )}
           </p>
           {best[cls] ? <div class="mg-best">🏆 Récord: {best[cls]}</div> : null}
           <button class="btn big-cta" onClick={mini.start}>
@@ -153,10 +164,10 @@ export function MiniFrame({
           {mini.record && <div class="mg-record">¡NUEVO RÉCORD!</div>}
           <div class="mg-big">{mini.score}</div>
           <p>
-            {unit} ({mini.misses} fallos) · tu jornada se acorta <b>{mini.score * MINUTES_PER_POINT} minutos</b>
+            {unit} ({mini.misses} fallos) · {pays ? <>ganas <b>{pays.fmt(mini.score * pays.per)}</b></> : <>tu jornada se acorta <b>{mini.score * MINUTES_PER_POINT} minutos</b></>}
           </p>
           <button class="btn big-cta" onClick={() => onFinish(mini.score)}>
-            Volver al trabajo
+            {pays ? 'Cerrar el puesto' : 'Volver al trabajo'}
           </button>
         </div>
       )}

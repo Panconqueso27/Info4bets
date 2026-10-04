@@ -235,6 +235,7 @@ export const TUTORIAL: TutStep[] = [
   { id: 'tarjeta', at: 'top', text: 'Los sucesos llegan como tarjetas. Deslízala a la derecha, a la izquierda o hacia arriba para decidir.' },
   { id: 'herramientas', at: 'bottom', text: 'Abajo tienes la Bolsa, tu Agenda de decisiones, las Mejoras, los Logros y el Diario. En ☰ están el Armario y tu gente.' },
   { id: 'v06', at: 'bottom', text: 'Novedad: durante la jornada, el botón de Minijuegos abre 5 juegos distintos con récords. En ☰ puedes activar o quitar el sonido ambiente.' },
+  { id: 'v07', at: 'bottom', text: 'Novedad: la ciudad es el doble de grande. Cruza el puente a Brooklyn con el minimapa 🗺. En 🎯 Extras tienes misiones y formas de ganar dinero; en 🏢 Propiedad, tus solares, negocios y las cuentas.' },
   { id: 'v05', at: 'bottom', text: 'Novedad: desliza la fila de botones. 🏗 Solares y obras (también tocando el mapa), 📻 Radio con trabajos extra, 🥤 tu Negocio o 📸 el Turismo de la ciudad.' },
 ];
 

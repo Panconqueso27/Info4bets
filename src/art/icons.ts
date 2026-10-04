@@ -114,6 +114,66 @@ const ICONS: Record<string, string[]> = {
     '.....rr.....', '....rrrr....', '...rrrrrr...', '..rrrrrrrr..', '.rrrrrrrrrr.', '..wwwwwwww..',
     '..wbbwwbbw..', '..wbbwwbbw..', '..wwwnnwww..', '..wwwnnwww..', '..wwwnnwww..', '.gggggggggg.',
   ],
+  moneda: [
+    '....yyyy....', '..yyYYYYyy..', '.yYYyyyyYYy.', '.yYyyYYyyYy.', 'yYyyYyyYyyYy', 'yYyyyYYyyyYy',
+    'yYyyyyyYyyYy', 'yYyyYyyYyyYy', '.yYyyYYyyYy.', '.yYYyyyyYYy.', '..yyYYYYyy..', '....yyyy....',
+  ],
+  cono: [
+    '.....YY.....', '.....YY.....', '....YYYY....', '....wwww....', '...YYYYYY...', '...YYYYYY...',
+    '..wwwwwwww..', '..YYYYYYYY..', '.YYYYYYYYYY.', '.YYYYYYYYYY.', 'kkkkkkkkkkkk', 'kkkkkkkkkkkk',
+  ],
+  cartel: [
+    '............', 'wwwwwwwwwwww', 'wrrwwrrwwrrw', 'wwwwwwwwwwww', 'wrwrwrrwrwrw', 'wwwwwwwwwwww',
+    'aaaaaaaaaaaa', '..n......n..', '..n......n..', '..n......n..', '..n......n..', '.NNN....NNN.',
+  ],
+  caballo: [
+    '........nn..', '.......nnnn.', '......nnnkn.', '.....nnnnnnn', '.N..nnnnn...', 'NNnnnnnnn...',
+    '.nnnnnnnn...', '.nnnnnnnn...', '.n.n..n.n...', '.n.n..n.n...', '.k.k..k.k...', '............',
+  ],
+  boleto: [
+    '............', 'yyyyyyyyyyyy', 'yYYYYYYYYYYy', 'yYkkYkkYkkYy', 'yYkkYkkYkkYy', 'yYYYYYYYYYYy',
+    'y.yyyyyyyy.y', 'yYYYYYYYYYYy', 'yYrrrrrrrrYy', 'yYYYYYYYYYYy', 'yyyyyyyyyyyy', '............',
+  ],
+  taxi: [
+    '............', '....kkkk....', '...yyyyyy...', '..yccyyccy..', '..yccyyccy..', '.yyyyyyyyyy.',
+    '.ykkkkkkkky.', '.yyyyyyyyyy.', '.wyyyyyyyyw.', '.yyyyyyyyyy.', '.kk......kk.', '.kk......kk.',
+  ],
+  perrito: [
+    '............', '............', '..ssssssss..', '.ssssssssss.', 'srrrrrrrrrrs', 'syryryryryrs',
+    'srrrrrrrrrrs', '.ssssssssss.', '..ssssssss..', '............', '............', '............',
+  ],
+  grafica: [
+    '............', '..........g.', '.........gg.', '..r.....gg..', '.rrr...gg...', 'rr.rr.gg....',
+    '....rgg.....', '.....g......', 'a...........', 'a..yy.cc.gg.', 'a..yy.cc.gg.', 'aaaaaaaaaaaa',
+  ],
+  agenda: [
+    '....aaaa....', '.nnnaAAannn.', '.nwwwwwwwwn.', '.nwkkkkkkwn.', '.nwwwwwwwwn.', '.nwkkkkkwwn.',
+    '.nwwwwwwwwn.', '.nwkkkkkkwn.', '.nwwwwwwwwn.', '.nwkkkwwwwn.', '.nwwwwwwwwn.', '.nnnnnnnnnn.',
+  ],
+  flecha: [
+    '.....gg.....', '....gggg....', '...gggggg...', '..gggggggg..', '.gggggggggg.', '....gggg....',
+    '....gggg....', '....gggg....', '....gggg....', '....gggg....', '....GGGG....', '............',
+  ],
+  diana: [
+    '....rrrr....', '..rrwwwwrr..', '.rwwrrrrwwr.', '.rwrrwwrrwr.', 'rwrrwwwwrrwr', 'rwrwwrrwwrwr',
+    'rwrwwrrwwrwr', 'rwrrwwwwrrwr', '.rwrrwwrrwr.', '.rwwrrrrwwr.', '..rrwwwwrr..', '....rrrr....',
+  ],
+  edificio: [
+    '......aa....', '.....aAAa...', '....aAAAAa..', '.BBBBBBaAa..', '.BcBcBBAAa..', '.BBBBBBaAa..',
+    '.BcBcBBAAa..', '.BBBBBBaAa..', '.BcBcBBAAa..', '.BBBBBBaAa..', '.BBnnBBAAa..', 'kkkkkkkkkkkk',
+  ],
+  trofeo: [
+    '.yyyyyyyyyy.', 'yyYyyyyyyYyy', 'y.yyyyyyyy.y', 'y.yyyyyyyy.y', '.yyyyyyyyyy.', '..yyyyyyyy..',
+    '...yyyyyy...', '.....YY.....', '.....YY.....', '...YYYYYY...', '..nnnnnnnn..', '..nnnnnnnn..',
+  ],
+  menu: [
+    '............', '............', '.wwwwwwwwww.', '.wwwwwwwwww.', '............', '.wwwwwwwwww.',
+    '.wwwwwwwwww.', '............', '.wwwwwwwwww.', '.wwwwwwwwww.', '............', '............',
+  ],
+  mapa: [
+    '............', '.yyy.ggg.yy.', '.yyyggggyyy.', '.ybyggggyby.', '.ybbggggybb.', '.yybgggbyyb.',
+    '.yyybgbbyyy.', '.yrybbbyyyy.', '.yrrybyyyyy.', '.yyyybyyyyy.', '.yyy.yyy.yy.', '............',
+  ],
   estrella: [
     '.....yy.....', '.....yy.....', '....yyyy....', 'yyyyyyyyyyyy', '.yyyyyyyyyy.', '..yyyyyyyy..',
     '...yyyyyy...', '..yyyyyyyy..', '..yyy..yyy..', '.yyy....yyy.', '.yy......yy.', '............',

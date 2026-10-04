@@ -1,6 +1,12 @@
 import Phaser from 'phaser';
 import {
   aveX,
+  AVES,
+  BRIDGE_STREET,
+  MANHATTAN_COLS,
+  RIVER_X,
+  RIVER_W,
+  streetSpan,
   COLS,
   generateCityMap,
   BLOCK_H,
@@ -29,11 +35,14 @@ import { lightAt, type Light } from '../art/daynight';
 import { CAR_COLORS, drawCarFront, drawCarSide, drawMini, MINI_H, MINI_W } from '../art/sprites';
 import { mulberry32 } from '../core/rng';
 import { LOTS } from '../core/lots';
+import { districtOf } from '../core/city';
 import type { Look } from '../core/types';
 import { randomLook } from '../art/character';
 import { bridge, type SceneModel, type Spot } from './bridge';
 import { drawPet, drawVending } from '../art/sprites';
 import { thunder } from '../platform/audio';
+import { drawIcon } from '../art/icons';
+import { MEGA } from '../core/lots';
 
 /** Cambia la profundidad solo si varía: cada cambio obliga a reordenar la capa. */
 function depthOf(o: Phaser.GameObjects.Components.Depth & { depth: number }, d: number) {
@@ -61,6 +70,11 @@ interface Car {
   lane: string;
   speed: number;
   len: number;
+  /** Tramo por el que circula (las calles no cruzan el río salvo la del puente). */
+  min: number;
+  max: number;
+  /** Cruces de su recorrido (para los semáforos). */
+  cross: number[];
 }
 
 /** Ciclo de semáforos: avenidas y calles se alternan. */
@@ -70,6 +84,10 @@ interface Walker {
   sprite: Phaser.GameObjects.Sprite;
   c: number;
   r: number;
+  /** Solo pasea por esta zona (gente de Times Square de noche). */
+  zone?: [number, number, number, number];
+  /** Solo sale de noche. */
+  night?: boolean;
 }
 
 export class CityScene extends Phaser.Scene {
@@ -90,8 +108,18 @@ export class CityScene extends Phaser.Scene {
   private mapSig = '\u0000';
   private mapImgs: Phaser.GameObjects.Image[] = [];
   /** Lienzos de cada capa del mapa, para hornear la nieve en la base. */
-  private mapSets: { key: string; base: HTMLCanvasElement; snow: HTMLCanvasElement; img: Phaser.GameObjects.Image }[] = [];
-  private snowBaked = false;
+  private mapSets: { key: string; base: HTMLCanvasElement; snow: HTMLCanvasElement; wet?: HTMLCanvasElement; img: Phaser.GameObjects.Image }[] = [];
+  private bakedMode = '';
+  /** Trozos del mapa (Manhattan y Brooklyn): solo se dibujan los que ve la cámara. */
+  private chunks: { x0: number; x1: number; imgs: Phaser.GameObjects.Image[]; row: number }[] = [];
+  private cullX = -1;
+  private umbrella!: Phaser.GameObjects.Image;
+  private boats: { img: Phaser.GameObjects.Image; dir: number; speed: number }[] = [];
+  private steams: Phaser.GameObjects.Image[] = [];
+  private markerIcons: Phaser.GameObjects.Image[] = [];
+  private markerKey = '';
+  private cheerSeen = 0;
+  private viewAt = 0;
   private pet: Phaser.GameObjects.Sprite | null = null;
   private petKind = '';
   private petTrail: { x: number; y: number }[] = [];
@@ -141,6 +169,7 @@ export class CityScene extends Phaser.Scene {
 
     this.spawnTraffic();
     this.spawnPedestrians();
+    this.spawnLife();
 
     this.ring = this.add.ellipse(0, 0, 12, 5).setDepth(0).setStrokeStyle(1, 0xffe066).setFillStyle(0xffe066, 0.18).setVisible(false);
     this.world.add(this.ring);
@@ -173,6 +202,10 @@ export class CityScene extends Phaser.Scene {
     cam.centerOn(MAP_W / 2, MAP_H / 2);
     this.scale.on('resize', () => this.applyBounds());
     this.setupInput();
+    bridge.onFocus((x, y) => {
+      this.userPannedAt = this.time.now;
+      this.cameras.main.pan(x, y, 450, 'Sine.easeInOut');
+    });
 
     if (import.meta.env.DEV) (window as any).__city = this;
     const unsub = bridge.subscribe((m) => this.onModel(m));
@@ -275,6 +308,56 @@ export class CityScene extends Phaser.Scene {
       t.add('1', 0, 6, 0, 6, 5);
     }
     tex('vending', 4, 7, (ctx) => drawVending(ctx, 0, 0));
+    tex('umbrella', 9, 6, (ctx) => {
+      const c = ['#e8414f', '#f4efe2'];
+      for (let x = 0; x < 9; x++) {
+        ctx.fillStyle = c[Math.floor(x / 2) % 2];
+        const h = x === 0 || x === 8 ? 1 : x === 1 || x === 7 ? 2 : 3;
+        ctx.fillRect(x, 3 - h, 1, h);
+      }
+      ctx.fillStyle = '#14101f';
+      ctx.fillRect(4, 3, 1, 3);
+    });
+    tex('pigeon', 4, 3, (ctx) => {
+      ctx.fillStyle = '#8a8e98';
+      ctx.fillRect(0, 1, 3, 2);
+      ctx.fillStyle = '#5a6070';
+      ctx.fillRect(2, 0, 2, 1);
+      ctx.fillStyle = '#e2a23b';
+      ctx.fillRect(3, 1, 1, 1);
+    });
+    tex('steam', 8, 8, (ctx) => {
+      const g = ctx.createRadialGradient(4, 4, 0, 4, 4, 4);
+      g.addColorStop(0, 'rgba(235,235,245,0.9)');
+      g.addColorStop(1, 'rgba(235,235,245,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 8, 8);
+    });
+    tex('tugboat', 8, 14, (ctx) => {
+      ctx.fillStyle = 'rgba(220,235,255,0.5)';
+      ctx.fillRect(2, 13, 4, 1);
+      ctx.fillStyle = '#c0392b';
+      ctx.fillRect(1, 2, 6, 11);
+      ctx.fillRect(2, 1, 4, 1);
+      ctx.fillStyle = '#f4efe2';
+      ctx.fillRect(2, 5, 4, 4);
+      ctx.fillStyle = '#14101f';
+      ctx.fillRect(3, 3, 2, 2);
+    });
+    // iconos de los marcadores (pixel art de 12×12 a escala 1)
+    for (const id of ['moneda', 'cono', 'cartel', 'caballo', 'boleto', 'estrella', 'casa']) {
+      const c = document.createElement('canvas');
+      drawIcon(c, id, 1);
+      const d = document.createElement('canvas');
+      d.width = 14;
+      d.height = 14;
+      const dc = d.getContext('2d')!;
+      dc.fillStyle = 'rgba(20,16,31,0.85)';
+      dc.fillRect(1, 0, 12, 14);
+      dc.fillRect(0, 1, 14, 12);
+      dc.drawImage(c, 1, 1);
+      this.textures.addCanvas(`mk-${id}`, d);
+    }
   }
 
   /** (Re)dibuja el mapa con los solares y obras de la partida. */
@@ -284,51 +367,68 @@ export class CityScene extends Phaser.Scene {
     for (const img of this.mapImgs) img.destroy();
     this.mapImgs = [];
     this.mapSets = [];
-    this.snowBaked = false;
+    this.bakedMode = '-';
     this.bases = [];
     this.lightImgs = [];
     this.neons = [];
     const art = generateCityMap(1985, m.city);
     this.tops = art.tops;
-    const addSet = (key: string, set: { base: HTMLCanvasElement; lights: HTMLCanvasElement; neon: HTMLCanvasElement; snow: HTMLCanvasElement }, y: number, depth: number) => {
+    this.chunks = [];
+    const addSet = (key: string, set: { base: HTMLCanvasElement; lights: HTMLCanvasElement; neon: HTMLCanvasElement; snow: HTMLCanvasElement; wet?: HTMLCanvasElement }, x: number, y: number, depth: number) => {
       for (const kind of ['base', 'lights', 'neon'] as const) {
         if (this.textures.exists(`${key}-${kind}`)) this.textures.remove(`${key}-${kind}`);
         this.textures.addCanvas(`${key}-${kind}`, set[kind]);
       }
-      if (this.textures.exists(`${key}-nieve`)) this.textures.remove(`${key}-nieve`);
-      const base = this.add.image(0, y, `${key}-base`).setOrigin(0).setDepth(depth);
-      this.mapSets.push({ key, base: set.base, snow: set.snow, img: base });
-      const lights = this.add.image(0, y, `${key}-lights`).setOrigin(0).setDepth(depth + 0.02).setBlendMode(Phaser.BlendModes.ADD);
-      const neon = this.add.image(0, y, `${key}-neon`).setOrigin(0).setDepth(depth + 0.03).setBlendMode(Phaser.BlendModes.ADD);
+      for (const v of ['s', 'w', 'sw']) if (this.textures.exists(`${key}-v${v}`)) this.textures.remove(`${key}-v${v}`);
+      const base = this.add.image(x, y, `${key}-base`).setOrigin(0).setDepth(depth);
+      this.mapSets.push({ key, base: set.base, snow: set.snow, wet: set.wet, img: base });
+      const lights = this.add.image(x, y, `${key}-lights`).setOrigin(0).setDepth(depth + 0.02).setBlendMode(Phaser.BlendModes.ADD);
+      const neon = this.add.image(x, y, `${key}-neon`).setOrigin(0).setDepth(depth + 0.03).setBlendMode(Phaser.BlendModes.ADD);
+      const imgs = [base, lights, neon];
       this.bases.push(base);
       this.lightImgs.push(lights);
       this.neons.push(neon);
-      this.mapImgs.push(base, lights, neon);
-      this.world.add([base, lights, neon]);
+      this.mapImgs.push(...imgs);
+      this.world.add(imgs);
+      this.chunks.push({ x0: x, x1: x + set.base.width, imgs, row: depth });
     };
-    addSet('map-ground', art.ground, 0, -100);
-    art.rows.forEach((r, i) => addSet(`map-row${i}`, r, r.y, r.depth));
+    art.grounds.forEach((g, i) => addSet(`map-ground${i}`, g, g.x, 0, -100));
+    art.rows.forEach((r, i) => addSet(`map-row${i}`, r, r.x, r.y, r.depth));
+    this.cullX = -1;
     if (this.labels.length) this.repositionLabels();
     this.lastLightAt = 0;
   }
 
-  /** Días de nieve: la nieve se pinta dentro de la textura base (una capa menos que dibujar). */
-  private bakeSnow(on: boolean) {
-    if (on === this.snowBaked) return;
-    this.snowBaked = on;
+  /**
+   * Nieve y charcos se pintan dentro de la textura base (una capa menos que dibujar):
+   * en móviles modestos lo caro es rellenar píxeles, no cambiar de textura.
+   */
+  private bakeWeather(snow: boolean, wet: boolean) {
+    const mode = `${snow ? 's' : ''}${wet ? 'w' : ''}`;
+    if (mode === this.bakedMode) return;
+    this.bakedMode = mode;
     for (const m of this.mapSets) {
-      const key = `${m.key}-nieve`;
-      if (on && !this.textures.exists(key)) {
+      const useWet = wet && !!m.wet;
+      const variant = `${snow ? 's' : ''}${useWet ? 'w' : ''}`;
+      if (!variant) {
+        m.img.setTexture(`${m.key}-base`);
+        continue;
+      }
+      const key = `${m.key}-v${variant}`;
+      if (!this.textures.exists(key)) {
         const c = document.createElement('canvas');
         c.width = m.base.width;
         c.height = m.base.height;
         const ctx = c.getContext('2d')!;
         ctx.drawImage(m.base, 0, 0);
-        ctx.globalAlpha = 0.85;
-        ctx.drawImage(m.snow, 0, 0);
+        if (useWet) ctx.drawImage(m.wet!, 0, 0);
+        if (snow) {
+          ctx.globalAlpha = 0.85;
+          ctx.drawImage(m.snow, 0, 0);
+        }
         this.textures.addCanvas(key, c);
       }
-      m.img.setTexture(on ? key : `${m.key}-base`);
+      m.img.setTexture(key);
     }
   }
 
@@ -363,6 +463,96 @@ export class CityScene extends Phaser.Scene {
         this.machines.push(img);
         this.world.add(img);
       }
+    }
+  }
+
+  /** Vida de la ciudad: palomas en el parque, vapor de las alcantarillas, remolcadores en el río. */
+  private spawnLife() {
+    const rand = mulberry32(77);
+    this.umbrella = this.add.image(0, 0, 'umbrella').setOrigin(0.5, 1).setVisible(false);
+    this.world.add(this.umbrella);
+    // palomas
+    const park = placeRect(PLACE_BY_ID.parque);
+    for (let i = 0; i < (this.low ? 4 : 10); i++) {
+      const px = park.x + 20 + rand() * (park.w - 40);
+      const py = park.y + 20 + rand() * (park.h - 40);
+      const pg = this.add.image(px, py, 'pigeon').setOrigin(0.5, 1).setDepth(py);
+      this.world.add(pg);
+      const hop = () => {
+        if (!pg.active) return;
+        const nx = Phaser.Math.Clamp(pg.x + (Math.random() - 0.5) * 16, park.x + 8, park.x + park.w - 8);
+        const ny = Phaser.Math.Clamp(pg.y + (Math.random() - 0.5) * 10, park.y + 8, park.y + park.h - 8);
+        pg.setFlipX(nx < pg.x);
+        this.tweens.add({ targets: pg, x: nx, y: ny, duration: 300, ease: 'Quad.easeOut', onComplete: () => { pg.setDepth(pg.y); this.time.delayedCall(800 + Math.random() * 3000, hop); } });
+      };
+      this.time.delayedCall(rand() * 2000, hop);
+    }
+    // vapor de alcantarilla
+    for (let i = 0; i < (this.low ? 4 : 9); i++) {
+      const sx = aveX(Math.floor(rand() * AVES)) - 4 + rand() * 8;
+      const sy = stY(Math.floor(rand() * (ROWS + 1)));
+      const st = this.add.image(sx, sy, 'steam').setOrigin(0.5, 1).setAlpha(0).setDepth(sy + 1);
+      this.world.add(st);
+      this.steams.push(st);
+      this.tweens.add({ targets: st, y: sy - 10, alpha: { from: 0.55, to: 0 }, scale: { from: 0.6, to: 1.4 }, duration: 2200, delay: rand() * 2000, repeat: -1 });
+    }
+    // remolcadores en el East River
+    for (let i = 0; i < 2; i++) {
+      const dir = i ? -1 : 1;
+      const bx = RIVER_X + (i ? RIVER_W - 18 : 18);
+      const img = this.add.image(bx, rand() * MAP_H, 'tugboat').setOrigin(0.5, 0.5).setDepth(-60).setFlipY(dir < 0);
+      this.world.add(img);
+      this.boats.push({ img, dir, speed: 5 + rand() * 3 });
+    }
+  }
+
+  /** Iconos flotantes sobre tus negocios, las obras y las actividades. */
+  private syncMarkers(m: SceneModel) {
+    const key = JSON.stringify(m.markers) + this.mapSig.length;
+    if (key === this.markerKey) return;
+    this.markerKey = key;
+    for (const ic of this.markerIcons) ic.destroy();
+    this.markerIcons = [];
+    for (const mk of m.markers) {
+      let x = 0;
+      let top = 0;
+      if (mk.kind === 'lot') {
+        const lot = LOTS.find((l) => l.id === mk.id);
+        if (!lot) continue;
+        const r = lotRect(lot);
+        x = r.x + r.w / 2;
+        top = Math.min(r.y, this.tops[`${lot.c},${lot.r}`] ?? r.y);
+      } else if (mk.kind === 'place') {
+        const p = PLACE_BY_ID[mk.id as PlaceId];
+        if (!p) continue;
+        const b = placeBounds(p, this.tops);
+        x = b.x + b.w / 2;
+        top = b.y - 8;
+      } else {
+        const mg = MEGA.find((q) => q.id === mk.id);
+        if (!mg || 'place' in mg.site) continue;
+        const b = placeRect({ id: 'plaza', label: '', c: mg.site.c, r: mg.site.r, cw: mg.site.cw, rh: mg.site.rh });
+        x = b.x + b.w / 2;
+        top = b.y;
+      }
+      const tex = `mk-${mk.icon}`;
+      if (!this.textures.exists(tex)) continue;
+      const ic = this.add.image(x, top - 6, tex).setOrigin(0.5, 1).setDepth(100002);
+      this.world.add(ic);
+      this.tweens.add({ targets: ic, y: top - 10, duration: 700 + Math.random() * 300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.markerIcons.push(ic);
+    }
+  }
+
+  /** Solo se dibujan los trozos del mapa que caen dentro de la cámara. */
+  private cull() {
+    const v = this.cameras.main.worldView;
+    const key = Math.round(v.x / 8) * 10000 + Math.round(v.width / 8);
+    if (key === this.cullX) return;
+    this.cullX = key;
+    for (const ch of this.chunks) {
+      const vis = ch.x1 > v.x - 24 && ch.x0 < v.right + 24;
+      for (const img of ch.imgs) img.setVisible(vis);
     }
   }
 
@@ -407,28 +597,40 @@ export class CityScene extends Phaser.Scene {
 
   private spawnTraffic() {
     const rand = mulberry32(42);
-    for (let k = 0; k < (this.low ? 18 : 30); k++) {
-      const police = rand() < 0.08;
-      const ci = Math.floor(rand() * CAR_COLORS.length);
+    const n = this.low ? 28 : 52;
+    const aveCross = Array.from({ length: AVES }, (_, i) => aveX(i));
+    const stCross = Array.from({ length: ROWS + 1 }, (_, j) => stY(j));
+    for (let k = 0; k < n; k++) {
+      const police = rand() < 0.07;
+      // Nueva York: la mitad de los coches son taxis amarillos
+      const ci = rand() < 0.5 ? 0 : Math.floor(rand() * CAR_COLORS.length);
       const axis: 'v' | 'h' = k % 2 === 0 ? 'v' : 'h';
       const dir: 1 | -1 = rand() < 0.5 ? 1 : -1;
       const speed = 16 + rand() * 14;
       let img: Phaser.GameObjects.Image;
       let lane: string;
+      let min = -12;
+      let max = MAP_H + 12;
+      let cross = stCross;
       if (axis === 'v') {
         // Se conduce por la derecha: hacia el sur por el carril oeste, hacia el norte por el este.
-        const i = Math.floor(rand() * (COLS + 1));
+        const i = Math.floor(rand() * AVES);
         img = this.add.image(aveX(i) + (dir > 0 ? -4 : 4), rand() * MAP_H, `car-front-${police ? 'p' : ci}`).setOrigin(0.5, 1);
         lane = `v${i}${dir}`;
       } else {
         const j = Math.floor(rand() * (ROWS + 1));
-        img = this.add.image(rand() * MAP_W, stY(j) + (dir > 0 ? 5 : -1), `car-side-${police ? 'p' : ci}`).setOrigin(0.5, 1);
+        const side = rand() < 0.5 ? 'manhattan' : 'brooklyn';
+        const [x0, x1] = streetSpan(j, side);
+        min = x0 - 12;
+        max = x1 + 12;
+        cross = aveCross.filter((x) => x > x0 && x < x1);
+        img = this.add.image(x0 + rand() * (x1 - x0), stY(j) + (dir > 0 ? 5 : -1), `car-side-${police ? 'p' : ci}`).setOrigin(0.5, 1);
         img.setFlipX(dir < 0);
-        lane = `h${j}${dir}`;
+        lane = `h${j}${dir}${j === BRIDGE_STREET ? 'p' : side[0]}`;
       }
       const light = this.add.image(img.x, img.y, 'headlight').setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDepth(99990);
       this.world.add([img, light]);
-      this.cars.push({ img, light, axis, dir, lane, speed, len: axis === 'v' ? 8 : 10 });
+      this.cars.push({ img, light, axis, dir, lane, speed, len: axis === 'v' ? 8 : 10, min, max, cross });
     }
     // separar coches que hayan nacido encima de otros
     for (const c of this.cars)
@@ -445,20 +647,12 @@ export class CityScene extends Phaser.Scene {
     else c.img.x = v;
   }
 
-  /** Coordenadas de los cruces a lo largo del eje de un coche. */
-  private crossings(c: Car): number[] {
-    return c.axis === 'v'
-      ? Array.from({ length: ROWS + 1 }, (_, j) => stY(j))
-      : Array.from({ length: COLS + 1 }, (_, i) => aveX(i));
-  }
-
   /** Mueve el tráfico: respeta semáforos y la distancia con el coche de delante. */
   private moveTraffic(dt: number, time: number) {
     const phase = Math.floor(time / SIGNAL_MS) % 2; // 0: avenidas en verde, 1: calles en verde
     const amber = time % SIGNAL_MS > SIGNAL_MS - 1200;
     if (phase !== this.signalPhase) this.drawSignals(phase);
     this.signalPhase = phase;
-    const limit = (c: Car) => (c.axis === 'v' ? MAP_H : MAP_W);
     const lanes = new Map<string, Car[]>();
     for (const c of this.cars) {
       const l = lanes.get(c.lane);
@@ -473,7 +667,7 @@ export class CityScene extends Phaser.Scene {
       const red = (c.axis === 'v' ? phase !== 0 : phase !== 1) || amber;
       if (red) {
         const half = (c.axis === 'v' ? ST_H : AVE_W) / 2 + 2;
-        for (const x of this.crossings(c)) {
+        for (const x of c.cross) {
           const stopLine = x - c.dir * half;
           const dist = (stopLine - front) * c.dir;
           if (dist >= -0.5 && dist < 10) {
@@ -489,8 +683,8 @@ export class CityScene extends Phaser.Scene {
         if (gap > 0 && gap < c.len + 5) next = pos + c.dir * Math.max(0, gap - c.len - 5) * 0.5;
       }
       this.setAlong(c, next);
-      if (next > limit(c) + 12) this.setAlong(c, -12);
-      if (next < -12) this.setAlong(c, limit(c) + 12);
+      if (next > c.max) this.setAlong(c, c.min);
+      if (next < c.min) this.setAlong(c, c.max);
       depthOf(c.img, c.img.y);
       c.light.setPosition(c.img.x + (c.axis === 'h' ? c.dir * 9 : 0), c.img.y + (c.axis === 'v' ? (c.dir > 0 ? 6 : -14) : -3));
     }
@@ -500,11 +694,11 @@ export class CityScene extends Phaser.Scene {
   private drawSignals(phase: number) {
     const g = this.signals;
     g.clear();
-    for (let i = 0; i <= COLS; i++)
+    for (let i = 0; i < AVES; i++)
       for (let j = 1; j <= ROWS; j++) {
         const x = aveX(i) + AVE_W / 2 + 1;
         const y = blockY(j - 1) + BLOCK_H - 2;
-        if (x > MAP_W - 2) continue;
+        if (x > MAP_W - 2 || (x > RIVER_X - 2 && x < RIVER_X + RIVER_W + 2)) continue;
         g.fillStyle(0x1a1a1f).fillRect(x, y - 7, 1, 7);
         g.fillStyle(0x1a1a1f).fillRect(x - 1, y - 9, 3, 3);
         g.fillStyle(phase === 0 ? 0x3dff7a : 0xff3b3b).fillRect(x, y - 8, 1, 1);
@@ -513,26 +707,38 @@ export class CityScene extends Phaser.Scene {
 
   private spawnPedestrians() {
     const rand = mulberry32(1985);
-    for (let i = 0; i < (this.low ? 9 : 18); i++) {
+    const add = (c: number, r: number, extra: Partial<Walker> = {}) => {
       const look = randomLook(rand() < 0.5 ? 'inmigrante' : 'alcalde', rand);
       const key = this.ensureMini(look);
-      const c = Math.floor(rand() * COLS);
-      const r = Math.floor(rand() * ROWS);
       const sprite = this.add.sprite(walkX(c), walkY(r), key, '0').setOrigin(0.5, 1);
       this.world.add(sprite);
-      const w: Walker = { sprite, c, r };
+      const w: Walker = { sprite, c, r, ...extra };
       this.walkers.push(w);
       this.time.delayedCall(rand() * 3000, () => this.wander(w));
-    }
+    };
+    for (let i = 0; i < (this.low ? 14 : 32); i++) add(Math.floor(rand() * COLS), Math.floor(rand() * ROWS));
+    // Times Square se llena de noche
+    if (!this.low) for (let i = 0; i < 8; i++) add(1 + Math.floor(rand() * 3), 2 + Math.floor(rand() * 3), { zone: [1, 3, 2, 4], night: true });
+    // Cuanto más nivel tiene un barrio, más gente por sus calles
+    for (const [d, lvl] of Object.entries(bridge.get().city?.districts ?? {}))
+      for (let i = 0; i < (lvl ?? 0) * 2 && !this.low; i++) {
+        const blocks: [number, number][] = [];
+        for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (districtOf(c, r) === d) blocks.push([c, r]);
+        const [c, r] = blocks[Math.floor(rand() * blocks.length)];
+        add(c, r);
+      }
   }
 
   private wander(w: Walker) {
     if (!w.sprite.active) return;
+    const [c0, c1, r0, r1] = w.zone ?? [0, COLS - 1, 0, ROWS - 1];
+    // El río solo se cruza por la acera del puente.
+    const crossOk = (c: number) => (c < MANHATTAN_COLS) === (w.c < MANHATTAN_COLS) || w.r === BRIDGE_STREET - 1;
     const opts: [number, number][] = [];
-    if (w.c > 0) opts.push([w.c - 1, w.r]);
-    if (w.c < COLS - 1) opts.push([w.c + 1, w.r]);
-    if (w.r > 0) opts.push([w.c, w.r - 1]);
-    if (w.r < ROWS - 1) opts.push([w.c, w.r + 1]);
+    if (w.c > c0 && crossOk(w.c - 1)) opts.push([w.c - 1, w.r]);
+    if (w.c < c1 && crossOk(w.c + 1)) opts.push([w.c + 1, w.r]);
+    if (w.r > r0) opts.push([w.c, w.r - 1]);
+    if (w.r < r1) opts.push([w.c, w.r + 1]);
     const [c, r] = opts[Math.floor(Math.random() * opts.length)];
     const tx = walkX(c);
     const ty = walkY(r);
@@ -565,6 +771,11 @@ export class CityScene extends Phaser.Scene {
   private onModel(m: SceneModel, initial = false) {
     this.buildMap(m);
     this.syncExtras(m);
+    this.syncMarkers(m);
+    if (m.cheer !== this.cheerSeen) {
+      if (this.cheerSeen && this.player?.visible && !this.walkTween) this.tweens.add({ targets: this.player, y: this.player.y - 4, duration: 120, yoyo: true, repeat: 1, ease: 'Quad.easeOut' });
+      this.cheerSeen = m.cheer;
+    }
     this.syncOther(m);
     if (!m.role || !m.look) {
       this.walkTween?.stop();
@@ -783,6 +994,12 @@ export class CityScene extends Phaser.Scene {
       .filter(({ b }) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)
       .sort((a, b) => b.b.y + b.b.h - (a.b.y + a.b.h));
     if (hits.length) return bridge.tap(hits[0].p.id);
+    // Grandes proyectos
+    for (const mg of MEGA) {
+      if ('place' in mg.site) continue;
+      const b = placeRect({ id: 'plaza', label: '', c: mg.site.c, r: mg.site.r, cw: mg.site.cw, rh: mg.site.rh });
+      if (x >= b.x && x <= b.x + b.w && y >= b.y - 30 && y <= b.y + b.h) return bridge.tap(`mega:${mg.id}`);
+    }
     // Manzanas y solares: el de más al sur cuya altura cubra el toque.
     const special = new Set<string>();
     for (const p of PLACES_MAP)
@@ -817,14 +1034,23 @@ export class CityScene extends Phaser.Scene {
       ambient = Phaser.Display.Color.GetColor(((ambient >> 16) & 255) * k[0], ((ambient >> 8) & 255) * k[1], (ambient & 255) * k[2]);
     }
     for (const b of this.bases) b.setTint(ambient);
-    this.bakeSnow(w === 'nieve');
+    this.bakeWeather(w === 'nieve', w === 'lluvia' || w === 'tormenta');
     const nightA = Math.max(0, (l.night - 0.1) / 0.9);
-    for (const li of this.lightImgs) li.setAlpha(Math.max(nightA, w === 'tormenta' ? 0.35 : 0));
+    // Las ventanas se encienden escalonadas al anochecer: primero el norte, luego el sur.
+    for (const li of this.lightImgs) {
+      const frac = li.y / MAP_H;
+      const stag = Phaser.Math.Clamp((l.night - 0.08 - frac * 0.18) / 0.74, 0, 1);
+      li.setAlpha(Math.max(stag, w === 'tormenta' ? 0.35 : 0));
+    }
     for (const c of this.cars) {
       c.img.setTint(ambient);
       c.light.setAlpha(nightA * 0.9);
     }
-    for (const wk of this.walkers) wk.sprite.setTint(ambient);
+    for (const wk of this.walkers) {
+      wk.sprite.setTint(ambient);
+      if (wk.night) wk.sprite.setVisible(l.night > 0.5);
+    }
+    for (const b of this.boats) b.img.setTint(ambient);
     this.pet?.setTint(ambient);
     for (const mm of this.machines) mm.setTint(ambient);
     if (this.player) {
@@ -943,6 +1169,19 @@ export class CityScene extends Phaser.Scene {
   update(time: number, delta: number) {
     this.checkPerf(delta);
     this.updateLight();
+    this.cull();
+    // remolcadores
+    for (const b of this.boats) {
+      b.img.y += b.dir * b.speed * (delta / 1000);
+      if (b.img.y > MAP_H + 10) b.img.y = -10;
+      if (b.img.y < -10) b.img.y = MAP_H + 10;
+    }
+    // el minimapa sabe qué ve la cámara (4 veces por segundo)
+    if (time - this.viewAt > 250) {
+      this.viewAt = time;
+      const v = this.cameras.main.worldView;
+      bridge.publishView({ px: this.player?.x ?? 0, py: this.player?.y ?? 0, playerVisible: !!this.player?.visible, x: v.x, y: v.y, w: v.width, h: v.height });
+    }
     const neonA = (0.55 + this.light.night * 0.45) * (Math.random() < 0.012 ? 0.5 : 1);
     if (neonA !== this.neons[0]?.alpha) for (const n of this.neons) n.setAlpha(neonA);
     this.drawWeather(delta);
@@ -969,6 +1208,13 @@ export class CityScene extends Phaser.Scene {
       this.ring.setVisible(this.player.visible).setPosition(this.player.x, this.player.y - 1);
       depthOf(this.ring, this.player.y);
       if (this.pet) this.followPet(delta);
+      const wx = bridge.get().weather;
+      const rainy = (wx === 'lluvia' || wx === 'tormenta') && this.player.visible;
+      this.umbrella.setVisible(rainy);
+      if (rainy) {
+        this.umbrella.setPosition(this.player.x, this.player.y - 9);
+        depthOf(this.umbrella, this.player.y + 0.6);
+      }
     }
 
     // cámara: sigue al personaje salvo que el jugador haya movido el mapa

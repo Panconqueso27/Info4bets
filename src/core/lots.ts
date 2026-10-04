@@ -114,10 +114,10 @@ export interface MegaDef {
 }
 
 export const MEGA: MegaDef[] = [
-  { id: 'timessquare', label: 'Reforma de Times Square', icon: '🎭', site: { place: 'plaza' }, cost: 1_500_000, days: 3, instant: { popularidad: 8, control: 4 }, tourism: 0.7, income: 20_000, description: 'Teatros restaurados, pantallas gigantes y una plaza para pasear.', autoDay: 10 },
-  { id: 'puerto', label: 'Puerto de cruceros', icon: '🛳', site: { c: 4, r: 7, cw: 1, rh: 2 }, cost: 2_000_000, days: 4, instant: { popularidad: 6 }, tourism: 0.8, income: 30_000, description: 'Una terminal moderna donde atracan los cruceros del Atlántico.', autoDay: 20 },
-  { id: 'estadio', label: 'Estadio de béisbol', icon: '⚾', site: { c: 6, r: 4, cw: 2, rh: 1 }, cost: 2_500_000, days: 5, instant: { popularidad: 12 }, tourism: 1, income: 40_000, description: 'Los Dodgers vuelven a Brooklyn. 50.000 gargantas cada partido.', autoDay: 32 },
-  { id: 'aeropuerto', label: 'Aeropuerto de Brooklyn', icon: '✈', site: { c: 6, r: 0, cw: 2, rh: 2 }, cost: 4_000_000, days: 7, instant: { popularidad: 10, control: 6 }, tourism: 1.5, income: 60_000, description: 'Vuelos a todo el país desde la otra orilla del río.', autoDay: 45 },
+  { id: 'timessquare', label: 'Reforma de Times Square', icon: '🎭', site: { place: 'plaza' }, cost: 900_000, days: 3, instant: { popularidad: 8, control: 4 }, tourism: 0.7, income: 20_000, description: 'Teatros restaurados, pantallas gigantes y una plaza para pasear.', autoDay: 10 },
+  { id: 'puerto', label: 'Puerto de cruceros', icon: '🛳', site: { c: 4, r: 7, cw: 1, rh: 2 }, cost: 1_200_000, days: 4, instant: { popularidad: 6 }, tourism: 0.8, income: 30_000, description: 'Una terminal moderna donde atracan los cruceros del Atlántico.', autoDay: 20 },
+  { id: 'estadio', label: 'Estadio de béisbol', icon: '⚾', site: { c: 6, r: 4, cw: 2, rh: 1 }, cost: 1_600_000, days: 5, instant: { popularidad: 12 }, tourism: 1, income: 40_000, description: 'Los Dodgers vuelven a Brooklyn. 50.000 gargantas cada partido.', autoDay: 32 },
+  { id: 'aeropuerto', label: 'Aeropuerto de Brooklyn', icon: '✈', site: { c: 6, r: 0, cw: 2, rh: 2 }, cost: 2_500_000, days: 7, instant: { popularidad: 10, control: 6 }, tourism: 1.5, income: 60_000, description: 'Vuelos a todo el país desde la otra orilla del río.', autoDay: 45 },
 ];
 export const MEGA_BY_ID = Object.fromEntries(MEGA.map((m) => [m.id, m])) as Record<string, MegaDef>;
 

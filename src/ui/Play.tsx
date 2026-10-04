@@ -1,5 +1,8 @@
 import * as audio from '../platform/audio';
 import { lowFx, setLowFx } from '../scene/CityScene';
+import { PixelIcon } from './PixelIcon';
+
+const missionsLeft = (s: GameState) => (s.missions?.date === s.today.date ? s.missions.list.filter((m) => !m.done).length : 0);
 import { StatsView } from './Extras';
 import { Letters, Words } from './AnimText';
 import { useEffect, useRef, useState } from 'preact/hooks';
@@ -120,7 +123,7 @@ export function Dock({
       <>
         <div class="status">
           <span>
-            {e.kind === 'radio' ? `📻 ${e.label}` : '📦 Repartiendo paquetes por la ciudad'} · vuelve en <b>{formatDuration(e.endsAt - now)}</b>
+            {e.kind && e.kind !== 'reparto' ? `${{ radio: '📻', taxi: '🚕', clases: '📚' }[e.kind]} ${e.label}` : '📦 Repartiendo paquetes por la ciudad'} · vuelve en <b>{formatDuration(e.endsAt - now)}</b>
           </span>
         </div>
         <div class="progress errand">
@@ -221,7 +224,10 @@ export function Dock({
       <div class="dock-tools">
         {TOOLS.filter((t) => !t.role || t.role === state.character.role).map((t) => (
           <button key={t.id + t.label} class={`tool ${t.id === 'bolsa' && marketSession(state, now) ? 'live' : ''}`} onClick={() => onPanel(t.id)}>
-            <span class="tool-ic">{t.icon}</span>
+            <span class="tool-ic">
+              <PixelIcon id={t.icon} size={2} />
+              {t.id === 'extras' && missionsLeft(state) > 0 && <i class="tool-badge">{missionsLeft(state)}</i>}
+            </span>
             {t.label}
           </button>
         ))}
@@ -230,20 +236,17 @@ export function Dock({
   );
 }
 
-export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu' | 'personas' | 'armario' | 'stats' | 'obras' | 'radio' | 'negocio' | 'turismo';
+export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu' | 'personas' | 'armario' | 'stats' | 'extras' | 'propiedades' | 'copia';
 
 const TOOLS: { id: Panel; icon: string; label: string; role?: Role }[] = [
-  { id: 'bolsa', icon: '📈', label: 'Bolsa' },
-  { id: 'agenda', icon: '📋', label: 'Agenda' },
-  { id: 'mejora', icon: '⬆', label: 'Mejora' },
-  { id: 'obras', icon: '🏗', label: 'Solar', role: 'inmigrante' },
-  { id: 'obras', icon: '🏗', label: 'Obras', role: 'alcalde' },
-  { id: 'radio', icon: '📻', label: 'Radio', role: 'inmigrante' },
-  { id: 'negocio', icon: '🥤', label: 'Negocio', role: 'inmigrante' },
-  { id: 'turismo', icon: '📸', label: 'Turismo', role: 'alcalde' },
-  { id: 'logros', icon: '🏆', label: 'Logros' },
-  { id: 'diario', icon: '📖', label: 'Diario' },
-  { id: 'menu', icon: '☰', label: 'Menú' },
+  { id: 'bolsa', icon: 'grafica', label: 'Bolsa' },
+  { id: 'extras', icon: 'diana', label: 'Extras' },
+  { id: 'propiedades', icon: 'edificio', label: 'Propiedad' },
+  { id: 'agenda', icon: 'agenda', label: 'Agenda' },
+  { id: 'mejora', icon: 'flecha', label: 'Mejora' },
+  { id: 'logros', icon: 'trofeo', label: 'Logros' },
+  { id: 'diario', icon: 'libro', label: 'Diario' },
+  { id: 'menu', icon: 'menu', label: 'Menú' },
 ];
 
 function Deltas({ deltas, state }: { deltas: Bars; state: GameState }) {
@@ -341,6 +344,9 @@ export function MenuModal({
           </button>
           <button class="btn secondary" onClick={onTutorial}>
             ❓ Ver tutorial
+          </button>
+          <button class="btn secondary" onClick={() => onOpen('copia')}>
+            💾 Copia de seguridad
           </button>
         </div>
         <div class="menu-grid" style={{ marginBottom: 12 }}>

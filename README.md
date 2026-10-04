@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: beta 0.6.0**
+**Versión actual: beta 0.7.0**
 
 ## Probar la beta
 
@@ -21,6 +21,30 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.7.0
+
+- **Ciudad el doble de grande:** Manhattan, el East River con el **puente de Brooklyn** (coches, peatones y remolcadores) y **Brooklyn**, con sus barrios: los Muelles, Williamsburg (fábricas y chimeneas), Brooklyn Heights (casas de ladrillo con árboles), Coney Island (noria y montaña rusa), el Rastro, el Hipódromo y la fábrica de azúcar. En Manhattan aparecen Chinatown y el Lower East Side.
+  - El mapa se divide en trozos y solo se dibuja la parte que se ve.
+- **16 solares**, con precio según el barrio.
+  - **Inmigrante:** hasta 3 solares. En cada uno, una casa de alquiler (casa, dúplex y edificio de 4 pisos) o un negocio con 3 niveles: lavandería, puesto de comida o taller.
+  - **Alcalde:** cada obra pública tiene 3 niveles (por ejemplo, del parque de barrio al jardín botánico). Además puede lanzar 4 **grandes proyectos**: reforma de Times Square, puerto de cruceros, estadio de béisbol y aeropuerto. También puede **subastar solares**. En la partida del inmigrante, la ciudad inaugura los grandes proyectos con los días.
+  - **Nivel de barrio:** cuanto más se construye, más gente hay en la calle, los solares cuestan más y los negocios ganan más.
+- **🎯 Extras:** **misiones del día** (3 retos con premio y un bonus si cumples las tres) y dinero fuera del trabajo.
+  - **Inmigrante:** radio, reparto, taxi (paga más de noche y con lluvia), clases de español, puesto de perritos calientes (minijuego) y el rastro de los domingos.
+  - **Alcalde:** cenas de recaudación (con riesgo de escándalo), mítines de barrio, bonos municipales y subasta de solares.
+  - **Los dos:** hipódromo y béisbol los fines de semana, y lotería semanal.
+- **🏢 Propiedad:** lo que te da dinero cada noche, nivel de los barrios, solares y obras, negocio o turismo, grandes proyectos y el **libro de cuentas** semanal por categorías.
+- **Impuestos y alquiler:** cada mes sube el alquiler del cuarto del inmigrante y llegan los impuestos de sus propiedades. El alcalde paga el mantenimiento de las obras.
+- **Minimapa con viaje rápido** (casa, trabajo, solares, Brooklyn) e **iconos sobre el mapa**: tus negocios, las obras y el rastro o el hipódromo cuando abren.
+- **Copia de seguridad:** exporta la partida a un código y restáurala en otro móvil (menú ☰).
+- **Pulido visual:**
+  - Marco de máquina recreativa en el HUD, el panel inferior y las ventanas, e iconos pixel art en los botones.
+  - Letreros de tiendas en inglés, pasos de cebra, alcantarillas con vapor, cabinas, buzones, quioscos y basura en los barrios pobres.
+  - Charcos con reflejos de neón cuando llueve, ventanas que se encienden escalonadas, amaneceres y atardeceres más cálidos.
+  - Palomas en el parque, más taxis y gente en Times Square de noche.
+  - El personaje salta al ganar dinero y saca el paraguas cuando llueve.
+- Rendimiento con el mapa doble (CPU 4 veces más lenta): de 57 a 58 fps con lluvia, nieve o la Bolsa abierta.
 
 ## Novedades 0.6.0
 

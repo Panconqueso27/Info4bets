@@ -125,7 +125,7 @@ export function startTaxi(state: GameState, now: number) {
   const why = canTaxi(state, now);
   if (why) throw new Error(why);
   const t = taxiPay(state, now);
-  state.errand = { startedAt: now, endsAt: now + TAXI_HOURS * HOUR, kind: 'taxi', label: 'Carreras de taxi por la ciudad', pay: t.pay, wear: { estres: 3, salud: -1 } };
+  state.errand = { startedAt: now, endsAt: now + TAXI_HOURS * HOUR, kind: 'taxi', label: 'Carreras de taxi por la ciudad', pay: t.pay, wear: { estres: 2, salud: -1 } };
   markToday(state, 'taxiDia', now);
   countMission(state, 'actividad', 1);
   log(state, now, 'info', 'Taxi', `${state.character.name} pone el cartel de LIBRE en el parabrisas (${TAXI_HOURS} h${t.night ? ', tarifa nocturna' : ''}${t.rain ? ', con lluvia todos quieren taxi' : ''}).`);
@@ -161,7 +161,7 @@ export function applyHotdogs(state: GameState, points: number, now: number) {
   const n = Math.max(0, Math.min(60, Math.floor(points)));
   const money = n * HOTDOG_PER_POINT;
   markToday(state, 'perritosDia', now);
-  const deltas = withCat('extras', () => applyBars(state, { dinero: money, estres: 2 }));
+  const deltas = withCat('extras', () => applyBars(state, { dinero: money, estres: 1 }));
   countMission(state, 'actividad', 1);
   countMission(state, 'extra', 1);
   log(state, now, money ? 'bueno' : 'info', 'Puesto de perritos', `Vendes ${n} perrito${n === 1 ? '' : 's'} calientes en la esquina: ${fmtOf(state)(money)} en la caja.`, deltas);

@@ -5,13 +5,18 @@ import {
   changeLook,
   buyCar,
   buyUpgrade,
+  buildBusiness,
   buildCivic,
   buildHousePhase,
   buyLot,
   buyVending,
+  dayNumber,
   renovateBlock,
   repairVending,
+  startMega,
   takeRadioJob,
+  upgradeCivic,
+  upgradeLot,
   startErrand,
   canStartShift,
   forceEvent,
@@ -61,13 +66,19 @@ const MINIGAMES: Record<string, (p: MiniProps) => any> = {
   press: Press,
   budget: Budget,
   handshake: Handshake,
+  hotdogs: Hotdogs,
 };
 import * as audio from '../platform/audio';
 import { lightAt } from '../art/daynight';
 import { Customizer, IdentityForm, RoleSelect, TitleScreen } from './Setup';
-import { BlockModal, LotCard, NegocioModal, ObrasModal, RadioModal, TurismoModal } from './City';
+import { BlockModal, LotCard, MegaCard, PropertiesModal, type CityActions } from './City';
 import { Modal } from './Panels';
-import { cityLook, citySignature, LOT_BY_ID } from '../core/lots';
+import { cityLook, citySignature, LOT_BY_ID, MEGA_BY_ID } from '../core/lots';
+import { applyHotdogs, auctionLot, betBaseball, betRace, buyBond, buyRastro, buyTicket, racesOpen, rastroOpen, startClasses, startTaxi } from '../core/economy';
+import { BackupModal, BaseballModal, BondsModal, ExtrasModal, LotteryModal, RaceModal, RastroModal, type ExtraPanel } from './Extras7';
+import { Hotdogs } from './games/Street';
+import { Minimap } from './Minimap';
+import type { Marker } from '../scene/bridge';
 
 type Screen =
   | { id: 'title' }
@@ -103,6 +114,9 @@ export function App() {
   const [reward, setReward] = useState<{ title: string; text: string } | null>(null);
   const [tutTick, setTutTick] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
+  const [extra, setExtra] = useState<ExtraPanel | null>(null);
+  const moneyRef = useRef<number | null>(null);
+  const cheer = useRef(0);
   const cityRef = useRef({ sig: '\u0000', look: cityLook(null) });
   const seenPending = useRef(new Set<string>());
 
@@ -171,10 +185,12 @@ export function App() {
       if (!s || screen.id !== 'play') return;
       audio.play.click();
       const mine = ROLE_PLACES[s.character.role];
-      if (id.startsWith('lot:')) {
+      if (id.startsWith('lot:') || id.startsWith('mega:')) {
         setPanel(null);
         return setTarget(id);
       }
+      if (id === 'mercado') return rastroOpen(s) ? setExtra('rastro') : setToast({ title: 'RASTRO DE BROOKLYN', text: 'Puestos cerrados. El rastro abre los domingos.' });
+      if (id === 'hipodromo') return racesOpen(s) ? setExtra('carreras') : setToast({ title: 'HIPÓDROMO', text: 'Hoy no hay carreras. Vuelve el fin de semana.' });
       if (id.startsWith('block:')) {
         if (s.character.role !== 'alcalde') return setToast({ title: 'MANZANA', text: 'Edificios de vecinos. Solo el alcalde puede renovarlos.' });
         setPanel(null);
@@ -196,6 +212,8 @@ export function App() {
         hotel: 'Hotel con letrero rosa. Nadie pregunta.',
         pizza: 'Porción a 75 centavos.',
         bar: 'Cerveza fría y béisbol en la tele.',
+        fabrica: 'La vieja fábrica de azúcar. Huele a caramelo hasta en el puente.',
+        coney: 'La noria, la montaña rusa y perritos de Nathan’s.',
       };
       setToast({ title: label.toUpperCase(), text: flavor[id] ?? '' });
     });
@@ -213,12 +231,31 @@ export function App() {
 
   // La escena refleja dónde está el personaje.
   useEffect(() => {
+    let markers: Marker[] = [];
     if (playing) {
-      const sig = citySignature(state);
-      if (sig !== cityRef.current.sig) cityRef.current = { sig, look: cityLook(state) };
+      const day = dayNumber(state, now);
+      const sig = citySignature(state, day);
+      if (sig !== cityRef.current.sig) cityRef.current = { sig, look: cityLook(state, day) };
+      // iconos sobre el mapa
+      const mk: Marker[] = [];
+      for (const [id, l] of Object.entries(state.lots ?? {})) {
+        if (l.buildingUntil) mk.push({ kind: 'lot', id, icon: 'cono' });
+        else if (l.owner === 'jugador') mk.push({ kind: 'lot', id, icon: 'moneda' });
+      }
+      for (const [id, p] of Object.entries(state.projects ?? {})) if (!p.done) mk.push({ kind: 'mega', id, icon: 'cono' });
+      if (state.character.role === 'inmigrante' && rastroOpen(state)) mk.push({ kind: 'place', id: 'mercado', icon: 'cartel' });
+      if (racesOpen(state)) mk.push({ kind: 'place', id: 'hipodromo', icon: 'caballo' });
+      const key = JSON.stringify(mk);
+      markers = key === JSON.stringify(bridge.get().markers) ? bridge.get().markers : mk;
+      // el personaje salta de alegría al ganar dinero
+      const money = state.bars.dinero ?? 0;
+      if (moneyRef.current !== null && money > moneyRef.current) cheer.current++;
+      moneyRef.current = money;
     }
     if (playing)
       bridge.set({
+        markers,
+        cheer: cheer.current,
         city: cityRef.current.look,
         citySig: cityRef.current.sig,
         pet: state.pet?.kind ?? null,
@@ -230,7 +267,7 @@ export function App() {
         other: state.other ?? null,
         weather: ((devEnabled && devWeather()) || todayWeather(state)) as Weather,
       });
-    else bridge.set({ role: null, look: null, spot: 'home', weather: 'despejado', other: null, pet: null, vending: 0 });
+    else bridge.set({ role: null, look: null, spot: 'home', weather: 'despejado', other: null, pet: null, vending: 0, markers: [] });
   });
 
   // Avisos: sucesos nuevos y logros/bolsa.
@@ -278,15 +315,18 @@ export function App() {
       list.push({
         id: `errand-${s.errand.endsAt}`,
         at: s.errand.endsAt,
-        title: s.errand.kind === 'radio' ? 'Trabajo terminado' : 'Reparto terminado',
-        body: s.errand.kind === 'radio' ? `${s.character.name} terminó: ${s.errand.label}. ¡A cobrar!` : `${s.character.name} volvió del reparto con el dinero.`,
+        title: s.errand.kind && s.errand.kind !== 'reparto' ? 'Trabajo terminado' : 'Reparto terminado',
+        body: s.errand.kind && s.errand.kind !== 'reparto' ? `${s.character.name} terminó: ${s.errand.label}. ¡A cobrar!` : `${s.character.name} volvió del reparto con el dinero.`,
       });
     for (const l of Object.values(s.lots ?? {}))
       if (l.buildingUntil) list.push({ id: `obra-${l.buildingUntil}`, at: l.buildingUntil, title: '🏗 Obras terminadas', body: 'Ve a ver cómo ha quedado.' });
+    for (const p of Object.values(s.projects ?? {}))
+      if (!p.done) list.push({ id: `mega-${p.until}`, at: p.until, title: '🎉 Gran inauguración', body: 'Tu gran proyecto está listo. ¡La ciudad lo celebra!' });
+    for (const b of s.bonds ?? []) list.push({ id: `bono-${b.until}`, at: b.until, title: '📜 Bonos vencidos', body: 'Tus bonos municipales devuelven el dinero con intereses.' });
     const tomorrow = startOfDay(addDays(s.today.date, 1)) + REMINDER_HOUR * 3_600_000;
     list.push({ id: `rem-${tomorrow}`, at: tomorrow, title: `🔥 Racha de ${s.streak} días`, body: `No olvides ir ${role.toWorkplace} hoy o perderás la racha.` });
     notify.scheduleAll(list, clock.now(), clock.getSpeed());
-  }, [state?.shift?.startedAt, state?.shift?.endsAt, state?.errand?.endsAt, state?.shift?.cancelled, state?.gameOver, state?.today.date, state?.streak, clock.getSpeed(), citySignature(state)]);
+  }, [state?.shift?.startedAt, state?.shift?.endsAt, state?.errand?.endsAt, state?.shift?.cancelled, state?.gameOver, state?.today.date, state?.streak, clock.getSpeed(), citySignature(state) + JSON.stringify(state?.bonds ?? [])]);
 
   const begin = (c: Character) => {
     deleteGame();
@@ -349,10 +389,27 @@ export function App() {
   const pending = state.pending[0];
   const showNews = !state.gameOver && state.newsSeenDate !== state.today.date;
   const closePanel = () => setPanel(null);
-  const cityActions = {
-    onBuyLot: (id: string) => act((s, t) => buyLot(s, id, t)),
-    onBuildPhase: () => act(buildHousePhase),
-    onBuildCivic: (id: string, civic: string) => act((s, t) => buildCivic(s, id, civic, t)),
+  const cityActions: CityActions = {
+    onBuyLot: (id) => act((s, t) => buyLot(s, id, t)),
+    onBuildPhase: (lotId) => act((s, t) => buildHousePhase(s, t, lotId)),
+    onBuildBiz: (lotId, biz) => act((s, t) => buildBusiness(s, lotId, biz, t)),
+    onUpgradeLot: (lotId) => act((s, t) => upgradeLot(s, lotId, t)),
+    onBuildCivic: (id, civic) => act((s, t) => buildCivic(s, id, civic, t)),
+    onUpgradeCivic: (lotId) => act((s, t) => upgradeCivic(s, lotId, t)),
+    onAuction: (lotId) => act((s, t) => auctionLot(s, lotId, t)),
+    onStartMega: (id) => act((s, t) => startMega(s, id, t)),
+  };
+  /** Ejecuta una acción y devuelve su resultado (o nada si falló, con aviso). */
+  const ask = <T,>(fn: (s: GameState, t: number) => T): T | void => {
+    const s = game.current;
+    if (!s) return;
+    try {
+      const r = fn(s, clock.now());
+      commit();
+      return r;
+    } catch (e) {
+      setToast({ title: 'AVISO', text: (e as Error).message });
+    }
   };
 
   // Un solo panel a la vez, por orden de prioridad.
@@ -371,7 +428,8 @@ export function App() {
         onFinish={(n) => {
           setMinigame(null);
           if (id === 'dishes' || id === 'paperwork') saveRecord(id, n);
-          act((s, t) => applyMinigame(s, n, t, id));
+          if (id === 'hotdogs') act((s, t) => applyHotdogs(s, n, t));
+          else act((s, t) => applyMinigame(s, n, t, id));
         }}
       />
     );
@@ -408,12 +466,67 @@ export function App() {
         <LotCard state={state} lotId={target.slice(4)} now={now} {...cityActions} />
       </Modal>
     );
+  else if (target?.startsWith('mega:'))
+    overlay = (
+      <Modal title={MEGA_BY_ID[target.slice(5)].label} kicker="GRAN PROYECTO" onClose={() => setTarget(null)}>
+        <MegaCard state={state} id={target.slice(5)} now={now} onStart={cityActions.onStartMega} />
+      </Modal>
+    );
+  else if (extra === 'rastro') overlay = <RastroModal state={state} now={now} onBuy={(id) => ask((s, t) => buyRastro(s, id, t))} onClose={() => setExtra(null)} />;
+  else if (extra === 'carreras') overlay = <RaceModal state={state} now={now} onBet={(h, st) => ask((s, t) => betRace(s, h, st, t))} onClose={() => setExtra(null)} />;
+  else if (extra === 'beisbol') overlay = <BaseballModal state={state} now={now} onBet={(team, st) => ask((s, t) => betBaseball(s, team, st, t))} onClose={() => setExtra(null)} />;
+  else if (extra === 'loteria') overlay = <LotteryModal state={state} onBuy={(n) => act((s, t) => buyTicket(s, n, t))} onClose={() => setExtra(null)} />;
+  else if (extra === 'bonos') overlay = <BondsModal state={state} now={now} onBuy={(amount, days) => act((s, t) => buyBond(s, amount, days, t))} onClose={() => setExtra(null)} />;
   else if (target?.startsWith('block:'))
     overlay = <BlockModal state={state} blockKey={target.slice(6)} now={now} onRenovate={() => act((s, t) => renovateBlock(s, target.slice(6), t))} onClose={() => setTarget(null)} />;
-  else if (panel === 'obras') overlay = <ObrasModal state={state} now={now} {...cityActions} onClose={closePanel} />;
-  else if (panel === 'radio') overlay = <RadioModal state={state} now={now} onTake={(id) => { act((s, t) => takeRadioJob(s, id, t)); setPanel(null); }} onClose={closePanel} />;
-  else if (panel === 'negocio') overlay = <NegocioModal state={state} onBuy={() => act(buyVending)} onRepair={() => act(repairVending)} onClose={closePanel} />;
-  else if (panel === 'turismo') overlay = <TurismoModal state={state} onClose={closePanel} />;
+  else if (panel === 'copia') overlay = <BackupModal onClose={closePanel} />;
+  else if (panel === 'propiedades')
+    overlay = <PropertiesModal state={state} now={now} {...cityActions} onBuyVending={() => act(buyVending)} onRepairVending={() => act(repairVending)} onClose={closePanel} />;
+  else if (panel === 'extras')
+    overlay = (
+      <ExtrasModal
+        state={state}
+        now={now}
+        onClose={closePanel}
+        onRadio={(id) => {
+          act((s, t) => takeRadioJob(s, id, t));
+          setPanel(null);
+        }}
+        onErrand={() => {
+          act(startErrand);
+          setPanel(null);
+        }}
+        onTaxi={() => {
+          act(startTaxi);
+          setPanel(null);
+        }}
+        onClasses={() => {
+          act(startClasses);
+          setPanel(null);
+        }}
+        onHotdogs={() => {
+          setPanel(null);
+          setMinigame('hotdogs');
+        }}
+        onOpen={(p) => {
+          setPanel(null);
+          setExtra(p);
+        }}
+        onAction={(id) =>
+          act((s, t) => {
+            startAction(s, id, t);
+            setPanel(null);
+            setShowEvent(true);
+          })
+        }
+        onAuction={() => {
+          const free = Object.keys(LOT_BY_ID).find((id) => !state.lots?.[id]);
+          setPanel(free ? 'propiedades' : null);
+          if (!free) setToast({ title: 'SUBASTA', text: 'No quedan solares libres.' });
+          else setToast({ title: 'SUBASTA', text: 'Elige un solar libre en la pestaña Obras y pulsa "Subastarlo".' });
+        }}
+      />
+    );
   else if (panel === 'bolsa')
     overlay = <MarketTerminal state={state} now={now} onBet={(tk, dir, stake) => act((s, t) => placeBet(s, tk, dir, stake, t))} onClose={closePanel} />;
   else if (panel === 'agenda')
@@ -487,6 +600,7 @@ export function App() {
   return (
     <>
       <Hud state={state} now={now} />
+      {!overlay && !minigame && <Minimap state={state} />}
       <Dock
         state={state}
         now={now}

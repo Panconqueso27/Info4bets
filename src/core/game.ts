@@ -199,6 +199,11 @@ export function advance(state: GameState, now: number): boolean {
     dailyCheck(state, now);
     changed = true;
   }
+  // Partidas de versiones anteriores: misiones desde hoy mismo.
+  if (state.missions?.date !== state.today.date) {
+    ensureMissions(state);
+    changed = true;
+  }
 
   changed = checkGameOver(state, now) || changed;
   changed = evaluateAchievements(state, now) || changed;
