@@ -3615,7 +3615,7 @@ body {
 }
 .dock.compact .btn {
   padding: 9px 10px;
-  font-size: 11px;
+  font-size: 14px;
 }
 .dock.compact .minigame-btn small {
   display: inline;
@@ -3647,7 +3647,7 @@ body {
 }
 .dock.compact .tool {
   padding: 3px 0 2px;
-  font-size: 7px;
+  font-size: 9px;
 }
 .dock.compact .tool-ic {
   height: 22px;

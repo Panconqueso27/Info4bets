@@ -77,6 +77,7 @@ import { cityLook, citySignature, LOT_BY_ID, MEGA_BY_ID } from '../core/lots';
 import { applyHotdogs, auctionLot, betBaseball, betRace, buyBond, buyRastro, buyTicket, racesOpen, rastroOpen, startClasses, startTaxi } from '../core/economy';
 import { BackupModal, BaseballModal, BondsModal, ContestResultModal, ContestsModal, ExtrasModal, LotteryModal, RaceModal, RastroModal, type ExtraPanel } from './Extras7';
 import { Hotdogs } from './games/Street';
+import { RADIO_PLACE } from '../core/radio';
 import { Breakdance, Eating, Marathon, SimonGame, type ContestInfo } from './games/Contests';
 import { CONTEST_BY_ID, contestPrizes, contestRivals, enterContest, finishContest, withdrawContest, contestFee, type ContestResult } from '../core/contests';
 
@@ -257,8 +258,12 @@ export function App() {
       if (moneyRef.current !== null && money > moneyRef.current) cheer.current++;
       moneyRef.current = money;
     }
+    // Cada trabajo extra tiene su sitio: el personaje va allí y entra.
+    const e = playing ? state.errand : null;
+    const dest = !e ? null : e.kind === 'radio' ? RADIO_PLACE[e.job ?? ''] ?? null : e.kind === 'clases' ? `place:${ROLE_PLACES[state!.character.role].home}` : null;
     if (playing)
       bridge.set({
+        dest,
         markers,
         cheer: cheer.current,
         city: cityRef.current.look,

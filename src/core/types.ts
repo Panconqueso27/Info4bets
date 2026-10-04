@@ -225,6 +225,8 @@ export interface Errand {
   startedAt: number;
   endsAt: number;
   kind?: 'reparto' | 'radio' | 'taxi' | 'clases';
+  /** Trabajo de la radio (para saber a qué sitio de la ciudad va). */
+  job?: string;
   label?: string;
   pay?: number;
   wear?: Bars;

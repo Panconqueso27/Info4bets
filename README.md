@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: beta 0.7.0**
+**Versión actual: beta 0.8.0**
 
 ## Probar la beta
 
@@ -21,6 +21,22 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.8.0
+
+- **Rediseño visual:** el arte del mapa se dibuja al doble de detalle, con texturas (ladrillo, baldosa, asfalto), ventanas con marco y alféizar, toldos de rayas, cornisas, árboles frondosos y sombras suaves.
+  - Hay un cielo de horizonte que cambia entre día, atardecer y noche, y por la noche las ventanas tienen un brillo cálido.
+  - **Resolución adaptativa:** si el móvil va a menos de 40 FPS, el juego baja la resolución él solo y lo recuerda.
+- **Calles lógicas:** las avenidas y calles son de sentido único, al estilo de Nueva York, con flechas pintadas, dos carriles, pasos de cebra y semáforos.
+  - Los peatones esperan en la esquina y cruzan por el paso de cebra.
+- **Cada trabajo tiene su lugar:** el personaje camina hasta el edificio y se le ve entrar y salir. Una marca ▼ señala el destino.
+- **Panel inferior compacto:** las misiones, el progreso y los minijuegos ocupan mucho menos y dejan más ciudad a la vista.
+- **4 concursos de dificultad media-alta**, con inscripción, rivales y premios para los tres primeros:
+  - **Batalla de breakdance** en Times Square (viernes y sábados): pulsa las flechas al ritmo.
+  - **Concurso de comer perritos** en Coney Island (domingos, y el 4 de julio con premios triples): muerde y traga sin atragantarte.
+  - **Torneo de Simon** (martes, jueves y sábados): repite la secuencia de colores.
+  - **Maratón de Nueva York** (domingos y miércoles): mantén el ritmo en la zona verde.
+- **Fuente más legible**, sin dejar de ser pixel.
 
 ## Novedades 0.7.0
 

@@ -1340,7 +1340,7 @@ export function takeRadioJob(state: GameState, jobId: string, now: number) {
   if (why) throw new Error(why);
   const job = RADIO_BY_ID[jobId];
   if (!todayJobs(state).some((j) => j.id === jobId)) throw new Error('Ese trabajo ya no está disponible.');
-  state.errand = { startedAt: now, endsAt: now + job.hours * HOUR, kind: 'radio', label: job.label, pay: job.pay, wear: job.wear };
+  state.errand = { startedAt: now, endsAt: now + job.hours * HOUR, kind: 'radio', job: job.id, label: job.label, pay: job.pay, wear: job.wear };
   state.flags.radioDia = dayNumber(state, now);
   log(state, now, 'info', 'Radio', `${state.character.name} acepta el trabajo: ${job.label} (${job.hours} h).`);
 }

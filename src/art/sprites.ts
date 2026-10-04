@@ -178,3 +178,37 @@ export function drawVending(ctx: CanvasRenderingContext2D, ox: number, oy: numbe
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(ox, oy, 4, 1);
 }
+
+/**
+ * Amplía un sprite ×2 y le pone un contorno fino (medio píxel del mapa) y un
+ * brillo arriba a la izquierda: más definido, al nivel del arte nuevo.
+ * Devuelve un lienzo con 1 px de margen por cada lado.
+ */
+export function upscaleOutline(src: HTMLCanvasElement, outline = 'rgba(14,10,24,0.85)'): HTMLCanvasElement {
+  const w = src.width * 2 + 2;
+  const h = src.height * 2 + 2;
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  const ctx = out.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(src, 1, 1, src.width * 2, src.height * 2);
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  const solid = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && d[(y * w + x) * 4 + 3] > 140;
+  const edge: number[] = [];
+  const shine: number[] = [];
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (solid(x, y)) {
+        if (!solid(x - 1, y) && !solid(x, y - 1)) shine.push(x, y);
+        continue;
+      }
+      if (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1)) edge.push(x, y);
+    }
+  ctx.fillStyle = outline;
+  for (let i = 0; i < edge.length; i += 2) ctx.fillRect(edge[i], edge[i + 1], 1, 1);
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  for (let i = 0; i < shine.length; i += 2) ctx.fillRect(shine[i], shine[i + 1], 1, 1);
+  return out;
+}

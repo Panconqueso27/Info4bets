@@ -50,6 +50,14 @@ export function streetSpan(j: number, side: 'manhattan' | 'brooklyn'): [number, 
   if (j === BRIDGE_STREET) return [0, MAP_W];
   return side === 'manhattan' ? [0, RIVER_X] : [BROOKLYN_X, MAP_W];
 }
+/**
+ * Sentido de circulación, como en Manhattan: avenidas y calles de sentido
+ * único alternado (la del puente es de doble sentido).
+ * Avenidas: +1 hacia el sur, -1 hacia el norte. Calles: +1 al este, -1 al oeste.
+ */
+export const aveDir = (a: number): 1 | -1 => (a % 2 === 0 ? 1 : -1);
+export const stDir = (j: number): 1 | -1 | 0 => (j === BRIDGE_STREET ? 0 : j % 2 === 0 ? 1 : -1);
+
 /** Altura de la acera por la que se cruza el puente a pie. */
 export const BRIDGE_WALK_Y = blockY(BRIDGE_STREET - 1) + BLOCK_H - 1.5;
 /**
@@ -174,7 +182,7 @@ export interface CityMapArt {
   tops: Record<string, number>;
 }
 
-const ROW_ABOVE = 46;
+const ROW_ABOVE = 72;
 const ROW_BELOW = 14;
 export const rowOf = (y: number) => Math.max(0, Math.min(ROWS - 1, Math.floor((y - ST_H) / (BLOCK_H + ST_H))));
 export const colOf = (x: number) => {
@@ -194,12 +202,20 @@ export function placeBounds(p: Place, tops: Record<string, number>) {
 
 type Ctx = CanvasRenderingContext2D;
 
-function canvas(h = MAP_H, offsetY = 0) {
+/**
+ * Escala del arte: la capa base (edificios, calles, árboles) se dibuja al
+ * doble de resolución para tener detalle fino; luces, neones y nieve van a
+ * resolución normal y se suavizan al ampliarse (brillo más cálido).
+ */
+export const ART_SCALE = 2;
+
+function canvas(h = MAP_H, offsetY = 0, scale = 1) {
   const c = document.createElement('canvas');
-  c.width = MAP_W;
-  c.height = h;
+  c.width = MAP_W * scale;
+  c.height = h * scale;
   const ctx = c.getContext('2d')!;
   ctx.imageSmoothingEnabled = false;
+  ctx.scale(scale, scale);
   ctx.translate(0, -offsetY);
   return { c, ctx };
 }
@@ -207,6 +223,65 @@ function canvas(h = MAP_H, offsetY = 0) {
 function rect(ctx: Ctx, x: number, y: number, w: number, h: number, color: string) {
   ctx.fillStyle = color;
   ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+}
+
+/**
+ * Texturas repetidas (a la resolución de la capa base): grano de asfalto,
+ * grava, juntas de ladrillo y baldosas. Pintar con un patrón es una sola
+ * llamada en vez de miles de puntos: el mapa se genera mucho más rápido.
+ */
+const patterns: Record<string, CanvasPattern> = {};
+function pattern(ctx: Ctx, kind: 'grano' | 'grava' | 'ladrillo' | 'baldosa'): CanvasPattern {
+  const key = kind;
+  if (patterns[key]) return patterns[key];
+  const c = document.createElement('canvas');
+  const rnd = mulberry32(hashKind(kind));
+  const px = c.getContext('2d')!;
+  if (kind === 'grano' || kind === 'grava') {
+    c.width = c.height = 48;
+    const n = kind === 'grano' ? 520 : 700;
+    for (let i = 0; i < n; i++) {
+      px.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.16)' : 'rgba(255,255,255,0.09)';
+      px.fillRect(Math.floor(rnd() * 48), Math.floor(rnd() * 48), 1, 1);
+    }
+    if (kind === 'grano') for (let i = 0; i < 6; i++) {
+      px.fillStyle = 'rgba(0,0,0,0.08)';
+      px.fillRect(Math.floor(rnd() * 40), Math.floor(rnd() * 44), 4 + Math.floor(rnd() * 6), 2 + Math.floor(rnd() * 3));
+    }
+  } else if (kind === 'ladrillo') {
+    c.width = 12;
+    c.height = 6;
+    px.fillStyle = 'rgba(0,0,0,0.13)';
+    px.fillRect(0, 2, 12, 1);
+    px.fillRect(0, 5, 12, 1);
+    px.fillRect(3, 0, 1, 2);
+    px.fillRect(9, 3, 1, 2);
+  } else {
+    c.width = c.height = 6;
+    px.fillStyle = 'rgba(0,0,0,0.07)';
+    px.fillRect(0, 5, 6, 1);
+    px.fillRect(5, 0, 1, 6);
+  }
+  const p = ctx.createPattern(c, 'repeat')!;
+  // un píxel del patrón = un píxel real de la capa base (medio píxel del mapa)
+  p.setTransform(new DOMMatrix().scale(1 / ART_SCALE));
+  patterns[key] = p;
+  return p;
+}
+function hashKind(k: string) {
+  let h = 7;
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  return h;
+}
+function patch(ctx: Ctx, kind: 'grano' | 'grava' | 'ladrillo' | 'baldosa', x: number, y: number, w: number, h: number) {
+  ctx.fillStyle = pattern(ctx, kind);
+  ctx.fillRect(x, y, w, h);
+}
+
+/** Rectángulo con precisión de medio píxel (detalle fino en la capa base 2×). */
+function fine(ctx: Ctx, x: number, y: number, w: number, h: number, color: string) {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x * 2) / 2, Math.round(y * 2) / 2, Math.max(0.5, Math.round(w * 2) / 2), Math.max(0.5, Math.round(h * 2) / 2));
 }
 
 function disc(ctx: Ctx, cx: number, cy: number, r: number, color: string) {
@@ -225,9 +300,9 @@ function glow(ctx: Ctx, x: number, y: number, r: number, rgb: string, a = 0.5) {
   ctx.fillRect(x - r, y - r, r * 2, r * 2);
 }
 
-const ROOFS = ['#4a4850', '#5b5960', '#3f3e46', '#6b6470', '#7a6a5a', '#56606a'];
+const ROOFS = ['#4a4858', '#5b5966', '#3f3e4e', '#6b6478', '#7a5a4a', '#56607a', '#4a6a6a', '#8a5a48'];
 /** Fachadas: ladrillo, piedra, brownstone, estuco… */
-const FACADES = ['#8e3b2e', '#7a3a2c', '#9a4a34', '#6b4a3a', '#b9a68a', '#a89478', '#5a4a48', '#7d6a5c', '#4f5d6e', '#8a7560'];
+const FACADES = ['#a8452e', '#8e3b2e', '#b85a3a', '#7a4a3a', '#d8c09a', '#c8a880', '#6a4a58', '#8a6a5c', '#5a6a8a', '#a8805a', '#c87850', '#4a5a7a'];
 const AWNINGS = ['#c0392b', '#2e8b57', '#2f6fb3', '#e2a23b', '#7b4fa0'];
 const WARM = ['#ffd27a', '#ffc85e', '#ffe2a0', '#f9b85a'];
 
@@ -268,10 +343,15 @@ function waterTower(a: Art, x: number, y: number) {
 function roof(a: Art, x: number, y: number, w: number, h: number, color: string, opts: { tower?: boolean; laundry?: boolean } = {}) {
   const { base, lights, snow, rand } = a;
   rect(base, x, y, w, h, color);
-  for (let i = 0; i < (w * h) / 9; i++) rect(base, x + 1 + rand() * (w - 2), y + 1 + rand() * (h - 2), 1, 1, shade(color, rand() < 0.5 ? -0.1 : 0.08));
-  rect(base, x, y, w, 1, shade(color, 0.3));
+  // grava fina (textura) y manchas de humedad
+  patch(base, 'grava', x, y, w, h);
+  for (let i = 0; i < (w * h) / 120; i++) fine(base, x + 2 + rand() * (w - 6), y + 2 + rand() * (h - 5), 2 + rand() * 3, 1 + rand() * 2, shade(color, -0.07));
+  // pretil con piedras de remate
+  rect(base, x, y, w, 1, shade(color, 0.32));
+  for (let xx = x; xx < x + w; xx += 2) fine(base, xx, y + 0.5, 0.5, 0.5, shade(color, 0.12));
   rect(base, x, y, 1, h, shade(color, 0.2));
-  rect(base, x + w - 1, y, 1, h, shade(color, -0.3));
+  rect(base, x + w - 1, y, 1, h, shade(color, -0.32));
+  fine(base, x + 1, y + h - 0.5, w - 2, 0.5, shade(color, -0.2));
   rect(snow, x + 1, y + 1, w - 2, h - 1, 'rgba(240,246,255,0.92)');
   const spot = (sw: number, sh: number) => ({ x: x + 2 + rand() * Math.max(1, w - sw - 4), y: y + 2 + rand() * Math.max(1, h - sh - 4) });
   const acs = Math.floor(rand() * 3);
@@ -279,28 +359,48 @@ function roof(a: Art, x: number, y: number, w: number, h: number, color: string,
     const s = spot(4, 3);
     rect(base, s.x, s.y + 1, 4, 3, '#55595f');
     rect(base, s.x, s.y, 4, 2, '#a9adb3');
-    rect(base, s.x + 1, s.y, 2, 1, '#6d7177');
+    fine(base, s.x + 0.5, s.y + 0.5, 3, 0.5, '#c9cdd3');
+    for (let k = 0; k < 3; k++) fine(base, s.x + 0.5 + k, s.y + 1, 0.5, 0.5, '#6d7177');
+    fine(base, s.x + 4, s.y + 1.5, 0.5, 2, 'rgba(10,8,20,0.4)');
   }
   if (w > 12 && h > 8 && rand() < 0.6) {
     const s = spot(4, 4);
     rect(base, s.x, s.y, 4, 4, '#5a5560');
     rect(base, s.x, s.y, 4, 2, '#7a7580');
+    fine(base, s.x + 0.5, s.y + 0.5, 3, 0.5, '#9a95a0');
   }
   if (w > 14 && h > 8 && rand() < 0.45) {
     const s = spot(6, 3);
     rect(base, s.x, s.y, 6, 3, '#6fa7c7');
     rect(base, s.x, s.y, 6, 1, '#a9d4ea');
+    for (let k = 1; k < 6; k += 2) fine(base, s.x + k, s.y, 0.5, 3, '#4f87a7');
     rect(lights, s.x, s.y, 6, 3, 'rgba(255,214,140,0.8)');
   }
   if (opts.laundry && w > 16 && h > 6) {
     const ly = y + 2 + Math.floor(rand() * (h - 4));
-    rect(base, x + 3, ly, w - 6, 1, '#d8d4c6');
-    for (let i = x + 4; i < x + w - 4; i += 3) rect(base, i, ly + 1, 2, 2, ['#e8414f', '#3b7bdc', '#ffd24a', '#f4efe2', '#3fbf6a'][Math.floor(rand() * 5)]);
+    fine(base, x + 3, ly, w - 6, 0.5, '#d8d4c6');
+    for (let i = x + 4; i < x + w - 4; i += 2.5) fine(base, i, ly + 0.5, 1.5, 2, ['#e8414f', '#3b7bdc', '#ffd24a', '#f4efe2', '#3fbf6a'][Math.floor(rand() * 5)]);
   }
   if ((opts.tower ?? rand() < 0.4) && w > 12 && h > 8) {
     const s = spot(10, 6);
     waterTower(a, s.x + 5, s.y + 4);
   }
+}
+
+/** Halo de una ventana encendida (precalculado: se estampa miles de veces). */
+let haloCache: HTMLCanvasElement | null = null;
+function halo(ctx: Ctx, x: number, y: number) {
+  if (!haloCache) {
+    haloCache = document.createElement('canvas');
+    haloCache.width = haloCache.height = 12;
+    const h = haloCache.getContext('2d')!;
+    const g = h.createRadialGradient(6, 6, 0, 6, 6, 6);
+    g.addColorStop(0, 'rgba(255,190,110,0.32)');
+    g.addColorStop(1, 'rgba(255,190,110,0)');
+    h.fillStyle = g;
+    h.fillRect(0, 0, 12, 12);
+  }
+  ctx.drawImage(haloCache, x - 6, y - 6);
 }
 
 interface FacadeOpts {
@@ -317,60 +417,82 @@ interface FacadeOpts {
   stoop?: boolean;
 }
 
-/** Fachada frontal: cornisa, ventanas (algunas encendidas), escalera de incendios y planta baja. */
+/** Fachada frontal: cornisa, ventanas con marco (algunas encendidas), escalera de incendios y planta baja. */
 function facade(a: Art, x: number, y: number, w: number, h: number, color: string, opts: FacadeOpts = {}) {
   const { base, lights, snow, rand } = a;
   rect(base, x, y, w, h, color);
-  // textura de ladrillo
-  for (let yy = y + 2; yy < y + h; yy += 2) for (let xx = x + ((yy - y) % 4 ? 0 : 2); xx < x + w; xx += 4) if (rand() < 0.4) rect(base, xx, yy, 1, 1, shade(color, -0.12));
-  rect(base, x, y, w, 1, shade(color, 0.3));
-  rect(base, x, y + 1, w, 1, shade(color, -0.25));
+  // luz cenital: arriba más claro, abajo en sombra
+  fine(base, x, y + h * 0.6, w, h * 0.4, shade(color, -0.07));
+  // ladrillo: hiladas con juntas de mortero (textura)
+  patch(base, 'ladrillo', x + 0.5, y + 2, w - 1, h - 2);
+  // cornisa con dentículos
+  rect(base, x, y, w, 1, shade(color, 0.32));
+  for (let xx = x; xx < x + w; xx += 1) fine(base, xx, y + 1, 0.5, 0.5, shade(color, -0.3));
+  fine(base, x, y + 1.5, w, 0.5, shade(color, -0.18));
   rect(snow, x, y, w, 1, 'rgba(245,250,255,0.95)');
   rect(base, x, y, 1, h, shade(color, 0.12));
   rect(base, x + w - 1, y, 1, h, shade(color, -0.35));
   const shopH = opts.shop ? 4 : 0;
   const ww = opts.win ?? 2;
-  // ventanas
+  const frame = shade(color, -0.4);
+  // ventanas con marco, parteluz y alféizar
   for (let yy = y + 3; yy <= y + h - shopH - 3; yy += 3) {
     for (let xx = x + 2; xx <= x + w - ww - 1; xx += ww + 2) {
-      rect(base, xx, yy, ww, 2, '#26304a');
-      rect(base, xx, yy + 2, ww, 1, shade(color, 0.2));
-      if (rand() < 0.42) rect(lights, xx, yy, ww, 2, rand() < 0.12 ? '#9fd3ff' : WARM[Math.floor(rand() * WARM.length)]);
+      fine(base, xx - 0.5, yy - 0.5, ww + 1, 2.5, frame);
+      rect(base, xx, yy, ww, 2, '#24304c');
+      fine(base, xx, yy, 0.5, 0.5, '#5a7aa8');
+      fine(base, xx + ww / 2 - 0.25, yy, 0.5, 2, frame);
+      fine(base, xx - 0.5, yy + 2, ww + 1, 0.5, shade(color, 0.28));
+      if (rand() < 0.42) {
+        const warm = rand() < 0.12 ? '#9fd3ff' : WARM[Math.floor(rand() * WARM.length)];
+        rect(lights, xx, yy, ww, 2, warm);
+        if (rand() < 0.22) halo(lights, xx + ww / 2, yy + 1);
+      }
     }
   }
-  // escalera de incendios en zigzag
+  // escalera de incendios en zigzag con barandilla
   if (opts.fireEscape && w > 12 && h > 9) {
     const fx = x + Math.floor(w / 2) - 4;
     for (let yy = y + 3; yy < y + h - shopH - 2; yy += 3) {
-      rect(base, fx, yy + 2, 8, 1, '#14101f');
-      rect(base, (Math.floor((yy - y) / 3) % 2 ? fx : fx + 7), yy, 1, 3, '#14101f');
+      fine(base, fx, yy + 2, 8, 0.5, '#14101f');
+      fine(base, fx, yy + 1, 8, 0.5, 'rgba(20,16,31,0.6)');
+      for (let k = 0; k < 8; k += 1.5) fine(base, fx + k, yy + 1, 0.5, 1, 'rgba(20,16,31,0.7)');
+      fine(base, Math.floor((yy - y) / 3) % 2 ? fx : fx + 7.5, yy, 0.5, 3, '#14101f');
     }
   }
   // planta baja
   if (opts.shop) {
     const sy = y + h - shopH;
     const aw = AWNINGS[Math.floor(rand() * AWNINGS.length)];
-    for (let xx = x + 1; xx < x + w - 1; xx += 2) rect(base, xx, sy, 1, 1, aw);
-    for (let xx = x + 2; xx < x + w - 1; xx += 2) rect(base, xx, sy, 1, 1, '#f1ede3');
+    // toldo a rayas con volante
+    for (let xx = x + 0.5; xx < x + w - 0.5; xx += 1) fine(base, xx, sy - 0.5, 0.5, 1.5, (xx - x) % 2 < 1 ? aw : '#f1ede3');
+    for (let xx = x + 0.5; xx < x + w - 0.5; xx += 1) fine(base, xx, sy + 1, 0.5, 0.5, shade(aw, -0.25));
     rect(base, x + 1, sy + 1, w - 2, 3, '#2c3446');
+    fine(base, x + 1, sy + 1.5, w - 2, 0.5, '#46526a');
     rect(lights, x + 1, sy + 1, w - 2, 3, '#ffdb94');
+    halo(lights, x + w / 2, sy + 3);
+    // mercancía en el escaparate
+    for (let xx = x + 2; xx < x + w - 2; xx += 2.5) fine(base, xx, sy + 2.5, 1, 1, ['#e8414f', '#ffd24a', '#3fbf6a', '#f4efe2', '#2f6fb3'][Math.floor(rand() * 5)]);
     if (opts.trim) rect(a.neon, x + 1, sy - 1, w - 2, 1, opts.trim);
     if (opts.sign && h >= 10) {
       const tw = textWidth(opts.sign);
       const tx = x + Math.floor((w - tw) / 2);
       rect(base, tx - 1, sy - 7, tw + 2, 6, '#1d1d24');
+      fine(base, tx - 1, sy - 7, tw + 2, 0.5, '#4a4a58');
       drawText(base, opts.sign, tx, sy - 6, '#f4efe2');
       drawText(lights, opts.sign, tx, sy - 6, rand() < 0.5 ? '#ffd27a' : '#9fe8ff');
     }
     const door = x + Math.floor(rand() * (w - 4)) + 1;
     rect(base, door, sy + 1, 3, 3, '#3a2a20');
+    fine(base, door + 2, sy + 2.5, 0.5, 0.5, '#ffd24a');
     rect(snow, x, sy, w, 1, 'rgba(245,250,255,0.9)');
   }
   if (opts.stoop) {
     const sx = x + Math.floor(w / 2) - 2;
     for (let k = 0; k < 3; k++) rect(base, sx - k, y + h - 3 + k, 5 + k * 2, 1, '#9a8a78');
+    fine(base, sx - 2, y + h - 1, 9, 0.5, '#b8a890');
   }
-  rect(base, x, y + h, w, 1, 'rgba(10,8,20,0.5)');
+  fine(base, x, y + h, w, 1, 'rgba(10,8,20,0.45)');
 }
 
 /** Edificio completo: huella (x, y, w, d) en el suelo y altura H. */
@@ -379,13 +501,15 @@ function building(a: Art, x: number, y: number, w: number, d: number, H: number,
   const fc = opts.facadeColor ?? FACADES[Math.floor(a.rand() * FACADES.length)];
   // Cada edificio con su propio azar: cambiar un solar no altera el resto del mapa.
   const own = mulberry32(Math.floor(a.rand() * 0x7fffffff));
+  // Más inclinación: las fachadas se ven más altas (volumen como en la vista 3/4 clásica).
+  H = Math.round(H * 1.5);
   markTop(a, x, y + d, y - H - (opts.tower ? 12 : 4));
   later(a, y + d, () => {
     const prev = a.rand;
     a.rand = own;
-    // sombra hacia el este sobre el suelo
-    a.base.fillStyle = 'rgba(10, 8, 20, 0.35)';
-    a.base.fillRect(x + w, y + d - Math.min(H, d), Math.min(4, Math.ceil(H / 3)), Math.min(H, d));
+    // sombra suave hacia el este: más oscura junto al edificio
+    const sw = Math.min(5, Math.ceil(H / 3));
+    for (let k = 0; k < sw * 2; k++) fine(a.base, x + w + k / 2, y + d - Math.min(H, d), 0.5, Math.min(H, d), `rgba(20,14,40,${0.38 * (1 - k / (sw * 2))})`);
     roof(a, x, y - H, w, d, roofColor, { tower: opts.tower, laundry: opts.laundry });
     if (opts.corrugated) for (let xx = x + 1; xx < x + w - 1; xx += 2) rect(a.base, xx, y - H + 1, 1, d - 2, shade(roofColor, -0.12));
     if (opts.sawtooth)
@@ -497,7 +621,8 @@ function genericBlock(a: Art, c: number, r: number, o: BlockOpts = {}) {
   if (district === 'industrial') chimney(a, x0 + 8 + Math.floor(a.rand() * (w0 - 16)), y0 + 4, 16 + Math.floor(a.rand() * 8));
   if (district === 'chinatown') lanterns(a, x0, y0 + h0, w0);
   // Árboles en la acera: renovación nivel 2 y las calles de Brooklyn Heights.
-  if (renov >= 2 || district === 'heights') for (let tx = x0 + 6; tx < x0 + w0 - 3; tx += 14) tree(a, tx, blockY(r) + BLOCK_H - 1, 2);
+  const leafy = renov >= 2 || district === 'heights' || (district !== 'muelles' && district !== 'industrial' && a.rand() < 0.5);
+  if (leafy) for (let tx = x0 + 6 + Math.floor(a.rand() * 4); tx < x0 + w0 - 3; tx += 12 + Math.floor(a.rand() * 6)) tree(a, tx, blockY(r) + BLOCK_H - 1, 2 + (a.rand() < 0.4 ? 1 : 0));
   a.rand = prevRand;
 }
 
@@ -562,15 +687,38 @@ function neonVertical(a: Art, text: string, x: number, y: number, color: string,
   for (let i = 0; i < text.length; i++) drawText(a.neon, text[i], x + 1, y + 2 + i * 6, color);
 }
 
+/** Disco con precisión de medio píxel. */
+function fineDisc(ctx: Ctx, cx: number, cy: number, r: number, color: string) {
+  ctx.fillStyle = color;
+  for (let y = -r; y <= r; y += 0.5) {
+    const w = Math.sqrt(Math.max(0, r * r - y * y));
+    ctx.fillRect(Math.round((cx - w) * 2) / 2, Math.round((cy + y) * 2) / 2, Math.round(w * 4) / 2, 0.5);
+  }
+}
+
+/** Árbol frondoso: copa de varias matas con luz arriba a la izquierda. */
 function tree(a: Art, x: number, y: number, r: number) {
+  const seed = (x * 73856093) ^ (y * 19349663);
   later(a, y, () => {
-    a.base.fillStyle = 'rgba(10,30,10,0.35)';
-    a.base.fillRect(x - r + 2, y - 1, r * 2, 3);
-    rect(a.base, x, y - 3, 1, 3, '#4a3020');
-    disc(a.base, x, y - 3 - r, r, '#2f6b2b');
-    disc(a.base, x - 1, y - 4 - r, r - 1, '#3d7f36');
-    rect(a.base, x - 1, y - 3 - r * 2 + 1, 2, 1, '#6aaa52');
-    disc(a.snow, x, y - 4 - r, r - 1, 'rgba(245,250,255,0.92)');
+    const rnd = mulberry32(seed >>> 0);
+    // sombra suave en el suelo
+    for (let k = 0; k < 4; k++) fine(a.base, x - r + 1 + k * 0.5, y - 0.5 + k * 0.25, r * 2 + 2 - k, 1.5 - k * 0.25, 'rgba(10,20,15,0.12)');
+    // tronco
+    fine(a.base, x - 0.5, y - 3.5, 1.5, 3.5, '#4a3020');
+    fine(a.base, x - 0.5, y - 3.5, 0.5, 3.5, '#6a4830');
+    const clumps = r <= 2 ? 3 : 5;
+    const cy = y - 3 - r;
+    const pts = Array.from({ length: clumps }, (_, i) => {
+      const an = (i / clumps) * Math.PI * 2 + rnd();
+      return { x: x + Math.cos(an) * r * 0.55, y: cy + Math.sin(an) * r * 0.45, r: r * (0.6 + rnd() * 0.25) };
+    });
+    for (const p of pts) fineDisc(a.base, p.x, p.y + 0.5, p.r + 0.5, '#1d3d22');
+    fineDisc(a.base, x, cy, r * 0.8, '#2a5a2c');
+    for (const p of pts) fineDisc(a.base, p.x, p.y, p.r, '#2f6b2b');
+    for (const p of pts) fineDisc(a.base, p.x - p.r * 0.25, p.y - p.r * 0.3, p.r * 0.6, '#3f8236');
+    for (const p of pts) fineDisc(a.base, p.x - p.r * 0.4, p.y - p.r * 0.5, p.r * 0.28, '#5f9f48');
+    for (let k = 0; k < r * 4; k++) fine(a.base, x - r + rnd() * r * 1.4, cy - r + rnd() * r, 0.5, 0.5, '#8ac06a');
+    fineDisc(a.snow, x, cy - 0.5, r, 'rgba(245,250,255,0.92)');
   });
 }
 
@@ -1314,58 +1462,105 @@ function civicExtras(a: Art, l: LotDef, id: string, level: number, works: boolea
 // Calles
 // --------------------------------------------------------------------------
 
+/** Flecha pintada en el asfalto (sentido de circulación). */
+function arrow(ctx: Ctx, x: number, y: number, dx: number, dy: number) {
+  const col = 'rgba(232,228,216,0.75)';
+  if (dy) {
+    fine(ctx, x - 0.25, y - 2.5 * dy, 0.5, 4, col);
+    for (let k = 0; k < 3; k++) fine(ctx, x - 0.25 - k * 0.5, y + (1.5 - k * 0.5) * dy, 0.5 + k, 0.5, col);
+  } else {
+    fine(ctx, x - 2.5 * dx, y - 0.25, 4, 0.5, col);
+    for (let k = 0; k < 3; k++) fine(ctx, x + (1.5 - k * 0.5) * dx, y - 0.25 - k * 0.5, 0.5, 0.5 + k, col);
+  }
+}
+
 function streets(a: Art, lamps: { x: number; y: number }[]) {
   const { base, snow } = a;
-  rect(base, 0, 0, MAP_W, MAP_H, '#38363c');
-  for (let i = 0; i < 5200; i++) rect(base, a.rand() * MAP_W, a.rand() * MAP_H, 1, 1, a.rand() < 0.5 ? '#302e34' : '#413f46');
+  rect(base, 0, 0, MAP_W, MAP_H, '#34323a');
+  // asfalto con grano fino y parches
+  patch(base, 'grano', 0, 0, MAP_W, MAP_H);
+  for (let i = 0; i < 160; i++) fine(base, a.rand() * MAP_W, a.rand() * MAP_H, 2 + a.rand() * 5, 1 + a.rand() * 2, '#302e36');
   for (let i = 0; i < AVES; i++) {
     const cx = aveX(i);
-    rect(base, cx - 1, 0, 1, MAP_H, '#d8b23a');
-    rect(base, cx + 1, 0, 1, MAP_H, '#d8b23a');
-    for (let yy = 0; yy < MAP_H; yy += 8) {
-      rect(base, cx - 5, yy, 1, 4, '#bdb8ac');
-      rect(base, cx + 5, yy, 1, 4, '#bdb8ac');
+    // avenidas de sentido único: dos carriles separados por línea discontinua
+    for (let yy = 0; yy < MAP_H; yy += 8) fine(base, cx - 0.25, yy, 0.5, 4, '#cfcabe');
+    fine(base, cx - AVE_W / 2 + 1.5, 0, 0.5, MAP_H, '#d8b23a');
+    fine(base, cx + AVE_W / 2 - 2, 0, 0.5, MAP_H, '#cfcabe');
+    for (let j = 0; j < ROWS; j++) {
+      const ay = blockY(j) + BLOCK_H / 2;
+      arrow(base, cx - 4, ay, 0, aveDir(i));
+      arrow(base, cx + 4, ay, 0, aveDir(i));
     }
   }
-  for (let j = 0; j <= ROWS; j++) for (let xx = 0; xx < MAP_W; xx += 8) rect(base, xx, stY(j), 4, 1, '#bdb8ac');
+  for (let j = 0; j <= ROWS; j++) {
+    const cy = stY(j);
+    if (stDir(j)) for (let xx = 0; xx < MAP_W; xx += 8) fine(base, xx, cy - 0.25, 4, 0.5, '#cfcabe');
+    else {
+      fine(base, 0, cy - 0.75, MAP_W, 0.5, '#d8b23a');
+      fine(base, 0, cy + 0.25, MAP_W, 0.5, '#d8b23a');
+    }
+    for (let c = 0; c < COLS; c++) {
+      const ax = blockX(c) + BLOCK_W / 2;
+      const d = stDir(j);
+      if (d) {
+        arrow(base, ax - 10, cy - 3.5, d, 0);
+        arrow(base, ax + 10, cy + 3.5, d, 0);
+      } else {
+        arrow(base, ax - 10, cy - 3.5, -1, 0);
+        arrow(base, ax + 10, cy + 3.5, 1, 0);
+      }
+    }
+  }
   for (let c = 0; c < COLS; c++)
     for (let r = 0; r < ROWS; r++) {
       const x = blockX(c), y = blockY(r);
       const d = districtOf(c, r);
       rect(base, x, y, BLOCK_W, BLOCK_H, '#8d8a86');
-      for (let xx = x; xx < x + BLOCK_W; xx += 6) rect(base, xx, y + BLOCK_H - SIDEWALK, 1, SIDEWALK, '#7c7975');
-      rect(base, x, y + BLOCK_H - 1, BLOCK_W, 1, '#6a6763');
+      // baldosas de acera (textura)
+      patch(base, 'baldosa', x, y, BLOCK_W, BLOCK_H);
+      // bordillo: luz arriba, sombra en la cuneta
+      fine(base, x, y + BLOCK_H - 1, BLOCK_W, 0.5, '#a9a6a0');
+      fine(base, x, y + BLOCK_H - 0.5, BLOCK_W, 0.5, '#5a5752');
+      fine(base, x + BLOCK_W - 0.5, y, 0.5, BLOCK_H, '#5a5752');
+      fine(base, x, y, 0.5, BLOCK_H, '#a9a6a0');
       rect(snow, x, y, BLOCK_W, BLOCK_H, 'rgba(235,242,252,0.7)');
-      // farolas en la acera sur (la visible)
+      // farolas dobles en la acera sur (la visible), con halo cálido
       for (const lx of [x + 6, x + BLOCK_W - 6]) {
         const ly = y + BLOCK_H - 2;
         lamps.push({ x: lx, y: ly });
         later(a, ly + 0.5, () => {
-          rect(base, lx, ly - 8, 1, 8, '#2e3b33');
-          rect(base, lx - 1, ly - 9, 3, 1, '#2e3b33');
-          rect(a.lights, lx - 1, ly - 8, 3, 1, '#ffe2a0');
+          fine(a.base, lx, ly - 9, 0.5, 9, '#1f2a24');
+          fine(a.base, lx + 0.5, ly - 9, 0.5, 9, '#2e3b33');
+          fine(a.base, lx - 1.5, ly - 9.5, 3.5, 0.5, '#2e3b33');
+          fine(a.base, lx - 2, ly - 9, 1, 1, '#d8c890');
+          fine(a.base, lx + 1.5, ly - 9, 1, 1, '#d8c890');
+          fine(a.base, lx - 0.5, ly - 1, 2, 1, '#1f2a24');
+          rect(a.lights, lx - 2, ly - 9, 1, 1, '#ffe2a0');
+          rect(a.lights, lx + 2, ly - 9, 1, 1, '#ffe2a0');
         });
       }
       sidewalkProps(a, x, y, d);
     }
-  // Cruces: asfalto, pasos de cebra y alcantarillas
+  // Cruces: asfalto limpio, pasos de cebra y alcantarillas
   for (let i = 0; i < AVES; i++)
     for (let j = 0; j <= ROWS; j++) {
       const cx = aveX(i), cy = stY(j);
-      rect(base, cx - AVE_W / 2, cy - ST_H / 2, AVE_W, ST_H, '#3c3a40');
-      for (let k = -AVE_W / 2 + 1; k < AVE_W / 2 - 1; k += 3) {
-        rect(base, cx + k, cy - ST_H / 2 - 3, 2, 3, '#e8e4d8');
-        rect(base, cx + k, cy + ST_H / 2, 2, 3, '#e8e4d8');
+      rect(base, cx - AVE_W / 2, cy - ST_H / 2, AVE_W, ST_H, '#38363e');
+      patch(base, 'grano', cx - AVE_W / 2, cy - ST_H / 2, AVE_W, ST_H);
+      for (let k = -AVE_W / 2 + 1; k < AVE_W / 2 - 1; k += 2) {
+        fine(base, cx + k, cy - ST_H / 2 - 3, 1, 3, '#e8e4d8');
+        fine(base, cx + k, cy + ST_H / 2, 1, 3, '#e8e4d8');
       }
-      for (let k = -ST_H / 2 + 1; k < ST_H / 2 - 1; k += 3) {
-        rect(base, cx - AVE_W / 2 - 3, cy + k, 3, 2, '#e8e4d8');
-        rect(base, cx + AVE_W / 2, cy + k, 3, 2, '#e8e4d8');
+      for (let k = -ST_H / 2 + 1; k < ST_H / 2 - 1; k += 2) {
+        fine(base, cx - AVE_W / 2 - 3, cy + k, 3, 1, '#e8e4d8');
+        fine(base, cx + AVE_W / 2, cy + k, 3, 1, '#e8e4d8');
       }
       if (a.rand() < 0.45) {
         const mx = Math.round(cx - 3 + a.rand() * 6);
         const my = Math.round(cy - 2 + a.rand() * 4);
-        rect(base, mx, my, 4, 2, '#252427');
-        rect(base, mx + 1, my, 2, 1, '#4a484e');
+        fineDisc(base, mx + 1.5, my + 1, 1.5, '#252427');
+        fine(base, mx + 0.5, my + 0.5, 2, 0.5, '#4a484e');
+        fine(base, mx + 0.5, my + 1.5, 2, 0.5, '#4a484e');
       }
     }
   for (let i = 0; i < AVES; i++) {
@@ -1762,14 +1957,11 @@ function puddles(ctx: Ctx, rand: () => number) {
 }
 
 /** Trozos del mapa: Manhattan y Brooklyn se dibujan por separado para no pintar lo que no se ve. */
-export const CHUNKS: [number, number][] = [
-  [0, RIVER_X + RIVER_W / 2],
-  [RIVER_X + RIVER_W / 2, MAP_W],
-];
+export const CHUNKS: [number, number][] = [[0, MAP_W]];
 
 export function generateCityMap(seed = 1985, look?: CityLook | null): CityMapArt {
   const rand = mulberry32(seed);
-  const g = { base: canvas(), lights: canvas(), neon: canvas(), snow: canvas() };
+  const g = { base: canvas(MAP_H, 0, ART_SCALE), lights: canvas(), neon: canvas(), snow: canvas() };
   const a: Art = { base: g.base.ctx, lights: g.lights.ctx, neon: g.neon.ctx, snow: g.snow.ctx, rand, seed, queue: [], tops: {} };
   const lamps: { x: number; y: number }[] = [];
   streets(a, lamps);
@@ -1829,7 +2021,7 @@ export function generateCityMap(seed = 1985, look?: CityLook | null): CityMapArt
   for (let r = 0; r < ROWS; r++) {
     const y = blockY(r) - ROW_ABOVE;
     const h = BLOCK_H + ROW_ABOVE + ROW_BELOW;
-    full.push({ y, depth: rowDepth(r), set: { base: canvas(h, y), lights: canvas(h, y), neon: canvas(h, y), snow: canvas(h, y) } });
+    full.push({ y, depth: rowDepth(r), set: { base: canvas(h, y, ART_SCALE), lights: canvas(h, y), neon: canvas(h, y), snow: canvas(h, y) } });
   }
   a.queue.sort((p, q) => p.key - q.key).forEach((d) => {
     const set = full[rowOf(d.key)].set;
@@ -1839,24 +2031,30 @@ export function generateCityMap(seed = 1985, look?: CityLook | null): CityMapArt
     a.snow = set.snow.ctx;
     d.draw();
   });
-  for (const lp of lamps) glow(g.lights.ctx, lp.x, lp.y - 4, 10, '255,206,120', 0.4);
+  // charco de luz de cada farola sobre la acera y la calzada
+  for (const lp of lamps) {
+    glow(g.lights.ctx, lp.x, lp.y - 3, 16, '255,196,110', 0.42);
+    glow(g.lights.ctx, lp.x, lp.y - 9, 5, '255,230,170', 0.6);
+  }
   const wet = canvas();
   puddles(wet.ctx, mulberry32(seed ^ 0x77));
 
   // Partimos cada capa en trozos (Manhattan y Brooklyn).
-  const slice = (src: HTMLCanvasElement, [x0, x1]: [number, number]) => {
+  const slice = (src: HTMLCanvasElement, [x0, x1]: [number, number], k = 1) => {
+    // Un solo trozo: se usa el lienzo tal cual (sin copiarlo).
+    if (x0 <= 0 && x1 >= MAP_W) return src;
     const c = document.createElement('canvas');
-    c.width = Math.ceil(x1 - x0);
+    c.width = Math.ceil((Math.floor(x1) - Math.floor(x0)) * k);
     c.height = src.height;
-    c.getContext('2d')!.drawImage(src, -Math.floor(x0), 0);
+    c.getContext('2d')!.drawImage(src, -Math.floor(x0) * k, 0);
     return c;
   };
   const rows: RowLayer[] = [];
   const grounds: CityMapArt['grounds'] = [];
   for (const ch of CHUNKS) {
     for (const f of full)
-      rows.push({ x: Math.floor(ch[0]), y: f.y, depth: f.depth, base: slice(f.set.base.c, ch), lights: slice(f.set.lights.c, ch), neon: slice(f.set.neon.c, ch), snow: slice(f.set.snow.c, ch) });
-    grounds.push({ x: Math.floor(ch[0]), base: slice(g.base.c, ch), lights: slice(g.lights.c, ch), neon: slice(g.neon.c, ch), snow: slice(g.snow.c, ch), wet: slice(wet.c, ch) });
+      rows.push({ x: Math.floor(ch[0]), y: f.y, depth: f.depth, base: slice(f.set.base.c, ch, ART_SCALE), lights: slice(f.set.lights.c, ch), neon: slice(f.set.neon.c, ch), snow: slice(f.set.snow.c, ch) });
+    grounds.push({ x: Math.floor(ch[0]), base: slice(g.base.c, ch, ART_SCALE), lights: slice(g.lights.c, ch), neon: slice(g.neon.c, ch), snow: slice(g.snow.c, ch), wet: slice(wet.c, ch) });
   }
   return { ground: grounds[0], grounds, rows, lamps, tops: a.tops };
 }
@@ -1865,4 +2063,137 @@ function hashPlace(id: string) {
   let h = 2166136261;
   for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
   return h >>> 0;
+}
+
+// --------------------------------------------------------------------------
+// Horizonte: el cielo al norte de la ciudad (día, atardecer y noche)
+// --------------------------------------------------------------------------
+
+/** Alto de la franja de cielo que se ve al norte del mapa. */
+export const HORIZON_H = 150;
+
+export interface SkyArt {
+  day: HTMLCanvasElement;
+  dusk: HTMLCanvasElement;
+  night: HTMLCanvasElement;
+}
+
+/** Nube de píxeles: varias bolas superpuestas con luz arriba y sombra abajo. */
+function cloud(ctx: Ctx, rand: () => number, cx: number, cy: number, w: number, light: string, mid: string, dark: string) {
+  const puffs = 3 + Math.floor(rand() * 3);
+  for (const [col, dy] of [
+    [dark, 2],
+    [mid, 0],
+    [light, -2],
+  ] as [string, number][]) {
+    for (let i = 0; i < puffs; i++) {
+      const px = cx - w / 2 + (i / (puffs - 1 || 1)) * w;
+      const r = (w / puffs) * (0.7 + ((i * 37) % 5) / 10);
+      ctx.fillStyle = col;
+      for (let y = -r; y <= r * 0.6; y += 1) {
+        const ww = Math.floor(Math.sqrt(Math.max(0, r * r - y * y)));
+        ctx.fillRect(Math.round(px - ww), Math.round(cy + y + dy - (col === light ? r * 0.25 : 0)), ww * 2, 1);
+      }
+    }
+  }
+}
+
+function skyline(ctx: Ctx, rand: () => number, base: number, color: string, lit?: string) {
+  let x = 0;
+  while (x < MAP_W) {
+    const w = 8 + Math.floor(rand() * 18);
+    const h = 10 + Math.floor(rand() * (rand() < 0.15 ? 46 : 24));
+    ctx.fillStyle = color;
+    ctx.fillRect(x, base - h, w, h);
+    if (rand() < 0.2) ctx.fillRect(x + Math.floor(w / 2), base - h - 6, 1, 6); // antena
+    if (lit)
+      for (let yy = base - h + 3; yy < base - 2; yy += 3)
+        for (let xx = x + 2; xx < x + w - 1; xx += 3) if (rand() < 0.22) {
+          ctx.fillStyle = lit;
+          ctx.fillRect(xx, yy, 1, 1);
+        }
+    x += w + Math.floor(rand() * 3);
+  }
+}
+
+function hills(ctx: Ctx, base: number, amp: number, freq: number, phase: number, color: string) {
+  ctx.fillStyle = color;
+  for (let x = 0; x < MAP_W; x++) {
+    const h = amp * (0.6 + 0.4 * Math.sin(x * freq + phase)) + amp * 0.3 * Math.sin(x * freq * 3.1 + phase * 2);
+    ctx.fillRect(x, Math.round(base - h), 1, Math.ceil(h) + 1);
+  }
+}
+
+/** Degradado del cielo con tramado (dither) entre bandas, al estilo pixel art. */
+function skyGradient(ctx: Ctx, stops: string[]) {
+  const band = HORIZON_H / (stops.length - 1);
+  for (let i = 0; i < stops.length - 1; i++) {
+    const y0 = Math.round(i * band);
+    const y1 = Math.round((i + 1) * band);
+    ctx.fillStyle = stops[i];
+    ctx.fillRect(0, y0, MAP_W, y1 - y0);
+    // tramado de transición
+    ctx.fillStyle = stops[i + 1];
+    for (let y = y1 - 6; y < y1; y++) for (let x = (y % 2) * 1; x < MAP_W; x += y > y1 - 3 ? 2 : 4) ctx.fillRect(x, y, 1, 1);
+  }
+}
+
+export function generateSky(seed = 1985): SkyArt {
+  const make = (draw: (ctx: Ctx, rand: () => number) => void) => {
+    const c = document.createElement('canvas');
+    c.width = MAP_W;
+    c.height = HORIZON_H;
+    const ctx = c.getContext('2d')!;
+    draw(ctx, mulberry32(seed));
+    return c;
+  };
+  const H = HORIZON_H;
+  const day = make((ctx, rand) => {
+    skyGradient(ctx, ['#3d7fd0', '#5a9be0', '#8cc0ee', '#bfe0f6']);
+    for (let i = 0; i < 9; i++) cloud(ctx, rand, rand() * MAP_W, 20 + rand() * 60, 30 + rand() * 40, '#ffffff', '#e8f0fa', '#bfd2e8');
+    hills(ctx, H - 20, 26, 0.012, 1, '#7fa6c2');
+    skyline(ctx, rand, H - 6, '#6a8aa6');
+    hills(ctx, H, 12, 0.03, 2, '#4f7a5a');
+  });
+  const dusk = make((ctx, rand) => {
+    // el atardecer de la referencia: azul arriba, rosa y naranja abajo
+    skyGradient(ctx, ['#2b2a6b', '#5a4a9a', '#b85a9a', '#f08a5d', '#ffc06a']);
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = 'rgba(255,240,255,0.8)';
+      ctx.fillRect(rand() * MAP_W, rand() * 30, 1, 1);
+    }
+    // sol poniente
+    const sx = MAP_W * 0.45, sy = H - 26;
+    for (let y = -14; y <= 14; y++) {
+      const ww = Math.floor(Math.sqrt(196 - y * y));
+      ctx.fillStyle = y < -6 ? '#fff2a8' : y < 4 ? '#ffd86a' : '#ffb84a';
+      ctx.fillRect(sx - ww, sy + y, ww * 2, 1);
+    }
+    for (let i = 0; i < 12; i++) cloud(ctx, rand, rand() * MAP_W, 22 + rand() * 70, 26 + rand() * 46, '#ffb0c8', '#e07aa8', '#9a5a9a');
+    hills(ctx, H - 18, 30, 0.011, 1, '#6a5aa0');
+    skyline(ctx, rand, H - 6, '#3a3470', '#ffd27a');
+    hills(ctx, H, 14, 0.028, 2, '#24203f');
+  });
+  const night = make((ctx, rand) => {
+    skyGradient(ctx, ['#05030f', '#0b0824', '#1a1240', '#2d1f5e']);
+    for (let i = 0; i < 160; i++) {
+      ctx.fillStyle = rand() < 0.15 ? '#ffffff' : 'rgba(220,220,255,0.6)';
+      ctx.fillRect(rand() * MAP_W, rand() * (H - 40), 1, 1);
+    }
+    // luna
+    const mx = MAP_W * 0.7, my = 34;
+    for (let y = -8; y <= 8; y++) {
+      const ww = Math.floor(Math.sqrt(64 - y * y));
+      ctx.fillStyle = '#f4efe2';
+      ctx.fillRect(mx - ww, my + y, ww * 2, 1);
+    }
+    ctx.fillStyle = '#d8d0bf';
+    ctx.fillRect(mx - 3, my - 2, 2, 2);
+    ctx.fillRect(mx + 2, my + 3, 3, 2);
+    for (let i = 0; i < 6; i++) cloud(ctx, rand, rand() * MAP_W, 30 + rand() * 60, 30 + rand() * 40, '#3a3470', '#2a2458', '#1d1840');
+    hills(ctx, H - 18, 28, 0.011, 1, '#1d1840');
+    skyline(ctx, rand, H - 6, '#141030', '#ffd27a');
+    hills(ctx, H, 12, 0.03, 2, '#0d0a20');
+  });
+  return { day, dusk, night };
 }

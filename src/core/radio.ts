@@ -38,3 +38,17 @@ export function radioJobs(seed: number, date: string): RadioJob[] {
 }
 
 export const RADIO_BY_ID = Object.fromEntries(POOL.map((j) => [j.id, j])) as Record<string, RadioJob>;
+
+/** Dónde se hace cada trabajo de la radio: un lugar ("place:id") o una manzana ("block:c,r"). */
+export const RADIO_PLACE: Record<string, string> = {
+  oficinas: 'place:bolsa',
+  puerto: 'block:4,6',
+  ninos: 'block:6,3',
+  pintar: 'block:7,3',
+  volantes: 'place:plaza',
+  mudanza: 'block:5,5',
+  cocina: 'place:pizza',
+  obra: 'block:7,1',
+  traduccion: 'block:0,4',
+  taxi: 'block:3,8',
+};

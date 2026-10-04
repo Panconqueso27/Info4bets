@@ -7,6 +7,8 @@ import {
   RIVER_X,
   RIVER_W,
   streetSpan,
+  aveDir,
+  stDir,
   COLS,
   generateCityMap,
   BLOCK_H,
@@ -29,6 +31,10 @@ import {
   stY,
   walkX,
   walkY,
+  ART_SCALE,
+  generateSky,
+  HORIZON_H,
+  type Place,
   type PlaceId,
 } from '../art/cityMap';
 import { lightAt, type Light } from '../art/daynight';
@@ -39,10 +45,17 @@ import { districtOf } from '../core/city';
 import type { Look } from '../core/types';
 import { randomLook } from '../art/character';
 import { bridge, type SceneModel, type Spot } from './bridge';
-import { drawPet, drawVending } from '../art/sprites';
+import { drawPet, drawVending, upscaleOutline } from '../art/sprites';
 import { thunder } from '../platform/audio';
 import { drawIcon } from '../art/icons';
 import { MEGA } from '../core/lots';
+
+/** Destino de un trabajo extra: un lugar del mapa o una manzana. */
+function destPlace(dest: string): Place {
+  if (dest.startsWith('place:')) return PLACE_BY_ID[dest.slice(6) as PlaceId];
+  const [c, r] = dest.slice(6).split(',').map(Number);
+  return { id: 'plaza', label: '', c, r };
+}
 
 /** Cambia la profundidad solo si varía: cada cambio obliga a reordenar la capa. */
 function depthOf(o: Phaser.GameObjects.Components.Depth & { depth: number }, d: number) {
@@ -51,10 +64,15 @@ function depthOf(o: Phaser.GameObjects.Components.Depth & { depth: number }, d: 
 }
 
 /** Ancho lógico de la vista: la ciudad se ve en vertical, como en un móvil. */
-export const VIEW_W = 180;
+/**
+ * Resolución: 2 = alta (doble de detalle), 1 = ahorro (móviles lentos).
+ * El mapa siempre se ve al mismo tamaño; solo cambia cuántos píxeles se pintan.
+ */
+let RES = 2;
+const viewW = () => 180 * RES;
 const WALK_SPEED = 20;
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 3;
+const minZoom = () => 0.5 * RES;
+const maxZoom = () => 3 * RES;
 
 function lookKey(look: Look): string {
   return `mini-${look.outfit}-${look.hair}-${look.skin}-${look.hairColor}-${look.outfitColor}`;
@@ -111,6 +129,7 @@ export class CityScene extends Phaser.Scene {
   private mapSets: { key: string; base: HTMLCanvasElement; snow: HTMLCanvasElement; wet?: HTMLCanvasElement; img: Phaser.GameObjects.Image }[] = [];
   private bakedMode = '';
   /** Trozos del mapa (Manhattan y Brooklyn): solo se dibujan los que ve la cámara. */
+  private skyImgs: Partial<Record<'day' | 'dusk' | 'night', Phaser.GameObjects.Image>> = {};
   private chunks: { x0: number; x1: number; imgs: Phaser.GameObjects.Image[]; row: number }[] = [];
   private cullX = -1;
   private umbrella!: Phaser.GameObjects.Image;
@@ -139,6 +158,8 @@ export class CityScene extends Phaser.Scene {
   private marker!: Phaser.GameObjects.Text;
   private labels: Phaser.GameObjects.Text[] = [];
   private spot: Spot = 'home';
+  /** Sitio del trabajo extra en curso (para salir de él al volver). */
+  private errandDest: string | null = null;
   private walkTween: Phaser.Tweens.TweenChain | null = null;
   private stepTimer = 0;
   private stepFrame = 0;
@@ -163,6 +184,14 @@ export class CityScene extends Phaser.Scene {
     // El mapa: suelo abajo y una capa por fila de manzanas, ordenadas por profundidad
     // para que los edificios tapen a lo que pasa por detrás.
     this.world = this.add.layer();
+    // Cielo al norte de la ciudad: día, atardecer y noche se funden según la hora.
+    const sky = generateSky();
+    for (const k of ['day', 'dusk', 'night'] as const) {
+      this.textures.addCanvas(`sky-${k}`, sky[k]);
+      const img = this.add.image(0, -HORIZON_H, `sky-${k}`).setOrigin(0).setDepth(-300).setAlpha(k === 'day' ? 1 : 0);
+      this.skyImgs[k] = img;
+      this.world.add(img);
+    }
     this.buildMap(bridge.get());
     this.signals = this.add.graphics().setDepth(-50);
     this.world.add(this.signals);
@@ -197,7 +226,7 @@ export class CityScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.setBackgroundColor('#120c24');
-    cam.setZoom(1);
+    cam.setZoom(RES);
     this.applyBounds();
     cam.centerOn(MAP_W / 2, MAP_H / 2);
     this.scale.on('resize', () => this.applyBounds());
@@ -218,8 +247,10 @@ export class CityScene extends Phaser.Scene {
   private applyBounds() {
     const cam = this.cameras.main;
     const zoom = cam.zoom;
-    const top = 150 / 2.2 / zoom;
-    const bottom = 230 / 2.2 / zoom;
+    // píxeles de pantalla por píxel del juego (para que el HUD y el panel no tapen los bordes)
+    const k = Math.max(0.5, this.scale.displaySize.width / Math.max(1, this.scale.gameSize.width));
+    const top = 130 / k / zoom + HORIZON_H;
+    const bottom = 170 / k / zoom;
     cam.setBounds(-8, -top, MAP_W + 16, MAP_H + top + bottom);
     const W = this.scale.width;
     const H = this.scale.height;
@@ -238,12 +269,12 @@ export class CityScene extends Phaser.Scene {
         side.width = 10;
         side.height = 7;
         drawCarSide(side.getContext('2d')!, color, 0, 1, police);
-        this.textures.addCanvas(`car-side-${police ? 'p' : i}`, side);
+        this.textures.addCanvas(`car-side-${police ? 'p' : i}`, upscaleOutline(side));
         const front = document.createElement('canvas');
         front.width = 6;
         front.height = 8;
         drawCarFront(front.getContext('2d')!, color, 0, 0, police);
-        this.textures.addCanvas(`car-front-${police ? 'p' : i}`, front);
+        this.textures.addCanvas(`car-front-${police ? 'p' : i}`, upscaleOutline(front));
       }
     });
   }
@@ -308,6 +339,15 @@ export class CityScene extends Phaser.Scene {
       t.add('1', 0, 6, 0, 6, 5);
     }
     tex('vending', 4, 7, (ctx) => drawVending(ctx, 0, 0));
+    tex('door-light', 10, 12, (ctx) => {
+      const g = ctx.createLinearGradient(0, 0, 0, 12);
+      g.addColorStop(0, 'rgba(255,214,140,0)');
+      g.addColorStop(1, 'rgba(255,214,140,0.9)');
+      ctx.fillStyle = g;
+      ctx.fillRect(2, 0, 6, 12);
+      ctx.fillStyle = 'rgba(255,240,200,0.9)';
+      ctx.fillRect(3, 6, 4, 6);
+    });
     tex('umbrella', 9, 6, (ctx) => {
       const c = ['#e8414f', '#f4efe2'];
       for (let x = 0; x < 9; x++) {
@@ -380,7 +420,10 @@ export class CityScene extends Phaser.Scene {
         this.textures.addCanvas(`${key}-${kind}`, set[kind]);
       }
       for (const v of ['s', 'w', 'sw']) if (this.textures.exists(`${key}-v${v}`)) this.textures.remove(`${key}-v${v}`);
-      const base = this.add.image(x, y, `${key}-base`).setOrigin(0).setDepth(depth);
+      const base = this.add.image(x, y, `${key}-base`).setOrigin(0).setDepth(depth).setScale(1 / ART_SCALE);
+      // Las luces y los neones se amplían suavizados: brillo cálido, no bloques.
+      this.textures.get(`${key}-lights`).setFilter(Phaser.Textures.FilterMode.LINEAR);
+      this.textures.get(`${key}-neon`).setFilter(Phaser.Textures.FilterMode.LINEAR);
       this.mapSets.push({ key, base: set.base, snow: set.snow, wet: set.wet, img: base });
       const lights = this.add.image(x, y, `${key}-lights`).setOrigin(0).setDepth(depth + 0.02).setBlendMode(Phaser.BlendModes.ADD);
       const neon = this.add.image(x, y, `${key}-neon`).setOrigin(0).setDepth(depth + 0.03).setBlendMode(Phaser.BlendModes.ADD);
@@ -421,10 +464,11 @@ export class CityScene extends Phaser.Scene {
         c.height = m.base.height;
         const ctx = c.getContext('2d')!;
         ctx.drawImage(m.base, 0, 0);
-        if (useWet) ctx.drawImage(m.wet!, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        if (useWet) ctx.drawImage(m.wet!, 0, 0, c.width, c.height);
         if (snow) {
           ctx.globalAlpha = 0.85;
-          ctx.drawImage(m.snow, 0, 0);
+          ctx.drawImage(m.snow, 0, 0, c.width, c.height);
         }
         this.textures.addCanvas(key, c);
       }
@@ -559,16 +603,22 @@ export class CityScene extends Phaser.Scene {
   private ensureMini(look: Look): string {
     const key = lookKey(look);
     if (this.textures.exists(key)) return key;
+    // Cada fotograma se dibuja a 1×, se amplía ×2 con contorno y se coloca en una tira.
+    const FW = MINI_W * 2 + 2;
+    const FH = MINI_H * 2 + 2;
     const c = document.createElement('canvas');
-    c.width = MINI_W * 6;
-    c.height = MINI_H;
+    c.width = FW * 6;
+    c.height = FH;
     const ctx = c.getContext('2d')!;
-    for (let f = 0; f < 3; f++) {
-      drawMini(ctx, look, f, f * MINI_W, 0);
-      drawMini(ctx, look, f, (f + 3) * MINI_W, 0, true);
+    for (let f = 0; f < 6; f++) {
+      const one = document.createElement('canvas');
+      one.width = MINI_W;
+      one.height = MINI_H;
+      drawMini(one.getContext('2d')!, look, f % 3, 0, 0, f >= 3);
+      ctx.drawImage(upscaleOutline(one), f * FW, 0);
     }
     const tex = this.textures.addCanvas(key, c)!;
-    for (let f = 0; f < 6; f++) tex.add(String(f), 0, f * MINI_W, 0, MINI_W, MINI_H);
+    for (let f = 0; f < 6; f++) tex.add(String(f), 0, f * FW, 0, FW, FH);
     return key;
   }
 
@@ -605,7 +655,9 @@ export class CityScene extends Phaser.Scene {
       // Nueva York: la mitad de los coches son taxis amarillos
       const ci = rand() < 0.5 ? 0 : Math.floor(rand() * CAR_COLORS.length);
       const axis: 'v' | 'h' = k % 2 === 0 ? 'v' : 'h';
-      const dir: 1 | -1 = rand() < 0.5 ? 1 : -1;
+      let dir: 1 | -1 = rand() < 0.5 ? 1 : -1;
+      // Dos carriles del mismo sentido (calles y avenidas de sentido único).
+      const laneSide = rand() < 0.5 ? 0 : 1;
       const speed = 16 + rand() * 14;
       let img: Phaser.GameObjects.Image;
       let lane: string;
@@ -613,10 +665,10 @@ export class CityScene extends Phaser.Scene {
       let max = MAP_H + 12;
       let cross = stCross;
       if (axis === 'v') {
-        // Se conduce por la derecha: hacia el sur por el carril oeste, hacia el norte por el este.
         const i = Math.floor(rand() * AVES);
-        img = this.add.image(aveX(i) + (dir > 0 ? -4 : 4), rand() * MAP_H, `car-front-${police ? 'p' : ci}`).setOrigin(0.5, 1);
-        lane = `v${i}${dir}`;
+        dir = aveDir(i);
+        img = this.add.image(aveX(i) + (laneSide ? 4 : -4), rand() * MAP_H, `car-front-${police ? 'p' : ci}`).setOrigin(0.5, 1).setScale(0.5);
+        lane = `v${i}${laneSide}`;
       } else {
         const j = Math.floor(rand() * (ROWS + 1));
         const side = rand() < 0.5 ? 'manhattan' : 'brooklyn';
@@ -624,9 +676,17 @@ export class CityScene extends Phaser.Scene {
         min = x0 - 12;
         max = x1 + 12;
         cross = aveCross.filter((x) => x > x0 && x < x1);
-        img = this.add.image(x0 + rand() * (x1 - x0), stY(j) + (dir > 0 ? 5 : -1), `car-side-${police ? 'p' : ci}`).setOrigin(0.5, 1);
+        const sd = stDir(j);
+        // En la calle del puente se circula por la derecha en cada sentido.
+        let ly: number;
+        if (sd === 0) ly = stY(j) + (dir > 0 ? 5 : -1);
+        else {
+          dir = sd;
+          ly = stY(j) + (laneSide ? 5 : -1);
+        }
+        img = this.add.image(x0 + rand() * (x1 - x0), ly, `car-side-${police ? 'p' : ci}`).setOrigin(0.5, 1).setScale(0.5);
         img.setFlipX(dir < 0);
-        lane = `h${j}${dir}${j === BRIDGE_STREET ? 'p' : side[0]}`;
+        lane = `h${j}${sd === 0 ? dir : laneSide}${j === BRIDGE_STREET ? 'p' : side[0]}`;
       }
       const light = this.add.image(img.x, img.y, 'headlight').setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDepth(99990);
       this.world.add([img, light]);
@@ -710,7 +770,7 @@ export class CityScene extends Phaser.Scene {
     const add = (c: number, r: number, extra: Partial<Walker> = {}) => {
       const look = randomLook(rand() < 0.5 ? 'inmigrante' : 'alcalde', rand);
       const key = this.ensureMini(look);
-      const sprite = this.add.sprite(walkX(c), walkY(r), key, '0').setOrigin(0.5, 1);
+      const sprite = this.add.sprite(walkX(c), walkY(r), key, '0').setOrigin(0.5, 1).setScale(0.5);
       this.world.add(sprite);
       const w: Walker = { sprite, c, r, ...extra };
       this.walkers.push(w);
@@ -740,30 +800,54 @@ export class CityScene extends Phaser.Scene {
     if (w.r > r0) opts.push([w.c, w.r - 1]);
     if (w.r < r1) opts.push([w.c, w.r + 1]);
     const [c, r] = opts[Math.floor(Math.random() * opts.length)];
-    const tx = walkX(c);
-    const ty = walkY(r);
-    const dist = Math.abs(tx - w.sprite.x) + Math.abs(ty - w.sprite.y);
-    const back = ty < w.sprite.y;
+    // Tramos: andar por la acera hasta la esquina, esperar al semáforo y cruzar por el paso de cebra.
+    const x0 = w.sprite.x;
+    const y0 = w.sprite.y;
+    const segs: { x: number; y: number; cross?: 0 | 1 }[] = [];
+    if (c > w.c) {
+      const cx = blockX(w.c) + BLOCK_W + 0.5;
+      segs.push({ x: cx, y: y0 }, { x: walkX(c), y: y0, cross: 1 });
+    } else if (c < w.c) {
+      segs.push({ x: blockX(c) + BLOCK_W + 0.5, y: y0, cross: 1 }, { x: walkX(c), y: y0 });
+    } else if (r > w.r) {
+      segs.push({ x: x0, y: blockY(r) + 1, cross: 0 }, { x: x0, y: walkY(r) });
+    } else {
+      segs.push({ x: x0, y: blockY(w.r) + 1 }, { x: x0, y: walkY(r), cross: 0 });
+    }
     let t = 0;
     const anim = this.time.addEvent({
       delay: 180,
       loop: true,
-      callback: () => w.sprite.setFrame(String((back ? 3 : 0) + 1 + (t++ % 2))),
+      callback: () => w.sprite.setFrame(String((r < w.r ? 3 : 0) + 1 + (t++ % 2))),
     });
-    this.tweens.add({
-      targets: w.sprite,
-      x: tx,
-      y: ty,
-      duration: (dist / (WALK_SPEED * 0.6)) * 1000,
-      onComplete: () => {
+    const step = (k: number) => {
+      if (!w.sprite.active) return anim.remove();
+      if (k >= segs.length) {
         anim.remove();
-        if (!w.sprite.active) return;
         w.sprite.setFrame('0');
         w.c = c;
         w.r = r;
         this.time.delayedCall(500 + Math.random() * 4000, () => this.wander(w));
-      },
-    });
+        return;
+      }
+      const sg = segs[k];
+      const go = () => {
+        const dist = Math.abs(sg.x - w.sprite.x) + Math.abs(sg.y - w.sprite.y);
+        if (sg.x !== w.sprite.x) w.sprite.setFlipX(sg.x < w.sprite.x);
+        this.tweens.add({ targets: w.sprite, x: sg.x, y: sg.y, duration: (dist / (WALK_SPEED * 0.6)) * 1000, onComplete: () => step(k + 1) });
+      };
+      if (sg.cross === undefined) return go();
+      // cruza la avenida (1) cuando las calles tienen verde; la calle (0) cuando lo tienen las avenidas
+      const now = this.time.now;
+      const phase = Math.floor(now / SIGNAL_MS) % 2;
+      const intoPhase = now % SIGNAL_MS;
+      const ok = phase === sg.cross && intoPhase < SIGNAL_MS - 2200;
+      if (ok) return go();
+      w.sprite.setFrame(r < w.r ? '3' : '0');
+      const wait = phase === sg.cross ? SIGNAL_MS - intoPhase + SIGNAL_MS : SIGNAL_MS - intoPhase;
+      this.time.delayedCall(wait + 200 + Math.random() * 600, go);
+    };
+    step(0);
   }
 
   // ---------------------------------------------------------------- personaje
@@ -790,7 +874,7 @@ export class CityScene extends Phaser.Scene {
     const key = this.ensureMini(m.look);
     if (!this.player) {
       const home = placeEntrance(PLACE_BY_ID[ROLE_PLACES[m.role].home]);
-      this.player = this.add.sprite(home.x, home.y, key, '0').setOrigin(0.5, 1);
+      this.player = this.add.sprite(home.x, home.y, key, '0').setOrigin(0.5, 1).setScale(0.5);
       this.world.add(this.player);
       initial = true;
     } else if (this.player.texture.key !== key && m.spot !== 'errand') {
@@ -803,18 +887,72 @@ export class CityScene extends Phaser.Scene {
     if (initial || m.spot === 'away') {
       this.walkTween?.stop();
       this.spot = m.spot;
+      this.errandDest = m.spot === 'errand' ? m.dest : null;
       this.place(m);
-      if (m.spot === 'errand') this.errandLoop(m);
+      if (m.spot === 'errand' && !m.dest) this.errandLoop(m);
       return;
     }
     if (m.spot === this.spot) return;
     const from = this.spot;
     this.spot = m.spot;
     const places = ROLE_PLACES[m.role];
-    if (m.spot === 'work') this.walk(route(PLACE_BY_ID[places.home], PLACE_BY_ID[places.work]), () => this.place(bridge.get()));
-    else if (m.spot === 'home' && from === 'work') this.walk(route(PLACE_BY_ID[places.work], PLACE_BY_ID[places.home]), () => this.place(bridge.get()));
-    else if (m.spot === 'errand') this.errandLoop(m);
-    else this.place(m);
+    const home = PLACE_BY_ID[places.home];
+    const work = PLACE_BY_ID[places.work];
+    if (m.spot === 'work') {
+      // Camina hasta su trabajo y entra por la puerta.
+      this.walk(route(home, work), () => this.enterAt(work, () => this.place(bridge.get())));
+    } else if (m.spot === 'home' && from === 'work') {
+      this.exitAt(work, () => this.walk(route(work, home), () => this.place(bridge.get())));
+    } else if (m.spot === 'errand' && m.dest) {
+      const dest = destPlace(m.dest);
+      this.errandDest = m.dest;
+      this.walk(route(home, dest), () => this.enterAt(dest, () => this.place(bridge.get())), m.vehicle === 'auto' ? WALK_SPEED * 2 : WALK_SPEED);
+    } else if (m.spot === 'errand') {
+      this.errandDest = null;
+      this.errandLoop(m);
+    } else if (m.spot === 'home' && from === 'errand' && this.errandDest) {
+      const dest = destPlace(this.errandDest);
+      this.errandDest = null;
+      this.exitAt(dest, () => this.walk(route(dest, home), () => this.place(bridge.get())));
+    } else this.place(m);
+  }
+
+  /** Entra por la puerta: la puerta se ilumina y el personaje desaparece dentro. */
+  private enterAt(p: Place, done: () => void) {
+    const pl = this.player;
+    if (!pl) return done();
+    const e = placeEntrance(p);
+    pl.setPosition(e.x, e.y).setFrame('3');
+    this.doorFlash(e.x, e.y);
+    this.tweens.add({ targets: pl, y: e.y - 3, alpha: 0, duration: 380, ease: 'Quad.easeIn', onComplete: () => {
+      pl.setVisible(false).setAlpha(1).setY(e.y);
+      done();
+    } });
+  }
+
+  /** Sale por la puerta del sitio. */
+  private exitAt(p: Place, done: () => void) {
+    const pl = this.player;
+    if (!pl) return done();
+    this.marker.setVisible(false);
+    const e = placeEntrance(p);
+    this.doorFlash(e.x, e.y);
+    pl.setVisible(true).setFrame('0').setPosition(e.x, e.y - 3).setAlpha(0);
+    this.tweens.add({ targets: pl, y: e.y, alpha: 1, duration: 380, ease: 'Quad.easeOut', onComplete: done });
+  }
+
+  private doorFlash(x: number, y: number) {
+    const d = this.add.image(x, y - 1, 'door-light').setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(y + 0.05).setAlpha(0);
+    this.world.add(d);
+    this.tweens.add({ targets: d, alpha: 1, duration: 160, yoyo: true, hold: 260, onComplete: () => d.destroy() });
+  }
+
+  /** Marca ▼ sobre el sitio donde está dentro el personaje. */
+  private markAbove(p: Place) {
+    const r = placeBounds(p, this.tops);
+    this.marker.setPosition(r.x + r.w / 2, r.y - 9).setVisible(true).setDepth(100001);
+    this.tweens.killTweensOf(this.marker);
+    this.tweens.add({ targets: this.marker, y: r.y - 13, duration: 450, yoyo: true, repeat: -1 });
   }
 
   /** El otro protagonista pasea entre su casa y su trabajo, con su nombre encima. */
@@ -831,7 +969,7 @@ export class CityScene extends Phaser.Scene {
     const tex = this.ensureMini(o.look);
     const places = ROLE_PLACES[o.role];
     const start = placeEntrance(PLACE_BY_ID[places.work]);
-    const sprite = this.add.sprite(start.x, start.y, tex, '0').setOrigin(0.5, 1);
+    const sprite = this.add.sprite(start.x, start.y, tex, '0').setOrigin(0.5, 1).setScale(0.5);
     const label = this.add
       .text(start.x, start.y - 12, o.name, { fontFamily: 'LC Body, sans-serif', fontSize: '5px', color: '#ffe066', stroke: '#14101f', strokeThickness: 2, resolution: 4 })
       .setOrigin(0.5, 1)
@@ -890,10 +1028,12 @@ export class CityScene extends Phaser.Scene {
     } else if (m.spot === 'work') {
       const e = placeEntrance(PLACE_BY_ID[places.work]);
       p.setVisible(false).setPosition(e.x, e.y);
-      const r = placeBounds(PLACE_BY_ID[places.work], this.tops);
-      this.marker.setPosition(r.x + r.w / 2, r.y - 9).setVisible(true).setDepth(100001);
-      this.tweens.killTweensOf(this.marker);
-      this.tweens.add({ targets: this.marker, y: r.y - 13, duration: 450, yoyo: true, repeat: -1 });
+      this.markAbove(PLACE_BY_ID[places.work]);
+    } else if (m.spot === 'errand' && m.dest) {
+      const dest = destPlace(m.dest);
+      const e = placeEntrance(dest);
+      p.setVisible(false).setPosition(e.x, e.y);
+      this.markAbove(dest);
     } else if (m.spot === 'away') {
       p.setVisible(false);
     }
@@ -983,7 +1123,7 @@ export class CityScene extends Phaser.Scene {
   }
 
   private setZoom(z: number) {
-    this.cameras.main.setZoom(Phaser.Math.Clamp(z, MIN_ZOOM, MAX_ZOOM));
+    this.cameras.main.setZoom(Phaser.Math.Clamp(z, minZoom(), maxZoom()));
     this.applyBounds();
     this.userPannedAt = this.time.now;
   }
@@ -1035,6 +1175,14 @@ export class CityScene extends Phaser.Scene {
     }
     for (const b of this.bases) b.setTint(ambient);
     this.bakeWeather(w === 'nieve', w === 'lluvia' || w === 'tormenta');
+    // cielo: atardecer al amanecer y al anochecer, noche cerrada después
+    const d = new Date(now);
+    const h = d.getHours() + d.getMinutes() / 60;
+    const dusk = Math.max(0, 1 - Math.abs(h - 6.6) / 1.6, 1 - Math.abs(h - 19.2) / 1.8);
+    this.skyImgs.dusk?.setAlpha(dusk);
+    this.skyImgs.night?.setAlpha(Math.max(0, l.night - dusk * 0.6));
+    const cloudy = w !== 'despejado' ? 0.75 : 1;
+    this.skyImgs.day?.setTint(cloudy < 1 ? 0xb0b8c8 : 0xffffff);
     const nightA = Math.max(0, (l.night - 0.1) / 0.9);
     // Las ventanas se encienden escalonadas al anochecer: primero el norte, luego el sur.
     for (const li of this.lightImgs) {
@@ -1067,12 +1215,14 @@ export class CityScene extends Phaser.Scene {
       this.weatherShown = w;
       this.precip.clear();
       this.drops = [];
+      // las gotas se dibujan a escala 2 (la vista tiene el doble de resolución)
+      this.precip.setScale(RES);
       const snow = w === 'nieve';
       const n = w === 'tormenta' ? 140 : snow ? 90 : w === 'lluvia' ? 95 : 0;
       for (let i = 0; i < (this.low ? n / 2 : n); i++) {
         const s = 0.6 + Math.random() * 0.8;
         const frame = snow ? (s > 1.1 ? 'snow' : 'snow-s') : s > 1 ? 'rain' : 'rain-far';
-        this.drops.push({ bob: this.precip.create(Math.random() * W, Math.random() * H, frame), s });
+        this.drops.push({ bob: this.precip.create((Math.random() * W) / RES, (Math.random() * H) / RES, frame), s });
       }
       this.precip.setVisible(n > 0);
       // La cámara del clima solo trabaja si hay algo que dibujar.
@@ -1090,11 +1240,11 @@ export class CityScene extends Phaser.Scene {
           b.y += delta * 0.22 * d.s;
           b.x -= delta * 0.05 * d.s;
         }
-        if (b.y > H) {
+        if (b.y > H / RES) {
           b.y = -8;
-          b.x = Math.random() * (W + 30);
+          b.x = Math.random() * (W / RES + 30);
         }
-        if (b.x < -4) b.x = W;
+        if (b.x < -4) b.x = W / RES;
       }
     }
     // relámpagos
@@ -1155,6 +1305,15 @@ export class CityScene extends Phaser.Scene {
   private lowQuality() {
     this.low = true;
     setLowFx(true);
+    // Baja a resolución normal (cuatro veces menos píxeles que pintar).
+    if (RES > 1) {
+      const z = this.cameras.main.zoom / RES;
+      RES = 1;
+      this.scale.setGameSize(viewW(), viewHeight(this.game.canvas.parentElement ?? document.body));
+      this.cameras.main.setZoom(Math.max(minZoom(), z));
+      this.weatherShown = '';
+      this.applyBounds();
+    }
     for (const c of this.clouds) c.setVisible(false);
     for (const w of this.walkers.splice(this.walkers.length / 2)) {
       this.tweens.killTweensOf(w.sprite);
@@ -1222,7 +1381,8 @@ export class CityScene extends Phaser.Scene {
     const m = bridge.get();
     if (!m.role) {
       this.drift += delta * 0.00008;
-      cam.centerOn(MAP_W / 2 + Math.sin(this.drift) * (MAP_W / 2 - 40), MAP_H / 2 + Math.cos(this.drift * 0.7) * (MAP_H / 2 - 60));
+      // En la portada, la cámara pasea con el cielo del horizonte a la vista.
+      cam.centerOn(MAP_W / 2 + Math.sin(this.drift) * (MAP_W / 2 - 60), 40 + (Math.cos(this.drift * 0.7) + 1) * 0.5 * MAP_H * 0.4);
       return;
     }
     if (time - this.userPannedAt < 5000 || this.drag) return;
@@ -1263,15 +1423,16 @@ export function setLowFx(on: boolean) {
 /** Alto lógico según la proporción del contenedor (pantalla del móvil). */
 export function viewHeight(parent: HTMLElement): number {
   const ratio = parent.clientHeight / Math.max(1, parent.clientWidth);
-  return Math.round(Math.max(260, Math.min(420, VIEW_W * ratio)));
+  return Math.round(Math.max(260 * RES, Math.min(420 * RES, viewW() * ratio)));
 }
 
 export function createGame(parent: HTMLElement): Phaser.Game {
   if (lowFx()) document.documentElement.classList.add('lowfx');
+  RES = lowFx() ? 1 : 2;
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,
-    width: VIEW_W,
+    width: viewW(),
     height: viewHeight(parent),
     pixelArt: true,
     backgroundColor: '#120c24',
@@ -1283,6 +1444,6 @@ export function createGame(parent: HTMLElement): Phaser.Game {
     audio: { noAudio: true },
     input: { activePointers: 3 },
   });
-  window.addEventListener('resize', () => game.scale.setGameSize(VIEW_W, viewHeight(parent)));
+  window.addEventListener('resize', () => game.scale.setGameSize(viewW(), viewHeight(parent)));
   return game;
 }

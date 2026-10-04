@@ -25,16 +25,16 @@ interface Key {
 }
 
 const KEYS: Key[] = [
-  { h: 0, top: 0x05030f, bottom: 0x1a1240, ambient: 0x4a4a8a, night: 1 },
-  { h: 4.5, top: 0x07051a, bottom: 0x241a52, ambient: 0x4c4c8c, night: 1 },
+  { h: 0, top: 0x05030f, bottom: 0x1a1240, ambient: 0x5a58a6, night: 1 },
+  { h: 4.5, top: 0x07051a, bottom: 0x241a52, ambient: 0x5c5aa8, night: 1 },
   { h: 6, top: 0x2b2a6b, bottom: 0xf08a5d, ambient: 0xb88a90, night: 0.6 },
   { h: 7.5, top: 0x4f8fd6, bottom: 0xf7c58f, ambient: 0xf8d4b0, night: 0.15 },
   { h: 10, top: 0x3d86d9, bottom: 0xa8d4f2, ambient: 0xffffff, night: 0 },
   { h: 16, top: 0x3a7fd0, bottom: 0xb3d6ee, ambient: 0xfff6ea, night: 0 },
   { h: 18.5, top: 0x5d5aa8, bottom: 0xf59a5b, ambient: 0xffb080, night: 0.25 },
   { h: 19.75, top: 0x2c2366, bottom: 0xd2546e, ambient: 0xb87890, night: 0.65 },
-  { h: 21, top: 0x0b0824, bottom: 0x2d1f5e, ambient: 0x5a5294, night: 0.95 },
-  { h: 24, top: 0x05030f, bottom: 0x1a1240, ambient: 0x4a4a8a, night: 1 },
+  { h: 21, top: 0x0b0824, bottom: 0x2d1f5e, ambient: 0x6a5eaa, night: 0.95 },
+  { h: 24, top: 0x05030f, bottom: 0x1a1240, ambient: 0x5a58a6, night: 1 },
 ];
 
 export function lerpColor(a: number, b: number, t: number): number {

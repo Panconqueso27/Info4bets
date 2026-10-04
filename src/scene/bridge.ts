@@ -26,6 +26,8 @@ export interface SceneModel {
   markers: Marker[];
   /** Sube cada vez que el personaje gana dinero (salta de alegría). */
   cheer: number;
+  /** A dónde va en un trabajo extra: "place:id" o "block:c,r" (entra por la puerta); null = da vueltas. */
+  dest: string | null;
   now: () => number;
 }
 
@@ -51,7 +53,7 @@ export type TapTarget = PlaceId | `lot:${string}` | `block:${number},${number}` 
 
 type Listener = (m: SceneModel) => void;
 
-let model: SceneModel = { role: null, look: null, spot: 'home', vehicle: 'pie', weather: 'despejado', other: null, city: null, citySig: '', pet: null, vending: 0, markers: [], cheer: 0, now: () => Date.now() };
+let model: SceneModel = { role: null, look: null, spot: 'home', vehicle: 'pie', weather: 'despejado', other: null, city: null, citySig: '', pet: null, vending: 0, markers: [], cheer: 0, dest: null, now: () => Date.now() };
 let focusHandler: ((x: number, y: number) => void) | null = null;
 const viewListeners = new Set<(v: ViewInfo) => void>();
 let lastView: ViewInfo | null = null;
