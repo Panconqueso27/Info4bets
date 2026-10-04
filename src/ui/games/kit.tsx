@@ -50,9 +50,16 @@ export function useMini(id: string, seconds = GAME_SECONDS) {
   const scoreRef = useRef(0);
   const startedAt = useRef(0);
 
+  const finish = () => {
+    setRecord(saveRecord(id, scoreRef.current));
+    setPhase('end');
+    play.achievement();
+  };
+
   useEffect(() => {
     if (phase !== 'play') return;
     startedAt.current = Date.now();
+    if (seconds <= 0) return;
     const iv = setInterval(() => {
       const l = Math.max(0, seconds - Math.floor((Date.now() - startedAt.current) / 1000));
       setLeft(l);
@@ -77,11 +84,18 @@ export function useMini(id: string, seconds = GAME_SECONDS) {
     /** Segundos jugados (para subir la dificultad). */
     elapsed: () => (phase === 'play' ? (Date.now() - startedAt.current) / 1000 : 0),
     start: () => setPhase('play'),
+    /** Termina antes de tiempo (juegos sin cronómetro, como Simon). */
+    end: () => finish(),
     hit: (n = 1) => {
       scoreRef.current += n;
       setScore(scoreRef.current);
       setCombo((c) => c + 1);
       play.coin();
+    },
+    /** Fija la puntuación sin sonido (marcas continuas: km, perritos...). */
+    set: (n: number) => {
+      scoreRef.current = n;
+      setScore(n);
     },
     miss: () => {
       setMisses((m) => m + 1);
@@ -102,6 +116,7 @@ export function MiniFrame({
   onClose,
   children,
   pays,
+  contest,
 }: {
   mini: ReturnType<typeof useMini>;
   title: string;
@@ -112,15 +127,19 @@ export function MiniFrame({
   children: ComponentChildren;
   /** Si el minijuego paga dinero en vez de acortar la jornada. */
   pays?: { per: number; fmt: (n: number) => string };
+  /** Concurso: muestra la marca a batir en vez de minutos o dinero. */
+  contest?: { target: number; fee: string; prize: string };
 } & MiniProps) {
   const best = records();
   return (
     <div class={`minigame mg-${cls}`}>
       <div class="mg-head">
         <span class="mg-title">{title}</span>
-        <span class={`mg-timer ${mini.left <= 10 ? 'hot' : ''}`}>⏱ {mini.left}s</span>
+        {mini.left > 0 && mini.left < 900 && <span class={`mg-timer ${mini.left <= 10 ? 'hot' : ''}`}>⏱ {mini.left}s</span>}
         <span class="mg-score">
-          ✔ {mini.score} · {pays ? `+${pays.fmt(mini.score * pays.per)}` : `−${mini.score * MINUTES_PER_POINT} min`}
+          {contest
+            ? `${fmtScore(mini.score)} / 🏆 ${contest.target}`
+            : `✔ ${mini.score} · ${pays ? `+${pays.fmt(mini.score * pays.per)}` : `−${mini.score * MINUTES_PER_POINT} min`}`}
         </span>
       </div>
       {mini.combo >= 3 && mini.playing && (
@@ -137,7 +156,11 @@ export function MiniFrame({
           <p>
             {intro}
             <br />
-            {pays ? (
+            {contest ? (
+              <>
+                Inscripción <b>{contest.fee}</b> · al campeón, <b>{contest.prize}</b>. El favorito del barrio hará unos <b>{contest.target} {unit}</b>.
+              </>
+            ) : pays ? (
               <>
                 Cada acierto te deja <b>{pays.fmt(pays.per)}</b> en la caja.
               </>
@@ -159,15 +182,21 @@ export function MiniFrame({
       {mini.phase === 'end' && (
         <div class="mg-overlay">
           <h3>
-            <Letters text="¡Tiempo!" />
+            <Letters text={contest ? '¡Se acabó!' : '¡Tiempo!'} />
           </h3>
           {mini.record && <div class="mg-record">¡NUEVO RÉCORD!</div>}
-          <div class="mg-big">{mini.score}</div>
+          <div class="mg-big">{fmtScore(mini.score)}</div>
           <p>
-            {unit} ({mini.misses} fallos) · {pays ? <>ganas <b>{pays.fmt(mini.score * pays.per)}</b></> : <>tu jornada se acorta <b>{mini.score * MINUTES_PER_POINT} minutos</b></>}
+            {contest ? (
+              <>{unit} · el jurado reparte los premios…</>
+            ) : (
+              <>
+                {unit} ({mini.misses} fallos) · {pays ? <>ganas <b>{pays.fmt(mini.score * pays.per)}</b></> : <>tu jornada se acorta <b>{mini.score * MINUTES_PER_POINT} minutos</b></>}
+              </>
+            )}
           </p>
           <button class="btn big-cta" onClick={() => onFinish(mini.score)}>
-            {pays ? 'Cerrar el puesto' : 'Volver al trabajo'}
+            {contest ? 'Ver la clasificación' : pays ? 'Cerrar el puesto' : 'Volver al trabajo'}
           </button>
         </div>
       )}
@@ -192,5 +221,7 @@ export function useLoop(active: boolean, fn: (dt: number) => void) {
     return () => cancelAnimationFrame(raf);
   }, [active]);
 }
+
+const fmtScore = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 export const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];

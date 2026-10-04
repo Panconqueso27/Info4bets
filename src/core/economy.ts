@@ -423,6 +423,7 @@ export const CAT_LABEL: Record<string, string> = {
   apuestas: '🎲 Apuestas y lotería',
   sucesos: '⚡ Sucesos',
   premios: '🏆 Premios y misiones',
+  concursos: '🥇 Concursos',
   inversiones: '🏗 Compras e inversiones',
   gastos: '🏠 Gastos del día a día',
   impuestos: '🧾 Impuestos',

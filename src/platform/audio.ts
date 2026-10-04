@@ -177,6 +177,8 @@ export const play = {
       noise(t, 0.08, 0.35, 600, 0.8);
     }),
   error: () => sfx((t) => tone(160, t, 0.25, 'square', 0.12, 120)),
+  /** Nota suelta (Simon). */
+  tone: (f: number) => sfx((t) => tone(f, t, 0.28, 'square', 0.13)),
   achievement: () =>
     sfx((t) => {
       [392, 523, 659, 784].forEach((f, i) => tone(f, t + i * 0.1, 0.2, 'square', 0.12));

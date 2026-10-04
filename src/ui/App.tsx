@@ -75,8 +75,12 @@ import { BlockModal, LotCard, MegaCard, PropertiesModal, type CityActions } from
 import { Modal } from './Panels';
 import { cityLook, citySignature, LOT_BY_ID, MEGA_BY_ID } from '../core/lots';
 import { applyHotdogs, auctionLot, betBaseball, betRace, buyBond, buyRastro, buyTicket, racesOpen, rastroOpen, startClasses, startTaxi } from '../core/economy';
-import { BackupModal, BaseballModal, BondsModal, ExtrasModal, LotteryModal, RaceModal, RastroModal, type ExtraPanel } from './Extras7';
+import { BackupModal, BaseballModal, BondsModal, ContestResultModal, ContestsModal, ExtrasModal, LotteryModal, RaceModal, RastroModal, type ExtraPanel } from './Extras7';
 import { Hotdogs } from './games/Street';
+import { Breakdance, Eating, Marathon, SimonGame, type ContestInfo } from './games/Contests';
+import { CONTEST_BY_ID, contestPrizes, contestRivals, enterContest, finishContest, withdrawContest, contestFee, type ContestResult } from '../core/contests';
+
+const CONTEST_GAMES: Record<string, (p: MiniProps & { contest: ContestInfo }) => any> = { breakdance: Breakdance, perritos: Eating, simon: SimonGame, maraton: Marathon };
 import { Minimap } from './Minimap';
 import type { Marker } from '../scene/bridge';
 
@@ -115,6 +119,7 @@ export function App() {
   const [tutTick, setTutTick] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
   const [extra, setExtra] = useState<ExtraPanel | null>(null);
+  const [contestResult, setContestResult] = useState<{ id: string; result: ContestResult } | null>(null);
   const moneyRef = useRef<number | null>(null);
   const cheer = useRef(0);
   const cityRef = useRef({ sig: '\u0000', look: cityLook(null) });
@@ -419,7 +424,27 @@ export function App() {
   else if (reward) overlay = <RewardModal title={reward.title} text={reward.text} onClose={() => setReward(null)} />;
   else if (minigame === 'menu')
     overlay = <MiniGameMenu role={state.character.role} onPick={(id) => { audio.play.click(); setMinigame(id); }} onClose={() => setMinigame(null)} />;
-  else if (minigame) {
+  else if (contestResult) overlay = <ContestResultModal state={state} id={contestResult.id} result={contestResult.result} onClose={() => setContestResult(null)} />;
+  else if (minigame?.startsWith('contest:')) {
+    const id = minigame.slice(8);
+    const c = CONTEST_BY_ID[id];
+    const Game = CONTEST_GAMES[id];
+    const fmt = ROLES[state.character.role].formatMoney;
+    overlay = (
+      <Game
+        contest={{ target: contestRivals(state, id)[0].score, fee: fmt(contestFee(state, c)), prize: fmt(contestPrizes(state, c)[0]) }}
+        onClose={() => {
+          setMinigame(null);
+          act((s) => withdrawContest(s, id));
+        }}
+        onFinish={(score) => {
+          setMinigame(null);
+          const r = ask((s, t) => finishContest(s, id, score, t));
+          if (r) setContestResult({ id, result: r });
+        }}
+      />
+    );
+  } else if (minigame) {
     const Game = MINIGAMES[minigame];
     const id = minigame;
     overlay = (
@@ -476,6 +501,20 @@ export function App() {
   else if (extra === 'carreras') overlay = <RaceModal state={state} now={now} onBet={(h, st) => ask((s, t) => betRace(s, h, st, t))} onClose={() => setExtra(null)} />;
   else if (extra === 'beisbol') overlay = <BaseballModal state={state} now={now} onBet={(team, st) => ask((s, t) => betBaseball(s, team, st, t))} onClose={() => setExtra(null)} />;
   else if (extra === 'loteria') overlay = <LotteryModal state={state} onBuy={(n) => act((s, t) => buyTicket(s, n, t))} onClose={() => setExtra(null)} />;
+  else if (extra === 'concursos')
+    overlay = (
+      <ContestsModal
+        state={state}
+        now={now}
+        onEnter={(id) => {
+          if (ask((s, t) => (enterContest(s, id, t), true))) {
+            setExtra(null);
+            setMinigame(`contest:${id}`);
+          }
+        }}
+        onClose={() => setExtra(null)}
+      />
+    );
   else if (extra === 'bonos') overlay = <BondsModal state={state} now={now} onBuy={(amount, days) => act((s, t) => buyBond(s, amount, days, t))} onClose={() => setExtra(null)} />;
   else if (target?.startsWith('block:'))
     overlay = <BlockModal state={state} blockKey={target.slice(6)} now={now} onRenovate={() => act((s, t) => renovateBlock(s, target.slice(6), t))} onClose={() => setTarget(null)} />;

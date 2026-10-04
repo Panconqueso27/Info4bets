@@ -110,9 +110,10 @@ export function Dock({
   const block = canStartShift(state, now);
   const isImm = state.character.role === 'inmigrante';
   const errandOk = canStartErrand(state, now) === null;
+  // Panel compacto: el reparto se ofrece como botón pequeño (lo demás está en 🎯 Extras).
   const errandBtn = errandOk && (
-    <button class="btn secondary errand-btn" onClick={onErrand}>
-      📦 Repartir paquetes · {errandHours(state)}h · +{role.formatMoney(ERRAND_PAY)}
+    <button class="btn secondary small-cta" onClick={onErrand}>
+      📦 {errandHours(state)}h · +{role.formatMoney(ERRAND_PAY)}
     </button>
   );
   let body;
@@ -126,12 +127,9 @@ export function Dock({
             {e.kind && e.kind !== 'reparto' ? `${{ radio: '📻', taxi: '🚕', clases: '📚' }[e.kind]} ${e.label}` : '📦 Repartiendo paquetes por la ciudad'} · vuelve en <b>{formatDuration(e.endsAt - now)}</b>
           </span>
         </div>
-        <div class="progress errand">
+        <div class="progress errand slim">
           <div style={{ width: `${Math.min(1, (now - e.startedAt) / (e.endsAt - e.startedAt)) * 100}%` }} />
         </div>
-        <button class="btn" disabled>
-          {role.goToWork} (al volver)
-        </button>
       </>
     );
   } else if (shift) {
@@ -152,7 +150,7 @@ export function Dock({
           )}
         </div>
         {!shift.cancelled && (
-          <div class="progress">
+          <div class="progress slim">
             <div style={{ width: `${done * 100}%` }} />
           </div>
         )}
@@ -161,15 +159,9 @@ export function Dock({
             {shift.cancelled ? 'Volver a casa' : `${role.retire} (+${role.formatMoney(shiftPay(state))})`}
           </button>
         ) : (
-          <div class="row">
-            <button class="btn minigame-btn" onClick={onMinigame}>
-              {isImm ? '🍽 Minijuegos' : '🖋 Minijuegos'}
-              <small>−{MINUTES_PER_POINT} min por acierto · 5 juegos</small>
-            </button>
-            <button class="btn secondary" disabled>
-              {role.retire}
-            </button>
-          </div>
+          <button class="btn minigame-btn" onClick={onMinigame}>
+            {isImm ? '🍽' : '🖋'} Minijuegos <small>−{MINUTES_PER_POINT} min/acierto</small>
+          </button>
         )}
       </>
     );
@@ -189,38 +181,35 @@ export function Dock({
     body = (
       <>
         <div class="status">
-          <span>Jornada de hoy cumplida.</span> <span class="hint">Vuelve mañana para mantener la racha 🔥</span>
+          <span>✔ Jornada cumplida.</span> <span class="hint">Mira 🎯 Extras para ganar más.</span>
         </div>
-        {errandBtn || (
-          <button class="btn" disabled>
-            Hasta mañana
-          </button>
-        )}
+        {errandBtn}
       </>
     );
   } else {
     body = (
       <>
         <div class="status">
-          <span class="warn">Hoy aún no fuiste {role.toWorkplace}.</span>{' '}
-          <span class="hint">Si no vas, pierdes la racha y el sueldo.</span>
+          <span class="warn">Hoy aún no fuiste {role.toWorkplace}.</span> <span class="hint">Sin ir, pierdes racha y sueldo.</span>
         </div>
-        <button class="btn" onClick={onStart}>
-          {role.goToWork} · 8h
-        </button>
-        {errandBtn}
+        <div class="dock-row">
+          <button class="btn" onClick={onStart}>
+            {role.goToWork} · 8h
+          </button>
+          {errandBtn}
+        </div>
       </>
     );
   }
 
   return (
-    <div class="dock">
-      {body}
+    <div class="dock compact">
       {state.pending.length > 0 && (
-        <button class="btn pending-alert" style={{ marginTop: 8 }} onClick={onOpenEvent}>
-          ⚠ Tienes {state.pending.length === 1 ? 'un suceso pendiente' : `${state.pending.length} sucesos pendientes`}
+        <button class="pending-pill" onClick={onOpenEvent}>
+          ⚠ {state.pending.length === 1 ? '1 suceso' : `${state.pending.length} sucesos`}
         </button>
       )}
+      {body}
       <div class="dock-tools">
         {TOOLS.filter((t) => !t.role || t.role === state.character.role).map((t) => (
           <button key={t.id + t.label} class={`tool ${t.id === 'bolsa' && marketSession(state, now) ? 'live' : ''}`} onClick={() => onPanel(t.id)}>

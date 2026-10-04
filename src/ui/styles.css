@@ -3578,3 +3578,425 @@ body {
   color: #fff;
   font-family: var(--pixel);
 }
+
+/* ---------- 0.8: títulos y botones en Pixelify negrita (más legible) */
+.btn,
+.tool,
+.badge,
+.kicker,
+.deck-kicker,
+.stamp,
+.mg-title,
+.mg-timer,
+.tab,
+.chip-btn,
+.game-info b,
+.missions-head,
+.modal h3,
+.dcard-title,
+.screen h2 {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.tool {
+  font-size: 9px;
+}
+
+/* ---------- 0.8: panel inferior compacto (deja más pantalla a la ciudad) */
+.dock.compact {
+  padding: 10px 12px 9px;
+}
+.dock.compact .status {
+  font-size: 14px;
+  line-height: 1.15;
+  min-height: 0;
+  margin-bottom: 5px;
+  padding-right: 70px;
+}
+.dock.compact .btn {
+  padding: 9px 10px;
+  font-size: 11px;
+}
+.dock.compact .minigame-btn small {
+  display: inline;
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+.dock-row {
+  display: flex;
+  gap: 6px;
+}
+.dock-row .btn {
+  flex: 1;
+}
+.dock-row .small-cta {
+  flex: 0 0 auto;
+  width: auto;
+}
+.progress.slim {
+  height: 6px;
+  margin: 2px 0 6px;
+  border-width: 1px;
+}
+.dock.compact .dock-tools {
+  margin-top: 6px;
+  gap: 4px;
+  grid-auto-columns: calc((100% - 28px) / 8);
+  padding-bottom: 0;
+}
+.dock.compact .tool {
+  padding: 3px 0 2px;
+  font-size: 7px;
+}
+.dock.compact .tool-ic {
+  height: 22px;
+}
+.dock.compact .tool .pixel-icon {
+  width: 18px !important;
+  height: 18px !important;
+}
+.pending-pill {
+  position: absolute;
+  top: 9px;
+  right: 12px;
+  padding: 4px 8px;
+  border: none;
+  background: var(--bad);
+  color: #fff;
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 10px;
+  box-shadow: 0 2px 0 #000;
+  animation: pulse 0.8s steps(2) infinite;
+}
+/* HUD más compacto también */
+.hud {
+  padding: 9px 12px 7px;
+}
+.hud .bars {
+  gap: 3px 10px;
+}
+.hud .bar-head {
+  font-size: 12px;
+}
+.hud .bar-track {
+  height: 5px;
+}
+
+/* ---------- 0.8: concursos */
+.contest.open {
+  box-shadow: inset 0 0 0 2px #ffcc33, 0 0 14px rgba(255, 204, 51, 0.25);
+}
+.contest-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.contest-head > div {
+  display: grid;
+}
+.contest-head b {
+  color: var(--accent);
+  font-size: 15px;
+}
+.contest-head small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.contest-prizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 13px;
+}
+.passive-total.lost b {
+  color: #ff8a8a;
+}
+.podium {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.podium li {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 14px;
+}
+.podium li.you {
+  background: rgba(255, 224, 102, 0.15);
+  box-shadow: inset 0 0 0 1px #ffe066;
+  color: #ffe066;
+}
+/* breakdance */
+.dance-floor {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 25%, transparent 25% 50%), radial-gradient(ellipse at 50% 100%, #3a1a5a, #0d0a1a 70%);
+}
+.dance-lane {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 25%;
+}
+.dance-note {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 30px;
+  text-shadow: 0 0 10px currentColor, 2px 2px 0 #000;
+}
+.dance-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #fff;
+  box-shadow: 0 0 12px #ff4f9a;
+}
+.dance-judge {
+  position: absolute;
+  top: 40%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 22px;
+  color: #ffe066;
+  text-shadow: 0 0 10px #ff4f9a, 2px 2px 0 #000;
+  animation: comboPop 0.35s cubic-bezier(0.2, 1.8, 0.4, 1);
+}
+.dance-pads {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 10px;
+}
+.dance-pad {
+  height: 64px;
+  background: #1a1430;
+  border: 3px solid;
+  font-size: 28px;
+  box-shadow: 0 4px 0 #000;
+}
+.dance-pad:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #000;
+}
+/* comer perritos */
+.eat-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: linear-gradient(180deg, #3f86c8 0 35%, #e8d29a 35%);
+}
+.eat-plate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 260px;
+  min-height: 20px;
+  justify-content: center;
+}
+.eat-done {
+  width: 18px;
+  height: 8px;
+  border-radius: 4px;
+  background: #e2a23b;
+  border: 1px solid #000;
+}
+.eat-dog {
+  position: relative;
+  width: 160px;
+  height: 60px;
+}
+.eat-dog .sausage {
+  transition: right 0.1s;
+}
+.choke,
+.stamina {
+  width: 80%;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: #14101f;
+}
+.choke-bar {
+  height: 12px;
+  background: #14101f;
+  border: 2px solid #000;
+}
+.choke-bar span {
+  display: block;
+  height: 100%;
+}
+.eat-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 12px;
+}
+.eat-btn {
+  height: 78px;
+  background: #c0392b;
+  color: #fff;
+  border: 3px solid #000;
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 5px 0 #000;
+}
+.eat-btn.alt {
+  background: #2f6fb3;
+}
+.eat-btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #000;
+}
+.eat-btn:disabled {
+  opacity: 0.5;
+}
+/* Simon */
+.simon-stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 18px;
+  background: radial-gradient(circle, #2a2050, #0d0a1a 70%);
+}
+.simon {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 50%;
+  background: #14101f;
+  box-shadow: 0 0 0 4px #000, 0 6px 0 4px #000;
+}
+.simon-pad {
+  border: none;
+  filter: brightness(0.55);
+  transition: filter 0.08s;
+}
+.simon-pad.lit {
+  filter: brightness(1.35);
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.6);
+}
+.simon-pad.p0 {
+  border-radius: 100% 0 0 0;
+}
+.simon-pad.p1 {
+  border-radius: 0 100% 0 0;
+}
+.simon-pad.p2 {
+  border-radius: 0 0 0 100%;
+}
+.simon-pad.p3 {
+  border-radius: 0 0 100% 0;
+}
+.simon-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 90px;
+  height: 90px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #14101f;
+  border: 4px solid #000;
+  font-family: var(--pixel);
+  font-weight: 700;
+  color: #ffe066;
+  pointer-events: none;
+}
+.simon-info {
+  font-family: var(--pixel);
+  color: var(--muted);
+}
+/* maratón */
+.run-stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: linear-gradient(180deg, #8fc0e8 0 40%, #3f7a3a 40%);
+  touch-action: none;
+}
+.run-road {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 52%;
+  height: 50px;
+  background: repeating-linear-gradient(90deg, #5a5660 0 40px, #f4efe2 40px 46px);
+  background-size: 46px 50px;
+}
+.runner {
+  position: relative;
+  top: 6px;
+  font-size: 40px;
+  transform: scaleX(-1);
+}
+.runner.tired {
+  opacity: 0.6;
+}
+.speedo {
+  position: relative;
+  width: 80%;
+  height: 18px;
+  background: #ff4a5a;
+  border: 3px solid #000;
+  margin-top: 60px;
+}
+.speed-zone {
+  position: absolute;
+  left: 0;
+  width: 75%;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #ffcc33 0 62%, #35d07f 62%);
+}
+.speed-needle {
+  position: absolute;
+  top: -8px;
+  width: 4px;
+  height: 30px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #000;
+  transform: translateX(-50%);
+}
+.run-km {
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 26px;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}
+.run-hint {
+  font-family: var(--pixel);
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}

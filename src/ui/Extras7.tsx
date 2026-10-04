@@ -31,8 +31,9 @@ import { formatDuration } from '../core/time';
 import type { GameState } from '../core/types';
 import { play } from '../platform/audio';
 import { exportCode, importCode } from '../platform/save';
+import { canEnterContest, CONTEST_BY_ID, CONTESTS, contestDays, contestFee, contestOpen, contestPrizes, contestRivals, type ContestResult } from '../core/contests';
 
-export type ExtraPanel = 'rastro' | 'carreras' | 'beisbol' | 'loteria' | 'bonos';
+export type ExtraPanel = 'rastro' | 'carreras' | 'beisbol' | 'loteria' | 'bonos' | 'concursos';
 
 export interface ExtrasActions {
   onRadio: (id: string) => void;
@@ -130,6 +131,7 @@ export function ExtrasModal({ state, now, onClose, ...a }: { state: GameState; n
             <Activity icon="cartel" title="Subasta de solares" text="Vende un solar libre a una empresa: dinero rápido" status={null} cta="Ver solares" onClick={a.onAuction} />
           </>
         )}
+        <Activity icon="trofeo" title="Concursos" text={`Breakdance, perritos, Simon y maratón: ${CONTESTS.filter((c) => contestOpen(state, c)).length ? 'hay concurso hoy' : 'mira el calendario'}`} status={null} cta="Ver concursos" onClick={() => a.onOpen('concursos')} />
         <Activity icon="caballo" title="Hipódromo" text="Apuesta por un caballo (fines de semana)" status={weekend ? canRace(state, now) : 'Sábados y domingos'} cta="Ir a las carreras" onClick={() => a.onOpen('carreras')} />
         <Activity icon="estrella" title="Béisbol: Yankees vs Mets" text="Apuesta por el ganador (fines de semana)" status={weekend ? canBaseball(state, now) : 'Sábados y domingos'} cta="Apostar" onClick={() => a.onOpen('beisbol')} />
         <Activity icon="boleto" title="Lotería semanal" text={`Boleto de ${fmt(ticketPrice(state))} · sorteo el domingo por la noche`} status={null} cta="Comprar boleto" onClick={() => a.onOpen('loteria')} />
@@ -444,6 +446,84 @@ export function BackupModal({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       {msg && <div class="card-text warn-box">{msg}</div>}
+    </Modal>
+  );
+}
+
+/** 🥇 Concursos de la semana. */
+export function ContestsModal({ state, now, onEnter, onClose }: { state: GameState; now: number; onEnter: (id: string) => void; onClose: () => void }) {
+  const fmt = ROLES[state.character.role].formatMoney;
+  return (
+    <Modal title="Concursos" kicker="COMPITE Y GANA" onClose={onClose}>
+      <div class="card-text muted" style={{ marginBottom: 8 }}>
+        Cada concurso se celebra unos días a la semana. Pagas la inscripción y compites contra los mejores del barrio: solo los 3 primeros cobran.
+      </div>
+      <div class="stack">
+        {CONTESTS.map((c) => {
+          const why = canEnterContest(state, c.id, now);
+          const open = contestOpen(state, c);
+          const rivals = open ? contestRivals(state, c.id) : [];
+          const prizes = contestPrizes(state, c);
+          return (
+            <div key={c.id} class={`card contest ${open ? 'open' : ''}`}>
+              <div class="contest-head">
+                <PixelIcon id={c.icon} size={3} />
+                <div>
+                  <b>{c.label}</b>
+                  <small>
+                    📍 {c.where} · {open ? '¡HOY!' : contestDays(c)}
+                  </small>
+                </div>
+              </div>
+              <div class="card-text">{c.description}</div>
+              <div class="contest-prizes">
+                <span>🥇 {fmt(prizes[0])}</span>
+                <span>🥈 {fmt(prizes[1])}</span>
+                <span>🥉 {fmt(prizes[2])}</span>
+                <span class="muted">Inscripción {fmt(contestFee(state, c))}</span>
+              </div>
+              {open && (
+                <div class="card-text muted">
+                  Favorito: <b>{rivals[0].name}</b> ({rivals[0].score} {c.unit})
+                </div>
+              )}
+              <button class="btn small good" disabled={!!why} onClick={() => onEnter(c.id)}>
+                {why ?? 'Inscribirse y competir'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+export function ContestResultModal({ state, id, result, onClose }: { state: GameState; id: string; result: ContestResult; onClose: () => void }) {
+  const c = CONTEST_BY_ID[id];
+  const fmt = ROLES[state.character.role].formatMoney;
+  useEffect(() => {
+    if (result.place === 1) play.achievement();
+    else if (result.place <= 3) play.good();
+    else play.bad();
+  }, []);
+  return (
+    <Modal title={result.place === 1 ? '¡Campeón!' : result.place <= 3 ? '¡En el podio!' : 'Fuera del podio'} kicker={c.label.toUpperCase()} onClose={onClose}>
+      <div class={`passive-total ${result.place <= 3 ? '' : 'lost'}`}>
+        <small>Quedas</small>
+        <b>{result.place}º</b>
+        <small>{result.prize ? `Premio: ${fmt(result.prize)}` : 'Sin premio esta vez'}</small>
+      </div>
+      <ol class="podium">
+        {result.table.map((r, i) => (
+          <li key={r.name + i} class={r.you ? 'you' : ''}>
+            <span>{i < 3 ? ['🥇', '🥈', '🥉'][i] : `${i + 1}º`}</span>
+            <span>{r.name}</span>
+            <b>
+              {r.score} {c.unit}
+            </b>
+          </li>
+        ))}
+      </ol>
     </Modal>
   );
 }

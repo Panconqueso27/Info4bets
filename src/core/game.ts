@@ -990,7 +990,7 @@ export function gameStats(state: GameState, now: number): Stats {
 
 let ledgerCat = 'otros';
 /** Categorías que cuentan como dinero ganado (para las misiones). */
-const EARN_CATS = new Set(['sueldo', 'negocios', 'extras', 'sucesos', 'premios']);
+const EARN_CATS = new Set(['sueldo', 'negocios', 'extras', 'sucesos', 'premios', 'concursos']);
 
 /** Ejecuta `fn` apuntando el dinero que mueva en la categoría `cat`. */
 export function withCat<T>(cat: string, fn: () => T): T {
