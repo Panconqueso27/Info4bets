@@ -22,7 +22,10 @@ function char(role: Role): Character {
 }
 
 function game(role: Role = 'inmigrante'): GameState {
-  return newGame(char(role), at(1), 42);
+  const s = newGame(char(role), at(1), 42);
+  // Sin misiones del día: sus premios alterarían los importes exactos.
+  s.missions = { date: s.today.date, list: [] };
+  return s;
 }
 
 describe('días y racha', () => {

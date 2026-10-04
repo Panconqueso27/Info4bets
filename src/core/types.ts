@@ -165,6 +165,52 @@ export interface GameState {
   cosmetics?: string[];
   /** Decisiones más marcadas de la partida (para las estadísticas). */
   highlights?: { title: string; day: number; score: number; kind: LogKind }[];
+  /** Grandes proyectos del alcalde: id → obras en marcha o inaugurado. */
+  projects?: Record<string, { done: boolean; until: number }>;
+  /** Bonos municipales del alcalde. */
+  bonds?: Bond[];
+  /** Boletos de lotería de la semana. */
+  lottery?: LotteryTicket[];
+  /** Libro de cuentas de la semana en curso y de la anterior. */
+  ledger?: Ledger;
+  lastLedger?: Ledger;
+  /** Misiones del día. */
+  missions?: Missions;
+}
+
+export interface Bond {
+  amount: number;
+  /** Interés total al vencer (0.05 = 5%). */
+  rate: number;
+  until: number;
+}
+
+export interface LotteryTicket {
+  /** Semana del sorteo (número de semana de la partida). */
+  week: number;
+  numbers: [number, number, number];
+}
+
+export interface Ledger {
+  /** Semana de la partida (0 = días 1-7). */
+  week: number;
+  /** Categoría → dinero neto (positivo = ingreso). */
+  cats: Record<string, number>;
+}
+
+export interface Mission {
+  id: string;
+  label: string;
+  key: string;
+  target: number;
+  reward: number;
+  progress: number;
+  done: boolean;
+}
+
+export interface Missions {
+  date: string;
+  list: Mission[];
 }
 
 export interface OtherCharacter {
@@ -178,17 +224,19 @@ export interface OtherCharacter {
 export interface Errand {
   startedAt: number;
   endsAt: number;
-  kind?: 'reparto' | 'radio';
+  kind?: 'reparto' | 'radio' | 'taxi' | 'clases';
   label?: string;
   pay?: number;
   wear?: Bars;
 }
 
 export interface LotState {
-  /** Quién lo tiene: la ciudad (alcalde) o el jugador (inmigrante). */
-  owner: 'ciudad' | 'jugador';
-  /** Obra del alcalde (parque, escuela...) o 'casa' del inmigrante. */
+  /** Quién lo tiene: la ciudad (alcalde), el jugador (inmigrante) o una empresa (subastado). */
+  owner: 'ciudad' | 'jugador' | 'privado';
+  /** Obra del alcalde (parque, escuela...), del inmigrante ('vacio', 'casa', 'lavanderia'...) u 'oficinas'. */
   building: string;
+  /** Nivel de lo construido (1-3); en la casa, tras terminar las fases. */
+  level?: number;
   /** Fases completadas (casa del inmigrante: 0-4; obra del alcalde: 0-1). */
   phase: number;
   /** En obras hasta este instante (0 = nada en marcha). */

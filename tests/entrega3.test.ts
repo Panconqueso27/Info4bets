@@ -22,7 +22,9 @@ import type { Character, GameState, Role } from '../src/core/types';
 
 const at = (day: number, hour = 9, min = 0) => new Date(2026, 0, day, hour, min).getTime();
 const char = (role: Role): Character => ({ role, name: 'Ana', age: 30, look: { outfit: 'a', hair: 'b', skin: 'c', hairColor: 'd', outfitColor: 'e' } });
-const game = (role: Role = 'inmigrante') => newGame(char(role), at(1, 5), 3);
+/** Sin misiones del día: sus premios alterarían los importes exactos. */
+const noMissions = <T extends { missions?: unknown; today: { date: string } }>(s: T) => ((s.missions = { date: s.today.date, list: [] }), s);
+const game = (role: Role = 'inmigrante') => noMissions(newGame(char(role), at(1, 5), 3));
 
 function decide(s: GameState, eventId: string, choiceId: string, when = at(1, 10)) {
   s.pending.push({ instanceId: `t-${eventId}-${when}`, eventId, firedAt: when, seed: 1 });

@@ -23,7 +23,9 @@ import type { Character, GameState, Role } from '../src/core/types';
 
 const at = (day: number, hour = 9, min = 0) => new Date(2026, 0, day, hour, min).getTime();
 const char = (role: Role): Character => ({ role, name: 'Ana', age: 30, look: { outfit: 'a', hair: 'b', skin: 'c', hairColor: 'd', outfitColor: 'e' } });
-const game = (role: Role = 'inmigrante') => newGame(char(role), at(1, 5), 3);
+/** Sin misiones del día: sus premios alterarían los importes exactos. */
+const noMissions = <T extends { missions?: unknown; today: { date: string } }>(s: T) => ((s.missions = { date: s.today.date, list: [] }), s);
+const game = (role: Role = 'inmigrante') => noMissions(newGame(char(role), at(1, 5), 3));
 
 function decideOutcome(s: GameState, eventId: string, choiceId: string, outcomeId: string, when: number) {
   const def = EVENTS[eventId];
@@ -40,7 +42,7 @@ describe('solares y casa por fases', () => {
     s.bars.dinero = 5000;
     buyLot(s, 'L1', at(1, 6));
     expect(ownedLot(s)).toBe('L1');
-    expect(() => buyLot(s, 'L2', at(1, 6))).toThrow();
+    expect(() => buyLot(s, 'L1', at(1, 6))).toThrow();
     const sig0 = citySignature(s);
     for (let i = 0; i < HOUSE_PHASES.length; i++) {
       buildHousePhase(s, at(1 + i, 6));

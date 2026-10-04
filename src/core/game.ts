@@ -7,7 +7,8 @@ import { hashString, mixSeed, mulberry32, pickWeighted, randRange } from './rng'
 import { addDays, dateKey, DAY, daysBetween, HOUR, startOfDay } from './time';
 import { nextUpgrade, UPGRADES } from './upgrades';
 import { errandWeather, weatherFor, weatherWeight, type Weather } from './weather';
-import { CIVIC_BY_ID, HOUSE_PHASES, HOUSE_RENT, LOT_BY_ID, LOT_PRICE, ownedLot, RENOVATION } from './lots';
+import { BIZ_BY_ID, bizIncome, CIVIC_BY_ID, civicMul, civicUpgrade, districtLevel, HOUSE_PHASES, HOUSE_RENT, LOT_BY_ID, lotLevel, lotPrice, MAX_LOTS, MEGA_BY_ID, ownedLots, RENOVATION } from './lots';
+import { closeWeek, countMission, ensureMissions, matureBonds, monthlyBills } from './economy';
 import { RADIO_BY_ID, radioJobs } from './radio';
 import type { BarId, Bars, Character, GameState, LogEntry, LogKind, OtherCharacter, PendingEvent, Role } from './types';
 import { ACHIEVEMENT_UNLOCKS, COSMETIC_BY_ID, STREAK_REWARDS } from './cosmetics';
@@ -89,7 +90,9 @@ export function dayNumber(state: GameState, now: number): number {
   return Math.max(1, daysBetween(state.startDate, dateKey(now)) + 1);
 }
 
-function log(state: GameState, at: number, kind: LogKind, title: string, text: string, deltas?: Bars, day?: number) {
+export type LogFn = (kind: LogKind, title: string, text: string, deltas?: Bars) => void;
+
+export function log(state: GameState, at: number, kind: LogKind, title: string, text: string, deltas?: Bars, day?: number) {
   const entry: LogEntry = { at, day: day ?? dayNumber(state, at), kind, title, text };
   if (deltas && Object.keys(deltas).length) entry.deltas = deltas;
   state.log.unshift(entry);
@@ -109,6 +112,7 @@ export function applyBars(state: GameState, delta: Bars): Bars {
     const after = clampBar(k, before + d);
     state.bars[k] = after;
     if (after !== before) applied[k] = Math.round((after - before) * 10) / 10;
+    if (k === 'dinero' && after !== before) book(state, after - before);
   }
   return applied;
 }
@@ -151,6 +155,8 @@ export function advance(state: GameState, now: number): boolean {
   const todayKey = dateKey(now);
   let steps = 0;
   while (state.today.date < todayKey && steps < MAX_DAYS_TO_CATCH_UP) {
+    // Las obras que terminaron ese día ya cuentan para su cierre.
+    finishWorks(state, Math.min(now, startOfDay(addDays(state.today.date, 1)) - 1));
     closeDay(state, now);
     steps++;
     changed = true;
@@ -203,6 +209,7 @@ export function advance(state: GameState, now: number): boolean {
 /** Inicio de cada día: foto de las barras y sucesos diarios (remesa, elecciones...). */
 function dailyCheck(state: GameState, now: number) {
   state.dailyCheckDate = state.today.date;
+  ensureMissions(state);
   state.dayStartBars = { ...state.bars };
   const day = dayNumber(state, now);
   for (const def of eventsFor(state.character.role, 'diario')) {
@@ -283,7 +290,7 @@ function closeDay(state: GameState, now: number) {
   // Noche de nieve sin casa propia: frío en el cuarto compartido.
   const cold = roleId === 'inmigrante' && state.upgradeLevel === 0 && weatherFor(state.seed, closing.date) === 'nieve';
   if (cold) overnight.salud = (overnight.salud ?? 0) - 3;
-  let deltas = mergeDeltas(applyBars(state, passive), applyBars(state, { dinero: -role.dailyCost }), applyBars(state, overnight));
+  let deltas = mergeDeltas(applyBars(state, passive), withCat('gastos', () => applyBars(state, { dinero: -role.dailyCost - Number(state.flags.alquilerExtra ?? 0) * (roleId === 'inmigrante' ? 1 : 0) })), applyBars(state, overnight));
   const extra = (passiveNotes.length ? ` Te ayudan ${passiveNotes.join(' y ')}.` : '') + (cold ? ' Sin calefacción, la nieve se cuela por la ventana.' : '');
   if ((state.bars.dinero ?? 0) < 0) {
     deltas = mergeDeltas(deltas, applyBars(state, role.debtPenalty));
@@ -294,6 +301,8 @@ function closeDay(state: GameState, now: number) {
 
   // --- Ingresos pasivos y gastos recurrentes
   passiveIncome(state, closing.date, closingDay, entry);
+  monthlyBills(state, closingDay, entry);
+  closeWeek(state, closingDay, entry);
 
   // --- Encuesta semanal del alcalde
   if (roleId === 'alcalde' && closingDay % 7 === 0) {
@@ -388,8 +397,9 @@ export function retire(state: GameState, now: number): void {
   const relief = (UPGRADES[roleId].perLevel.shiftStressRelief ?? 0) * state.upgradeLevel;
   if (relief) wear.estres = Math.max(0, (wear.estres ?? 0) - relief);
   const pay = shiftPay(state);
-  const deltas = mergeDeltas(applyBars(state, { dinero: pay }), applyBars(state, wear));
+  const deltas = mergeDeltas(withCat('sueldo', () => applyBars(state, { dinero: pay })), applyBars(state, wear));
   state.flags.jornadas = Number(state.flags.jornadas ?? 0) + 1;
+  countMission(state, 'jornada', 1);
   addStat(state, 'ingresos', pay);
   log(state, now, 'bueno', 'Jornada completa', `${state.character.name} termina sus 8 horas en ${role.workplace} y cobra ${role.formatMoney(pay)}.`, deltas);
   checkGameOver(state, now);
@@ -439,7 +449,7 @@ export function placeBet(state: GameState, ticker: string, dir: 1 | -1, stake: n
   if ((state.bars.dinero ?? 0) < stake) throw new Error('No tienes suficiente dinero.');
   const role = ROLES[state.character.role];
   const entry = quote(state, ticker, now);
-  applyBars(state, { dinero: -stake });
+  withCat('bolsa', () => applyBars(state, { dinero: -stake }));
   state.market.bets.push({ id: `${ticker}-${now}`, ticker, dir, stake, entryPrice: entry, date: s.date, open: s.open[ticker], placedAt: now });
   log(state, now, 'info', 'Bolsa', `Apuestas ${role.formatMoney(stake)} a que ${ticker} ${dir > 0 ? 'SUBE ▲' : 'BAJA ▼'} (entrada ${entry.toFixed(2)}).`, { dinero: -stake });
 }
@@ -464,10 +474,14 @@ function settleBets(state: GameState, now: number, p: number) {
   }
   state.market.bets = [];
   addStat(state, net >= 0 ? 'bolsaGanado' : 'bolsaPerdido', Math.abs(net));
+  if (net > 0) {
+    countMission(state, 'bolsa', 1);
+    countMission(state, 'ganar', net);
+  }
   // El resultado afecta al dinero y al ánimo.
   const mood: Bars = net > 0 ? { estres: -3 } : net < 0 ? { estres: 4 } : {};
   if (roleId === 'inmigrante' && net !== 0) mood.esperanza = net > 0 ? 2 : -2;
-  const deltas = mergeDeltas(applyBars(state, { dinero: back }), applyBars(state, mood));
+  const deltas = mergeDeltas(withCat('bolsa', () => applyBars(state, { dinero: back })), applyBars(state, mood));
   const headline = net > 0 ? `Ganaste ${role.formatMoney(net)} en la bolsa. Sales con una sonrisa.` : net < 0 ? `Perdiste ${role.formatMoney(-net)} en la bolsa. Te pesa en el ánimo.` : 'La bolsa cerró sin ganancias ni pérdidas.';
   log(state, now, net >= 0 ? 'bueno' : 'malo', 'Cierre de la bolsa', `${headline} ${lines.join(' · ')}`, mergeDeltas(deltas, { dinero: -bets.reduce((s, x) => s + x.stake, 0) }));
   state.notices.push({ kind: 'aviso', title: 'BOLSA', text: headline });
@@ -486,7 +500,7 @@ export function buyUpgrade(state: GameState, now: number) {
   const money = state.bars.dinero ?? 0;
   const cost = upgradeCost(state, next.cost);
   if (money < cost) throw new Error(`Te faltan ${role.formatMoney(cost - money)}.`);
-  const deltas = mergeDeltas(applyBars(state, { dinero: -cost }), applyBars(state, next.instant));
+  const deltas = mergeDeltas(withCat('inversiones', () => applyBars(state, { dinero: -cost })), applyBars(state, next.instant));
   if (cost < next.cost) state.flags.descuentoCasa = false;
   state.upgradeLevel = next.level;
   log(state, now, 'bueno', `${UPGRADES[roleId].title}: nivel ${next.level}`, `${next.name}. ${next.description}`, deltas);
@@ -590,8 +604,9 @@ export function resolveEvent(state: GameState, instanceId: string, choiceId: str
   const message = fillText(outcome.message, vars);
 
   state.pending.splice(idx, 1);
-  let deltas = choice.cost ? applyBars(state, { dinero: -choice.cost }) : {};
-  deltas = mergeDeltas(deltas, applyEffects(state, outcome.effects, now));
+  let deltas = choice.cost ? withCat('sucesos', () => applyBars(state, { dinero: -choice.cost! })) : {};
+  deltas = mergeDeltas(deltas, withCat('sucesos', () => applyEffects(state, outcome.effects, now)));
+  countMission(state, 'suceso', 1);
   let previous: string | undefined;
   if (def.kind === 'aleatorio') {
     previous = state.eventHistory[state.eventHistory.length - 1];
@@ -697,7 +712,7 @@ export function checkGameOver(state: GameState, now: number): boolean {
   // Salud a cero: hospital (no es fin de partida, pero cuesta caro).
   if ((b.salud ?? 1) <= 0) {
     const roleId = state.character.role;
-    const deltas = mergeDeltas(applyBars(state, { salud: 25, estres: 15, dinero: -HOSPITAL_BILL[roleId] }));
+    const deltas = withCat('gastos', () => mergeDeltas(applyBars(state, { salud: 25, estres: 15, dinero: -HOSPITAL_BILL[roleId] })));
     if (state.shift && !state.shift.cancelled) {
       const s = marketSession(state, now);
       if (s) settleBets(state, now, s.p);
@@ -786,6 +801,7 @@ export function applyMinigame(state: GameState, points: number, now: number, gam
     state.flags[counter] = Number(state.flags[counter] ?? 0) + n;
   }
   addStat(state, 'minijuegos', n);
+  countMission(state, 'minijuego', n);
   const what = classic
     ? roleId === 'inmigrante'
       ? `Lavaste ${n} plato${n === 1 ? '' : 's'}`
@@ -832,20 +848,22 @@ export function startErrand(state: GameState, now: number) {
 function finishErrand(state: GameState, at: number) {
   const job = state.errand;
   state.errand = null;
-  if (job?.kind === 'radio') {
+  countMission(state, 'extra', 1);
+  if (job?.kind && job.kind !== 'reparto') {
     const pay = job.pay ?? 0;
-    const deltas = mergeDeltas(applyBars(state, { dinero: pay }), applyBars(state, job.wear ?? {}));
+    const deltas = mergeDeltas(withCat('extras', () => applyBars(state, { dinero: pay })), applyBars(state, job.wear ?? {}));
     addStat(state, 'ingresos', pay);
-    addStat(state, 'trabajosRadio', 1);
+    if (job.kind === 'radio') addStat(state, 'trabajosRadio', 1);
     const fmt = ROLES.inmigrante.formatMoney;
-    log(state, at, 'bueno', 'Trabajo de la radio', `${job.label}: hecho. Cobras ${fmt(pay)} en mano.`, deltas);
-    state.notices.push({ kind: 'aviso', title: 'RADIO', text: `${job.label}: +${fmt(pay)}` });
+    const title = { radio: 'Trabajo de la radio', taxi: 'Taxi nocturno', clases: 'Clases de español' }[job.kind];
+    log(state, at, 'bueno', title, `${job.label}: hecho. Cobras ${fmt(pay)} en mano.`, deltas);
+    state.notices.push({ kind: 'aviso', title: title.toUpperCase(), text: `${job.label}: +${fmt(pay)}` });
     return;
   }
   const w = errandWeather(todayWeather(state));
   const pay = ERRAND_PAY + w.extraPay;
   const wear: Bars = { salud: (ERRAND_WEAR.salud ?? 0) - w.extraWear, estres: (ERRAND_WEAR.estres ?? 0) + w.extraWear };
-  const deltas = mergeDeltas(applyBars(state, { dinero: pay }), applyBars(state, wear));
+  const deltas = mergeDeltas(withCat('extras', () => applyBars(state, { dinero: pay })), applyBars(state, wear));
   state.flags.repartos = Number(state.flags.repartos ?? 0) + 1;
   addStat(state, 'ingresos', pay);
   const fmt = ROLES.inmigrante.formatMoney;
@@ -863,7 +881,7 @@ export function buyCar(state: GameState, now: number) {
   if (state.character.role !== 'inmigrante' || state.flags.auto) throw new Error('Ya tienes auto.');
   const money = state.bars.dinero ?? 0;
   if (money < CAR_COST) throw new Error(`Te faltan ${ROLES.inmigrante.formatMoney(CAR_COST - money)}.`);
-  const deltas = applyBars(state, { dinero: -CAR_COST });
+  const deltas = withCat('inversiones', () => applyBars(state, { dinero: -CAR_COST }));
   state.flags.auto = true;
   log(state, now, 'bueno', 'Auto propio', 'Un sedán usado del 79, con la radio que solo coge una emisora. Ahora el reparto dura 2 horas.', deltas);
   evaluateAchievements(state, now);
@@ -914,7 +932,7 @@ function streakReward(state: GameState, now: number) {
   if (!r || state.flags[`racha${r.days}`]) return;
   state.flags[`racha${r.days}`] = true;
   const roleId = state.character.role;
-  const deltas = applyBars(state, { dinero: r.money[roleId] });
+  const deltas = withCat('premios', () => applyBars(state, { dinero: r.money[roleId] }));
   log(state, now, 'bueno', `🔥 ${r.title}`, `Recompensa por tu racha de ${r.days} días: ${ROLES[roleId].formatMoney(r.money[roleId])}.`, deltas);
   state.notices.push({ kind: 'racha', title: `RACHA DE ${r.days} DÍAS`, text: `${r.title} +${ROLES[roleId].formatMoney(r.money[roleId])}` });
   const cos = r.cosmetic?.[roleId];
@@ -962,39 +980,117 @@ export function gameStats(state: GameState, now: number): Stats {
 }
 
 // ---------------------------------------------------------------------------
+// Libro de cuentas: cada movimiento de dinero se apunta en una categoría
+// ---------------------------------------------------------------------------
+
+let ledgerCat = 'otros';
+/** Categorías que cuentan como dinero ganado (para las misiones). */
+const EARN_CATS = new Set(['sueldo', 'negocios', 'extras', 'sucesos', 'premios']);
+
+/** Ejecuta `fn` apuntando el dinero que mueva en la categoría `cat`. */
+export function withCat<T>(cat: string, fn: () => T): T {
+  const prev = ledgerCat;
+  ledgerCat = cat;
+  try {
+    return fn();
+  } finally {
+    ledgerCat = prev;
+  }
+}
+
+export const weekOf = (state: GameState) => Math.floor(daysBetween(state.startDate, state.today.date) / 7);
+
+function book(state: GameState, amount: number) {
+  if (!amount) return;
+  const week = weekOf(state);
+  if (!state.ledger || state.ledger.week !== week) state.ledger = { week, cats: {} };
+  state.ledger.cats[ledgerCat] = (state.ledger.cats[ledgerCat] ?? 0) + amount;
+  if (amount > 0 && EARN_CATS.has(ledgerCat)) countMission(state, 'ganar', amount);
+}
+
+// ---------------------------------------------------------------------------
 // Solares, obras y casa por fases
 // ---------------------------------------------------------------------------
 
-function pay(state: GameState, cost: number) {
+export function pay(state: GameState, cost: number) {
   const money = state.bars.dinero ?? 0;
   if (money < cost) throw new Error(`Te faltan ${ROLES[state.character.role].formatMoney(cost - money)}.`);
-  return applyBars(state, { dinero: -cost });
+  return withCat('inversiones', () => applyBars(state, { dinero: -cost }));
 }
 
-/** El inmigrante compra un solar (solo uno). */
+function districtLvlOf(state: GameState, lotId: string, now?: number) {
+  return districtLevel(state, LOT_BY_ID[lotId].district, now ? dayNumber(state, now) : 1);
+}
+
+/** Precio actual de un solar (sube con el nivel del barrio). */
+export function priceOfLot(state: GameState, lotId: string, now: number) {
+  return lotPrice(LOT_BY_ID[lotId], districtLvlOf(state, lotId, now));
+}
+
+/** El inmigrante compra un solar (hasta 3). */
 export function buyLot(state: GameState, lotId: string, now: number) {
   advance(state, now);
   if (state.character.role !== 'inmigrante') throw new Error('Solo el inmigrante compra solares.');
-  if (ownedLot(state)) throw new Error('Ya tienes un solar.');
+  if (ownedLots(state).length >= MAX_LOTS) throw new Error(`Ya tienes ${MAX_LOTS} solares.`);
   if (state.lots?.[lotId]) throw new Error('Ese solar ya no está libre.');
-  const deltas = pay(state, LOT_PRICE);
-  (state.lots ??= {})[lotId] = { owner: 'jugador', building: 'casa', phase: 0, buildingUntil: 0 };
-  log(state, now, 'bueno', 'Solar comprado', `${LOT_BY_ID[lotId].label} es tuyo. Ahora, a construir poco a poco.`, deltas);
+  const deltas = pay(state, priceOfLot(state, lotId, now));
+  (state.lots ??= {})[lotId] = { owner: 'jugador', building: 'vacio', phase: 0, buildingUntil: 0 };
+  log(state, now, 'bueno', 'Solar comprado', `${LOT_BY_ID[lotId].label} es tuyo. Decide qué levantar: una casa de alquiler o un negocio.`, deltas);
   state.notices.push({ kind: 'aviso', title: 'SOLAR', text: `¡${LOT_BY_ID[lotId].label} es tuyo!` });
+  countMission(state, 'construir', 1);
+}
+
+function myLot(state: GameState, lotId?: string) {
+  const id = lotId ?? ownedLots(state).find((k) => state.lots![k].building === 'casa' || state.lots![k].building === 'vacio');
+  const lot = id ? state.lots?.[id] : undefined;
+  if (!lot || lot.owner !== 'jugador') throw new Error('Primero compra un solar.');
+  if (lot.buildingUntil) throw new Error('Ya hay obras en marcha.');
+  return { id: id!, lot };
 }
 
 /** Siguiente fase de la casa del inmigrante (tarda un día). */
-export function buildHousePhase(state: GameState, now: number) {
+export function buildHousePhase(state: GameState, now: number, lotId?: string) {
   advance(state, now);
-  const id = ownedLot(state);
-  const lot = id ? state.lots![id] : undefined;
-  if (!lot) throw new Error('Primero compra un solar.');
-  if (lot.buildingUntil) throw new Error('Ya hay obras en marcha.');
+  const { lot } = myLot(state, lotId);
+  if (lot.building === 'vacio') lot.building = 'casa';
+  if (lot.building !== 'casa') throw new Error('En ese solar hay un negocio.');
   const phase = HOUSE_PHASES[lot.phase];
   if (!phase) throw new Error('Tu casa ya está terminada.');
   const deltas = pay(state, phase.cost);
   lot.buildingUntil = now + phase.hours * HOUR;
   log(state, now, 'info', `Obras: ${phase.label}`, `${phase.text} Estará lista en ${phase.hours} horas.`, deltas);
+  countMission(state, 'construir', 1);
+}
+
+/** Abre un negocio en un solar vacío del inmigrante. */
+export function buildBusiness(state: GameState, lotId: string, bizId: string, now: number) {
+  advance(state, now);
+  const { lot } = myLot(state, lotId);
+  if (lot.building !== 'vacio') throw new Error('Ese solar ya tiene algo construido.');
+  const def = BIZ_BY_ID[bizId];
+  if (!def || bizId === 'casa') throw new Error('Negocio desconocido.');
+  const lvl = def.levels[0];
+  const deltas = pay(state, lvl.cost);
+  lot.building = bizId;
+  lot.level = 0;
+  lot.buildingUntil = now + lvl.days * DAY;
+  log(state, now, 'info', `Obras: ${def.label}`, `${def.description} Abrirá en ${lvl.days} día${lvl.days > 1 ? 's' : ''}.`, deltas);
+  countMission(state, 'construir', 1);
+}
+
+/** Mejora la casa (dúplex, edificio) o el negocio de un solar. */
+export function upgradeLot(state: GameState, lotId: string, now: number) {
+  advance(state, now);
+  const { lot } = myLot(state, lotId);
+  const def = BIZ_BY_ID[lot.building];
+  const lvl = lotLevel(lot);
+  if (!def || lvl <= 0) throw new Error('Termina primero lo que estás construyendo.');
+  const next = def.levels[lvl];
+  if (!next) throw new Error('Ya está al máximo.');
+  const deltas = pay(state, next.cost);
+  lot.buildingUntil = now + next.days * DAY;
+  log(state, now, 'info', `Obras: ${next.name}`, `Ampliación en ${LOT_BY_ID[lotId].label}. Lista en ${next.days} días.`, deltas);
+  countMission(state, 'construir', 1);
 }
 
 /** El alcalde levanta una obra pública en un solar libre. */
@@ -1006,6 +1102,37 @@ export function buildCivic(state: GameState, lotId: string, civicId: string, now
   const deltas = pay(state, def.cost);
   (state.lots ??= {})[lotId] = { owner: 'ciudad', building: civicId, phase: 0, buildingUntil: now + def.days * DAY };
   log(state, now, 'info', `Obras: ${def.label}`, `Empiezan las obras en ${LOT_BY_ID[lotId].label}. Inauguración en ${def.days} días.`, deltas);
+  countMission(state, 'construir', 1);
+}
+
+/** El alcalde mejora una obra pública (niveles 2 y 3). */
+export function upgradeCivic(state: GameState, lotId: string, now: number) {
+  advance(state, now);
+  const lot = state.lots?.[lotId];
+  if (!lot || lot.owner !== 'ciudad') throw new Error('Ahí no hay una obra pública.');
+  if (lot.buildingUntil) throw new Error('Ya hay obras en marcha.');
+  const lvl = lotLevel(lot);
+  if (lvl <= 0) throw new Error('Aún no está inaugurada.');
+  if (lvl >= 3) throw new Error('Ya está al máximo.');
+  const def = CIVIC_BY_ID[lot.building];
+  const up = civicUpgrade(def, lvl + 1);
+  const deltas = pay(state, up.cost);
+  lot.buildingUntil = now + up.days * DAY;
+  log(state, now, 'info', `Obras: ${def.levels[lvl]}`, `${def.label} se amplía. Lista en ${up.days} días.`, deltas);
+  countMission(state, 'construir', 1);
+}
+
+/** El alcalde lanza un gran proyecto. */
+export function startMega(state: GameState, id: string, now: number) {
+  advance(state, now);
+  if (state.character.role !== 'alcalde') throw new Error('Solo el alcalde lanza grandes proyectos.');
+  if (state.projects?.[id]) throw new Error('Ese proyecto ya está en marcha.');
+  const def = MEGA_BY_ID[id];
+  const deltas = pay(state, def.cost);
+  (state.projects ??= {})[id] = { done: false, until: now + def.days * DAY };
+  log(state, now, 'info', `Gran proyecto: ${def.label}`, `${def.description} Inauguración en ${def.days} días.`, deltas);
+  state.notices.push({ kind: 'aviso', title: 'GRAN PROYECTO', text: `${def.icon} ${def.label}: empiezan las obras` });
+  countMission(state, 'construir', 1);
 }
 
 /** El alcalde renueva una manzana (dos niveles). */
@@ -1019,28 +1146,48 @@ export function renovateBlock(state: GameState, key: string, now: number) {
   const deltas = pay(state, next.cost);
   (state.renovating ??= {})[key] = now + next.hours * HOUR;
   log(state, now, 'info', `Renovación: ${next.label}`, `Andamios en la manzana ${key}. Lista en ${next.hours} horas.`, deltas);
+  countMission(state, 'construir', 1);
 }
 
 /** Termina las obras cuyo plazo ha vencido. */
 function finishWorks(state: GameState, now: number): boolean {
   let changed = false;
+  const fmt = ROLES[state.character.role].formatMoney;
   for (const [id, lot] of Object.entries(state.lots ?? {})) {
     if (!lot.buildingUntil || lot.buildingUntil > now) continue;
+    const at = lot.buildingUntil;
     lot.buildingUntil = 0;
-    lot.phase += 1;
     changed = true;
     if (lot.owner === 'ciudad') {
       const def = CIVIC_BY_ID[lot.building];
-      const deltas = applyBars(state, def.instant);
-      log(state, now, 'bueno', `Inauguración: ${def.label}`, `${def.description} Cortas la cinta en ${LOT_BY_ID[id].label}.`, deltas);
-      state.notices.push({ kind: 'aviso', title: 'INAUGURACIÓN', text: `${def.icon} ${def.label}` });
+      if (lot.phase === 0) {
+        lot.phase = 1;
+        lot.level = 1;
+        const deltas = applyBars(state, def.instant);
+        log(state, at, 'bueno', `Inauguración: ${def.label}`, `${def.description} Cortas la cinta en ${LOT_BY_ID[id].label}.`, deltas);
+        state.notices.push({ kind: 'aviso', title: 'INAUGURACIÓN', text: `${def.icon} ${def.label}` });
+      } else {
+        lot.level = (lot.level ?? 1) + 1;
+        const deltas = applyBars(state, { popularidad: 3 + lot.level });
+        log(state, at, 'bueno', `Ampliación: ${def.levels[lot.level - 1]}`, `${def.label} sube a nivel ${lot.level}: más visitantes y más ingresos.`, deltas);
+        state.notices.push({ kind: 'aviso', title: 'AMPLIACIÓN', text: `${def.icon} ${def.levels[lot.level - 1]}` });
+      }
       addStat(state, 'obras', 1);
-    } else {
+    } else if (lot.building === 'casa' && lot.phase < HOUSE_PHASES.length) {
+      lot.phase += 1;
       const done = lot.phase >= HOUSE_PHASES.length;
+      if (done) lot.level = 1;
       const deltas = applyBars(state, done ? { esperanza: 20, salud: 8 } : { esperanza: 3 });
       const label = HOUSE_PHASES[lot.phase - 1].label;
-      log(state, now, 'bueno', done ? '¡Tu casa está terminada!' : `Fase terminada: ${label}`, done ? `Tienes una casa con tu nombre. La alquilas: te dará ${ROLES.inmigrante.formatMoney(HOUSE_RENT)} cada día.` : 'Un paso más hacia tu casa propia.', deltas);
+      log(state, at, 'bueno', done ? '¡Tu casa está terminada!' : `Fase terminada: ${label}`, done ? `Tienes una casa con tu nombre. La alquilas: te dará ${fmt(HOUSE_RENT)} cada día.` : 'Un paso más hacia tu casa propia.', deltas);
       state.notices.push({ kind: 'aviso', title: 'TU CASA', text: done ? '¡Casa terminada!' : `${label}: hecho` });
+    } else {
+      const def = BIZ_BY_ID[lot.building];
+      lot.level = (lot.level ?? 0) + 1;
+      const lvl = def.levels[lot.level - 1];
+      const deltas = applyBars(state, { esperanza: 4 + lot.level * 2 });
+      log(state, at, 'bueno', lot.level === 1 ? `¡Abre tu ${def.label.toLowerCase()}!` : `Ampliación: ${lvl.name}`, `${LOT_BY_ID[id].label}: ${lvl.name}. Te dará ${fmt(lvl.income)} cada día.`, deltas);
+      state.notices.push({ kind: 'aviso', title: 'TU NEGOCIO', text: `${def.icon} ${lvl.name}` });
     }
   }
   for (const [key, until] of Object.entries(state.renovating ?? {})) {
@@ -1050,14 +1197,25 @@ function finishWorks(state: GameState, now: number): boolean {
     const r = RENOVATION[level];
     (state.renovated ??= {})[key] = level + 1;
     const deltas = applyBars(state, r.instant);
-    log(state, now, 'bueno', `Renovación: ${r.label}`, `La manzana ${key} luce como nueva. Los vecinos sacan fotos.`, deltas);
+    log(state, until, 'bueno', `Renovación: ${r.label}`, `La manzana ${key} luce como nueva. Los vecinos sacan fotos.`, deltas);
     changed = true;
   }
+  for (const [id, p] of Object.entries(state.projects ?? {})) {
+    if (p.done || p.until > now) continue;
+    p.done = true;
+    const def = MEGA_BY_ID[id];
+    const deltas = applyBars(state, def.instant);
+    log(state, p.until, 'bueno', `¡Inauguración! ${def.label}`, `${def.description} La ciudad entera sale a celebrarlo.`, deltas);
+    state.notices.push({ kind: 'aviso', title: 'GRAN INAUGURACIÓN', text: `${def.icon} ${def.label}` });
+    addStat(state, 'obras', 1);
+    changed = true;
+  }
+  changed = matureBonds(state, now) || changed;
   return changed;
 }
 
 // ---------------------------------------------------------------------------
-// Ingresos pasivos: máquinas, alquiler, mascota (inmigrante) y turismo (alcalde)
+// Ingresos pasivos: máquinas, alquileres, negocios (inmigrante); turismo (alcalde)
 // ---------------------------------------------------------------------------
 
 export const VENDING_PRICES = [350, 450, 600, 750, 900];
@@ -1094,19 +1252,28 @@ export interface Tourism {
 /** Turistas del día: popularidad × atractivo de la ciudad × clima. */
 export function tourismFor(state: GameState, date: string): Tourism {
   let attractions = 1;
-  for (const lot of Object.values(state.lots ?? {})) if (lot.owner === 'ciudad' && lot.phase > 0) attractions += CIVIC_BY_ID[lot.building]?.tourism ?? 0;
+  for (const lot of Object.values(state.lots ?? {})) if (lot.owner === 'ciudad' && lot.phase > 0) attractions += (CIVIC_BY_ID[lot.building]?.tourism ?? 0) * civicMul(lotLevel(lot));
   for (const lvl of Object.values(state.renovated ?? {})) attractions += lvl * 0.08;
+  for (const [id, p] of Object.entries(state.projects ?? {})) if (p.done) attractions += MEGA_BY_ID[id].tourism;
   const w = weatherFor(state.seed, date);
   const weather = { despejado: 1, nublado: 0.9, lluvia: 0.6, tormenta: 0.3, nieve: 0.75 }[w];
   const tourists = Math.round(1000 * ((state.bars.popularidad ?? 0) / 100) * attractions * weather);
   return { tourists, income: tourists * TOURIST_SPEND, attractions, weather };
 }
 
-/** Ingresos diarios de obras públicas (taquillas, abonos, alquileres). */
+/** Ingresos diarios de obras públicas y grandes proyectos (taquillas, abonos, alquileres). */
 export function civicIncome(state: GameState): number {
   let sum = 0;
-  for (const lot of Object.values(state.lots ?? {})) if (lot.owner === 'ciudad' && lot.phase > 0) sum += CIVIC_BY_ID[lot.building]?.income ?? 0;
+  for (const lot of Object.values(state.lots ?? {})) if (lot.owner === 'ciudad' && lot.phase > 0) sum += Math.round((CIVIC_BY_ID[lot.building]?.income ?? 0) * civicMul(lotLevel(lot)));
+  for (const [id, p] of Object.entries(state.projects ?? {})) if (p.done) sum += MEGA_BY_ID[id].income;
   return sum;
+}
+
+/** Lo que dan al día los solares del inmigrante. */
+export function businessIncome(state: GameState, day = 1): { id: string; income: number }[] {
+  return ownedLots(state)
+    .map((id) => ({ id, income: bizIncome(state.lots![id], districtLevel(state, LOT_BY_ID[id].district, day)) }))
+    .filter((x) => x.income > 0);
 }
 
 function passiveIncome(state: GameState, date: string, day: number, entry: (kind: LogKind, title: string, text: string, deltas?: Bars) => void) {
@@ -1121,10 +1288,10 @@ function passiveIncome(state: GameState, date: string, day: number, entry: (kind
       money += inc;
       parts.push(`máquinas ${fmt(inc)}${v.broken ? ` (${v.broken} rota${v.broken > 1 ? 's' : ''})` : ''}`);
     }
-    const lot = ownedLot(state);
-    if (lot && state.lots![lot].phase >= HOUSE_PHASES.length) {
-      money += HOUSE_RENT;
-      parts.push(`alquiler ${fmt(HOUSE_RENT)}`);
+    for (const b of businessIncome(state, day)) {
+      money += b.income;
+      const lot = state.lots![b.id];
+      parts.push(`${BIZ_BY_ID[lot.building].levels[lotLevel(lot) - 1].name.toLowerCase()} ${fmt(b.income)}`);
     }
     if (state.pet && day > state.pet.since && (day - state.pet.since) % 30 === 0) {
       money -= PET_MONTHLY;
@@ -1132,7 +1299,7 @@ function passiveIncome(state: GameState, date: string, day: number, entry: (kind
     }
     if (!parts.length) return;
     addStat(state, 'pasivos', Math.max(0, money));
-    entry(money >= 0 ? 'bueno' : 'malo', 'Ingresos pasivos', `Día ${day}: ${parts.join(' · ')}.`, applyBars(state, { dinero: money }));
+    entry(money >= 0 ? 'bueno' : 'malo', 'Ingresos pasivos', `Día ${day}: ${parts.join(' · ')}.`, withCat('negocios', () => applyBars(state, { dinero: money })));
   } else {
     const t = tourismFor(state, date);
     const civic = civicIncome(state);
@@ -1140,7 +1307,7 @@ function passiveIncome(state: GameState, date: string, day: number, entry: (kind
     if (!total) return;
     state.flags.turistasAyer = t.tourists;
     addStat(state, 'pasivos', total);
-    entry('bueno', 'Turismo e ingresos', `Día ${day}: ${t.tourists.toLocaleString('es')} turistas dejaron ${fmt(t.income)}${civic ? ` · obras públicas ${fmt(civic)}` : ''}.`, applyBars(state, { dinero: total }));
+    entry('bueno', 'Turismo e ingresos', `Día ${day}: ${t.tourists.toLocaleString('es')} turistas dejaron ${fmt(t.income)}${civic ? ` · obras públicas ${fmt(civic)}` : ''}.`, withCat('negocios', () => applyBars(state, { dinero: total })));
   }
 }
 

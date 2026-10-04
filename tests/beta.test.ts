@@ -26,7 +26,9 @@ import type { Character, GameState, Role } from '../src/core/types';
 
 const at = (day: number, hour = 9) => new Date(2026, 0, day, hour).getTime();
 const char = (role: Role): Character => ({ role, name: 'Ana', age: 30, look: { outfit: 'a', hair: 'b', skin: 'c', hairColor: 'd', outfitColor: 'e' } });
-const game = (role: Role = 'inmigrante', seed = 42) => newGame(char(role), at(1), seed);
+/** Sin misiones del día: sus premios alterarían los importes exactos. */
+const noMissions = <T extends { missions?: unknown; today: { date: string } }>(s: T) => ((s.missions = { date: s.today.date, list: [] }), s);
+const game = (role: Role = 'inmigrante', seed = 42) => noMissions(newGame(char(role), at(1), seed));
 
 /** Juega una jornada completa sin sucesos. */
 function workDay(s: GameState, day: number) {
@@ -229,7 +231,7 @@ describe('integridad del catálogo', () => {
   it('cada suceso tiene resultados buenos o malos con mensaje, y existe para ambos roles', () => {
     expect(eventsFor('inmigrante', 'aleatorio').length).toBeGreaterThanOrEqual(2);
     expect(eventsFor('alcalde', 'aleatorio').length).toBeGreaterThanOrEqual(3);
-    expect(eventsFor('alcalde', 'accion')).toHaveLength(5);
+    expect(eventsFor('alcalde', 'accion')).toHaveLength(7);
     for (const e of Object.values(EVENTS))
       for (const c of e.choices) {
         expect(c.outcomes.length).toBeGreaterThan(0);
