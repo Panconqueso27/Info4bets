@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: 0.12.0**
+**Versión actual: 0.12.1**
 
 ## Probar la beta
 
@@ -21,6 +21,10 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.12.1
+
+- **Corregido:** en el móvil, la lluvia y la nieve solo caían en una esquina de la pantalla. En la app (WebGL) el emisor de gotas no aplicaba su escala; ahora cada tamaño de gota es una textura propia y se reparten por toda la pantalla. También se recolocan si cambia el tamaño de la pantalla, por ejemplo al rotar o al cerrar el teclado.
 
 ## Novedades 0.12.0
 

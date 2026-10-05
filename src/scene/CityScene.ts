@@ -242,6 +242,7 @@ export class CityScene extends Phaser.Scene {
   private nextLightning = 0;
   /** Zoom con el que se generó la lluvia (si cambia mucho, se rehace). */
   private weatherZoom = 0;
+  private weatherSize = '';
   private ripples: Phaser.GameObjects.Bob[] = [];
   private accident: Accident | null = null;
   private nextAccident = 0;
@@ -288,8 +289,8 @@ export class CityScene extends Phaser.Scene {
       this.clouds.push(c);
       this.world.add(c);
     }
-    this.precip = this.add.blitter(0, 0, 'fx-drops').setVisible(false);
-    this.flash = this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0).setVisible(false);
+    this.precip = this.add.blitter(0, 0, 'fx-drops-2').setVisible(false).setDepth(10);
+    this.flash = this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0).setVisible(false).setDepth(20);
     this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
     // La cámara del clima no dibuja el mapa.
     this.world.cameraFilter |= this.uiCam.id;
@@ -388,35 +389,35 @@ export class CityScene extends Phaser.Scene {
       this.textures.addCanvas(key, c);
     };
     // Atlas de gotas: lluvia cercana y lejana, copos grande y pequeño.
-    const dc = document.createElement('canvas');
-    dc.width = 20;
-    dc.height = 8;
-    const d = dc.getContext('2d')!;
-    d.fillStyle = 'rgba(207,230,255,0.75)';
-    d.fillRect(0, 0, 1, 7);
-    d.fillStyle = 'rgba(207,230,255,0.35)';
-    d.fillRect(1, 5, 1, 3);
-    d.fillStyle = 'rgba(207,230,255,0.45)';
-    d.fillRect(4, 0, 1, 5);
-    d.fillStyle = 'rgba(255,255,255,0.95)';
-    d.fillRect(8, 0, 3, 3);
-    d.fillStyle = 'rgba(191,216,255,0.6)';
-    d.fillRect(11, 1, 1, 1);
-    d.fillStyle = 'rgba(255,255,255,0.95)';
-    d.fillRect(13, 0, 2, 2);
-    // salpicadura de una gota en el suelo
-    d.fillStyle = 'rgba(220,235,255,0.7)';
-    d.fillRect(16, 1, 1, 1);
-    d.fillRect(18, 1, 1, 1);
-    d.fillRect(17, 0, 1, 1);
-    d.fillStyle = 'rgba(220,235,255,0.35)';
-    d.fillRect(16, 2, 3, 1);
-    const dt = this.textures.addCanvas('fx-drops', dc)!;
-    dt.add('rain', 0, 0, 0, 2, 8);
-    dt.add('rain-far', 0, 4, 0, 1, 5);
-    dt.add('snow', 0, 8, 0, 4, 3);
-    dt.add('snow-s', 0, 13, 0, 2, 2);
-    dt.add('ripple', 0, 16, 0, 3, 3);
+    // Atlas de gotas a 4 tamaños ya dibujados: en WebGL el Blitter no aplica su
+    // escala, así que cada tamaño es una textura propia y se dibuja a escala 1.
+    for (let k = 1; k <= 4; k++) {
+      const dc = document.createElement('canvas');
+      dc.width = 20 * k;
+      dc.height = 8 * k;
+      const d = dc.getContext('2d')!;
+      const px = (x: number, y: number, w: number, h: number, col: string) => {
+        d.fillStyle = col;
+        d.fillRect(x * k, y * k, w * k, h * k);
+      };
+      px(0, 0, 1, 7, 'rgba(207,230,255,0.75)');
+      px(1, 5, 1, 3, 'rgba(207,230,255,0.35)');
+      px(4, 0, 1, 5, 'rgba(207,230,255,0.45)');
+      px(8, 0, 3, 3, 'rgba(255,255,255,0.95)');
+      px(11, 1, 1, 1, 'rgba(191,216,255,0.6)');
+      px(13, 0, 2, 2, 'rgba(255,255,255,0.95)');
+      // salpicadura de una gota en el suelo
+      px(16, 1, 1, 1, 'rgba(220,235,255,0.7)');
+      px(18, 1, 1, 1, 'rgba(220,235,255,0.7)');
+      px(17, 0, 1, 1, 'rgba(220,235,255,0.7)');
+      px(16, 2, 3, 1, 'rgba(220,235,255,0.35)');
+      const dt = this.textures.addCanvas(`fx-drops-${k}`, dc)!;
+      dt.add('rain', 0, 0, 0, 2 * k, 8 * k);
+      dt.add('rain-far', 0, 4 * k, 0, k, 5 * k);
+      dt.add('snow', 0, 8 * k, 0, 4 * k, 3 * k);
+      dt.add('snow-s', 0, 13 * k, 0, 2 * k, 2 * k);
+      dt.add('ripple', 0, 16 * k, 0, 3 * k, 3 * k);
+    }
     tex('cloud', 90, 50, (ctx) => {
       ctx.fillStyle = '#0a0818';
       ctx.beginPath();
@@ -1780,21 +1781,28 @@ export class CityScene extends Phaser.Scene {
     const k = Phaser.Math.Clamp(this.cameras.main.zoom / RES, 0.55, 2.2);
     const rain = w === 'lluvia' || w === 'tormenta';
     const snow = w === 'nieve';
-    if (w !== this.weatherShown || Math.abs(k - this.weatherZoom) > 0.18) {
+    const size = `${W}x${H}`;
+    if (w !== this.weatherShown || Math.abs(k - this.weatherZoom) > 0.18 || size !== this.weatherSize) {
       this.weatherShown = w;
       this.weatherZoom = k;
-      this.precip.clear();
+      this.weatherSize = size;
       this.drops = [];
       this.ripples = [];
-      // tamaño de cada gota en pantalla: resolución × zoom (nunca más pequeña que 1 píxel)
-      const sc = RES * Math.max(0.75, Math.sqrt(k));
-      this.precip.setScale(sc);
+      // tamaño de cada gota en pantalla: resolución × zoom, redondeado a un atlas ya dibujado
+      const sc = Phaser.Math.Clamp(Math.round(RES * Math.max(0.75, Math.sqrt(k))), 1, 4);
+      const key = `fx-drops-${sc}`;
+      if (this.precip.texture.key !== key) {
+        // el Blitter no cambia de textura: se crea otro con la del tamaño nuevo
+        this.precip.destroy();
+        this.precip = this.add.blitter(0, 0, key).setDepth(10);
+        this.cameras.main.ignore(this.precip);
+      } else this.precip.clear();
       const base = w === 'tormenta' ? 150 : snow ? 100 : w === 'lluvia' ? 100 : 0;
-      const n = Math.round(base * Phaser.Math.Clamp(1.25 / k, 0.7, 1.7) * (this.low ? 0.5 : 1));
+      const n = Math.round(base * Phaser.Math.Clamp(1.25 / k, 0.9, 1.7) * (this.low ? 0.6 : 1));
       for (let i = 0; i < n; i++) {
         const sp = 0.6 + Math.random() * 0.8;
         const frame = snow ? (sp > 1.1 ? 'snow' : 'snow-s') : sp > 1 ? 'rain' : 'rain-far';
-        this.drops.push({ bob: this.precip.create((Math.random() * W) / sc, (Math.random() * H) / sc, frame), s: sp });
+        this.drops.push({ bob: this.precip.create(Math.random() * W, Math.random() * H, frame), s: sp });
       }
       if (rain && !this.low) for (let i = 0; i < Math.round(26 / Math.sqrt(k)); i++) this.ripples.push(this.precip.create(-10, -10, 'ripple'));
       this.precip.setVisible(n > 0);
@@ -1803,9 +1811,10 @@ export class CityScene extends Phaser.Scene {
       this.lastLightAt = 0;
     }
     if (this.drops.length) {
-      const sc = this.precip.scaleX;
-      const vw = W / sc;
-      const vh = H / sc;
+      // todo en píxeles de la pantalla del juego (el Blitter va a escala 1)
+      const sc = Number(this.precip.texture.key.slice(-1));
+      const vw = W;
+      const vh = H;
       // de lejos todo cae más despacio en pantalla; la tormenta trae viento
       const fall = Math.sqrt(k);
       const wind = w === 'tormenta' ? 0.11 : 0.05;
@@ -1813,18 +1822,18 @@ export class CityScene extends Phaser.Scene {
       for (const d of this.drops) {
         const b = d.bob;
         if (snow) {
-          b.y += delta * 0.014 * d.s * fall;
-          b.x += Math.sin((b.y + d.s * 100) / 18) * 0.2 + delta * gust;
+          b.y += delta * 0.014 * d.s * fall * sc;
+          b.x += (Math.sin((b.y / sc + d.s * 100) / 18) * 0.2 + delta * gust) * sc;
         } else {
-          b.y += delta * 0.24 * d.s * fall;
-          b.x -= delta * wind * d.s * fall;
+          b.y += delta * 0.24 * d.s * fall * sc;
+          b.x -= delta * wind * d.s * fall * sc;
         }
         if (b.y > vh) {
-          b.y = -8;
-          b.x = Math.random() * (vw + 40);
+          b.y = -8 * sc;
+          b.x = Math.random() * (vw + 40 * sc);
         }
-        if (b.x < -6) b.x = vw + 4;
-        if (b.x > vw + 6) b.x = -4;
+        if (b.x < -6 * sc) b.x = vw + 4 * sc;
+        if (b.x > vw + 6 * sc) b.x = -4 * sc;
       }
       // salpicaduras: aparecen un instante en sitios al azar (solo en la mitad de abajo de la vista)
       for (const r of this.ripples) {
