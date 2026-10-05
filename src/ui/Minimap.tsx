@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { BLOCK_H, BLOCK_W, blockX, blockY, COLS, MAP_H, MAP_W, PLACE_BY_ID, PLACES_MAP, placeEntrance, placeRect, RIVER_W, RIVER_X, ROLE_PLACES, ROWS, lotRect, stY, BRIDGE_STREET } from '../art/cityMap';
+import { BLOCK_H, BLOCK_W, blockX, blockY, COLS, MAP_H, MAP_W, PLACE_BY_ID, PLACES_MAP, placeEntrance, placeRect, RIVER_W, RIVER_X, ROLE_PLACES, ROWS, lotRect, stY, BRIDGE_STREET, iso, unIso } from '../art/cityMap';
 import { districtOf, type District } from '../core/city';
 import { LOTS, MEGA } from '../core/lots';
 import type { GameState } from '../core/types';
@@ -9,10 +9,28 @@ import { PixelIcon } from './PixelIcon';
 /**
  * Minimapa con viaje rápido: toca un punto para llevar la cámara allí, o usa
  * los botones para ir a tu casa, tu trabajo, tus solares o Brooklyn.
+ * Se dibuja en rombo, con el mismo ángulo que la vista isométrica.
  */
-const S = 0.17;
-const W = Math.round(MAP_W * S);
-const H = Math.round(MAP_H * S);
+const S = 0.12;
+const W = Math.round((MAP_W + MAP_H) * S);
+const H = Math.round(((MAP_W + MAP_H) / 2) * S);
+/** Esquina del rombo en la pantalla del mundo. */
+const O = iso(0, MAP_H);
+const OT = iso(0, 0);
+/** Del plano al minimapa. */
+const mp = (x: number, y: number) => {
+  const p = iso(x, y);
+  return { x: (p.x - O.x) * S, y: (p.y - OT.y) * S };
+};
+/** Rectángulo del plano como rombo en el minimapa. */
+function quad(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const pts = [mp(x, y), mp(x + w, y), mp(x + w, y + h), mp(x, y + h)];
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+  ctx.closePath();
+  ctx.fill();
+}
 const DCOL: Record<District, string> = {
   midtown: '#6a6474',
   chinatown: '#8a4a3a',
@@ -24,24 +42,26 @@ const DCOL: Record<District, string> = {
 };
 
 function drawBase(ctx: CanvasRenderingContext2D) {
-  ctx.fillStyle = '#2a2830';
+  ctx.fillStyle = '#1d3a58';
   ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#2a2830';
+  quad(ctx, 0, 0, MAP_W, MAP_H);
   for (let c = 0; c < COLS; c++)
     for (let r = 0; r < ROWS; r++) {
       ctx.fillStyle = DCOL[districtOf(c, r)];
-      ctx.fillRect(blockX(c) * S, blockY(r) * S, BLOCK_W * S, BLOCK_H * S);
+      quad(ctx, blockX(c), blockY(r), BLOCK_W, BLOCK_H);
     }
   const special: Record<string, string> = { parque: '#3f7a3a', residencia: '#4a7a3e', alcaldia: '#d8d0bf', bolsa: '#ece6d8', plaza: '#ff4f9a', hipodromo: '#a8784a', coney: '#e8d29a' };
   for (const p of PLACES_MAP) {
     if (!special[p.id]) continue;
     const r = placeRect(p);
     ctx.fillStyle = special[p.id];
-    ctx.fillRect(r.x * S, r.y * S, r.w * S, r.h * S);
+    quad(ctx, r.x, r.y, r.w, r.h);
   }
   ctx.fillStyle = '#1d3a58';
-  ctx.fillRect(RIVER_X * S, 0, RIVER_W * S, H);
+  quad(ctx, RIVER_X, 0, RIVER_W, MAP_H);
   ctx.fillStyle = '#c2b08c';
-  ctx.fillRect(RIVER_X * S, stY(BRIDGE_STREET) * S - 1, RIVER_W * S, 2);
+  quad(ctx, RIVER_X, stY(BRIDGE_STREET) - 5, RIVER_W, 10);
 }
 
 export function Minimap({ state }: { state: GameState }) {
@@ -82,7 +102,8 @@ export function Minimap({ state }: { state: GameState }) {
       const st = state.lots?.[l.id];
       const r = lotRect(l);
       ctx.fillStyle = !st ? 'rgba(255,255,255,0.55)' : st.buildingUntil ? '#ff8a3b' : st.owner === 'jugador' || st.owner === 'ciudad' ? '#ffcc33' : '#9fe8ff';
-      ctx.fillRect((r.x + r.w / 2) * S - 1.5, (r.y + r.h / 2) * S - 1.5, 3, 3);
+      const q = mp(r.x + r.w / 2, r.y + r.h / 2);
+      ctx.fillRect(q.x - 1.5, q.y - 1.5, 3, 3);
     }
     for (const m of MEGA) {
       if ('place' in m.site) continue;
@@ -90,7 +111,8 @@ export function Minimap({ state }: { state: GameState }) {
       if (!p) continue;
       ctx.fillStyle = p.done ? '#4ff0ff' : '#ff8a3b';
       const r = placeRect({ id: 'plaza', label: '', c: m.site.c, r: m.site.r, cw: m.site.cw, rh: m.site.rh });
-      ctx.fillRect((r.x + r.w / 2) * S - 2, (r.y + r.h / 2) * S - 2, 4, 4);
+      const q = mp(r.x + r.w / 2, r.y + r.h / 2);
+      ctx.fillRect(q.x - 2, q.y - 2, 4, 4);
     }
     const mine = ROLE_PLACES[state.character.role];
     for (const [id, col] of [
@@ -99,16 +121,19 @@ export function Minimap({ state }: { state: GameState }) {
     ] as const) {
       const e = placeEntrance(PLACE_BY_ID[id]);
       ctx.fillStyle = col;
-      ctx.fillRect(e.x * S - 2, e.y * S - 2, 4, 4);
+      const q = mp(e.x, e.y);
+      ctx.fillRect(q.x - 2, q.y - 2, 4, 4);
     }
     const v = view.current;
     if (v) {
       ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(Math.round(v.x * S) + 0.5, Math.round(v.y * S) + 0.5, Math.round(v.w * S), Math.round(v.h * S));
+      // la vista llega en coordenadas de pantalla del mundo
+      ctx.strokeRect(Math.round((v.x - O.x) * S) + 0.5, Math.round((v.y - OT.y) * S) + 0.5, Math.round(v.w * S), Math.round(v.h * S));
       if (v.playerVisible) {
+        const q = mp(v.px, v.py);
         ctx.fillStyle = '#ff3b5a';
-        ctx.fillRect(v.px * S - 2, v.py * S - 3, 4, 4);
+        ctx.fillRect(q.x - 2, q.y - 3, 4, 4);
       }
     }
   };
@@ -124,13 +149,16 @@ export function Minimap({ state }: { state: GameState }) {
 
   const tap = (e: PointerEvent) => {
     const r = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
-    bridge.focus(((e.clientX - r.left) / r.width) * MAP_W, ((e.clientY - r.top) / r.height) * MAP_H);
+    const sx = ((e.clientX - r.left) / r.width) * W;
+    const sy = ((e.clientY - r.top) / r.height) * H;
+    const g = unIso(sx / S + O.x, sy / S + OT.y);
+    bridge.focus(Math.max(0, Math.min(MAP_W, g.x)), Math.max(0, Math.min(MAP_H, g.y)));
   };
   const go = (where: 'home' | 'work' | 'lots' | 'brooklyn') => {
     const mine = ROLE_PLACES[state.character.role];
     if (where === 'home' || where === 'work') {
       const e = placeEntrance(PLACE_BY_ID[where === 'home' ? mine.home : mine.work]);
-      return bridge.focus(e.x, e.y - 20);
+      return bridge.focus(e.x - 10, e.y - 10);
     }
     if (where === 'brooklyn') return bridge.focus(RIVER_X + RIVER_W + 160, MAP_H / 2);
     const ids = Object.entries(state.lots ?? {})
@@ -139,7 +167,7 @@ export function Minimap({ state }: { state: GameState }) {
     const list = ids.length ? ids : LOTS.filter((l) => !state.lots?.[l.id]).map((l) => l.id);
     const l = LOTS.find((x) => x.id === list[lotIdx.current++ % list.length])!;
     const r = lotRect(l);
-    bridge.focus(r.x + r.w / 2, r.y + r.h / 2 - 10);
+    bridge.focus(r.x + r.w / 2, r.y + r.h / 2);
   };
 
   return (

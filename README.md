@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: beta 0.8.0**
+**Versión actual: beta 0.9.0**
 
 ## Probar la beta
 
@@ -21,6 +21,23 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.9.0
+
+- **Vista isométrica**, como en los juegos clásicos de construir ciudades: la ciudad se ve en diagonal y desde arriba, y cada edificio es un volumen con azotea, fachada iluminada y fachada en sombra.
+  - Los edificios proyectan sombra.
+  - Midtown tiene rascacielos de cristal con antenas.
+  - El puente de Brooklyn tiene torres de piedra con arcos y cables.
+  - El mar rodea las islas.
+- **Lo demás no cambia:** las mismas manzanas, los lugares, los solares, las obras, los concursos, el tráfico con semáforos y la gente.
+  - Los personajes caminan por las aceras que dan a la cámara, así que siempre se les ve.
+  - Los edificios tapan a quien pasa por detrás.
+- **Minimapa en rombo**, con el mismo ángulo que la vista.
+- **Acercar y alejar:** pellizca para ver la ciudad entera o acercarte a una calle. Tocar un edificio funciona igual que antes.
+- **Rendimiento:**
+  - Cada manzana se dibuja recortada a su silueta.
+  - Los neones van dentro de la capa de luces.
+  - Si el móvil va lento, el juego baja la resolución él solo.
 
 ## Novedades 0.8.0
 
