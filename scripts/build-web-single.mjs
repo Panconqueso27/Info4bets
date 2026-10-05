@@ -9,7 +9,7 @@ const js = html.match(/<script type="module" crossorigin src="\.\/(assets\/[^"]+
 const css = html.match(/<link rel="stylesheet" crossorigin href="\.\/(assets\/[^"]+\.css)">/)[1];
 const code = readFileSync(`dist-web/${js}`, 'utf8').replace(/<\/script/gi, '<\\/script');
 const style = readFileSync(`dist-web/${css}`, 'utf8');
-const page = `<title>La Ciudad</title>
+const page = `<title>Pixelopolis</title>
 <meta name="theme-color" content="#120c24" />
 <style>${style}
 html, body { height: 100%; background: #07040f; }

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">La Ciudad</string>
-    <string name="title_activity_main">La Ciudad</string>
+    <string name="app_name">Pixelopolis</string>
+    <string name="title_activity_main">Pixelopolis</string>
     <string name="package_name">com.laciudad.juego</string>
     <string name="custom_url_scheme">com.laciudad.juego</string>
 </resources>

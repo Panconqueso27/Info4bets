@@ -233,7 +233,15 @@ type Ctx = CanvasRenderingContext2D;
  * Escala del arte: la capa base se dibuja al doble de resolución para tener
  * detalle fino; luces, neones y nieve van a resolución normal y se suavizan.
  */
-export const ART_SCALE = 2;
+let ART_SCALE = 3;
+/** El suelo va a 2× (calles y aceras); los edificios, a 3× para que se vean nítidos con zoom. */
+const GROUND_SCALE = 2;
+/** Detalle de los edificios: 3× en calidad alta, 2× en modo ahorro (menos memoria). */
+export function setArtScale(k: number) {
+  ART_SCALE = k;
+}
+/** Escala de cada lienzo (los patrones se ajustan a ella). */
+const SCALE = new WeakMap<Ctx, number>();
 
 /** Transformación de base de cada lienzo (para anidar planos sin acumular). */
 const BASE = new WeakMap<Ctx, DOMMatrix>();
@@ -247,6 +255,7 @@ function layer(rx: number, ry: number, w: number, h: number, scale: number, grou
   // El suelo se dibuja directamente en coordenadas del plano.
   if (ground) ctx.transform(1, 0.5, -1, 0.5, OX, OY);
   BASE.set(ctx, ctx.getTransform());
+  SCALE.set(ctx, scale);
   return { c, ctx };
 }
 
@@ -286,7 +295,9 @@ function ellipse(ctx: Ctx, cx: number, cy: number, rx: number, ry: number, color
 const patterns: Record<string, CanvasPattern> = {};
 /** Texturas repetidas: grano de asfalto, grava, ladrillo y baldosas (una sola llamada). */
 function pattern(ctx: Ctx, kind: 'grano' | 'grava' | 'ladrillo' | 'baldosa' | 'cesped'): CanvasPattern {
-  if (patterns[kind]) return patterns[kind];
+  const sc = SCALE.get(ctx) ?? 2;
+  const key = `${kind}${sc}`;
+  if (patterns[key]) return patterns[key];
   const c = document.createElement('canvas');
   const rnd = mulberry32(hashKind(kind));
   const px = c.getContext('2d')!;
@@ -318,8 +329,9 @@ function pattern(ctx: Ctx, kind: 'grano' | 'grava' | 'ladrillo' | 'baldosa' | 'c
   }
   const p = ctx.createPattern(c, 'repeat')!;
   // un píxel del patrón = medio píxel del mapa
-  p.setTransform(new DOMMatrix().scale(1 / ART_SCALE));
-  patterns[kind] = p;
+  // un píxel del patrón = medio píxel del mapa (con el lienzo a la escala que sea)
+  p.setTransform(new DOMMatrix().scale(1 / 2));
+  patterns[key] = p;
   return p;
 }
 function hashKind(k: string) {
@@ -383,6 +395,8 @@ interface Item {
   y1: number;
   h: number;
   draw: () => void;
+  /** Va delante de lo que se mueve por su celda (pilares que tapan a los coches que pasan por debajo). */
+  front?: boolean;
 }
 
 /** Estado del dibujo. Las capas cambian: primero el suelo y luego cada manzana. */
@@ -420,8 +434,8 @@ class Art {
  * orden de atrás hacia delante. (x0, y0)-(x1, y1) es su huella en el suelo
  * y h su altura (para el recorte y para saber dónde tocar).
  */
-function later(a: Art, x0: number, y0: number, x1: number, y1: number, h: number, draw: () => void) {
-  a.queue.push({ x0, y0, x1, y1, h, draw });
+function later(a: Art, x0: number, y0: number, x1: number, y1: number, h: number, draw: () => void, front = false) {
+  a.queue.push({ x0, y0, x1, y1, h, draw, front });
   const k = `${colOf((x0 + x1) / 2)},${rowOf((y0 + y1) / 2)}`;
   a.heights[k] = Math.max(a.heights[k] ?? 0, h);
 }
@@ -457,6 +471,14 @@ const onEast = (a: Art, X: number, Ys: number, zTop: number, fn: () => void) => 
 function sprite(a: Art, X: number, Y: number, fn: () => void, z = 0) {
   const p = iso(X, Y, z);
   withM(a, [1, 0, 0, 1, p.x - X, p.y - Y], fn);
+}
+
+/**
+ * De pie en un plano que mira al sur (letreros, carteles, la noria): mismo
+ * dibujo que sprite(), pero en perspectiva isométrica, pegado a la ciudad.
+ */
+function standS(a: Art, Y: number, fn: () => void, z = 0) {
+  plane(a, [0, Y, Y + z], [1, 0, 0], [0, 0, -1], fn);
 }
 
 interface BoxCol {
@@ -888,8 +910,7 @@ function genericBlock(a: Art, c: number, r: number, o: BlockOpts = {}) {
       x += finalW;
     }
   }
-  if (yard) yardExtras(a, district, x0, y0 + backD, w0, h0 - backD);
-  if (district === 'industrial') chimney(a, x0 + 8 + Math.floor(a.rand() * (w0 - 16)), y0 + 4, 30 + Math.floor(a.rand() * 14));
+  if (yard) yardExtras(a, district, x0, y0 + backD, w0, h0 - backD, district === 'industrial');
   if (district === 'chinatown') lanterns(a, x0, y0 + h0 + 1, w0);
   // Árboles en la acera: renovación nivel 2, Brooklyn Heights y la mitad del resto.
   const leafy = renov >= 2 || district === 'heights' || (district !== 'muelles' && district !== 'industrial' && a.rand() < 0.55);
@@ -897,17 +918,24 @@ function genericBlock(a: Art, c: number, r: number, o: BlockOpts = {}) {
   a.rand = prevRand;
 }
 
-/** Patio de almacén o fábrica: contenedores y una farola. */
-function yardExtras(a: Art, d: District, x: number, y: number, w: number, h: number) {
+/** Patio de almacén o fábrica: contenedores en fila (sin pisarse) y, en las fábricas, la chimenea. */
+function yardExtras(a: Art, d: District, x: number, y: number, w: number, h: number, stack = false) {
   rect(a.base, x, y, w, h, d === 'muelles' ? '#6d6a66' : '#5f5c58');
   patch(a.base, 'grava', x, y, w, h);
   rect(a.snow, x, y, w, h, 'rgba(240,246,255,0.8)');
   const colors = ['#c0392b', '#2f6fb3', '#3a7a4a', '#e2a23b', '#7a5232'];
-  for (let i = 0; i < 4; i++) {
-    const cx = x + 3 + Math.floor(a.rand() * Math.max(1, w - 18));
-    const cy = y + 3 + Math.floor(a.rand() * Math.max(1, h - 10));
-    const col = colors[Math.floor(a.rand() * colors.length)];
-    container(a, cx, cy, col);
+  // huecos de 16 × 8 en cuadrícula: cada contenedor (14 × 6) en el suyo
+  const cols = Math.floor((w - 4) / 16);
+  const rows = Math.max(1, Math.floor((h - 4) / 8));
+  const slots: [number, number][] = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) slots.push([x + 2 + c * 16, y + 2 + r * 8]);
+  if (stack && slots.length) {
+    const [sx, sy] = slots.splice(Math.floor(a.rand() * slots.length), 1)[0];
+    chimney(a, sx + 7, sy + 3.5, 34 + Math.floor(a.rand() * 14));
+  }
+  for (let i = 0; i < 4 && slots.length; i++) {
+    const [cx, cy] = slots.splice(Math.floor(a.rand() * slots.length), 1)[0];
+    container(a, cx, cy, colors[Math.floor(a.rand() * colors.length)]);
   }
   glow(a.lights, x + w / 2, y + h / 2, 14, '255,214,140', 0.35);
 }
@@ -927,10 +955,11 @@ function container(a: Art, x: number, y: number, col: string) {
   });
 }
 
-function chimney(a: Art, x: number, y: number, H: number) {
-  later(a, x - 3, y - 3, x + 3, y + 3, H + 4, () => {
-    groundShadow(a, x - 3, y - 3, 6, 6, H, 0.2);
+function chimney(a: Art, x: number, y: number, H: number, z = 0) {
+  later(a, x - 3, y - 3, x + 3, y + 3, H + z + 4, () => {
+    if (!z) groundShadow(a, x - 3, y - 3, 6, 6, H, 0.2);
     box(a, x - 3, y - 3, 6, 6, H, { top: '#3a2a20', south: '#8e3b2e', east: '#6a2a20' }, {
+      z,
       south: () => {
         patch(a.base, 'ladrillo', x - 3, 0, 6, H);
         for (let v = 3; v < H; v += 6) fine(a.base, x - 3, v, 6, 0.6, '#5a2018');
@@ -971,7 +1000,7 @@ function neonSign(a: Art, text: string, cx: number, y: number, color: string, rg
 
 /** Letrero de neón sobre postes, de pie (se lee de frente). */
 function roofSign(a: Art, text: string, X: number, Y: number, z: number, color: string, rgb: string) {
-  sprite(a, X, Y, () => {
+  standS(a, Y, () => {
     fine(a.base, X - 8, Y - 4, 0.8, 4, '#14101f');
     fine(a.base, X + 7, Y - 4, 0.8, 4, '#14101f');
     neonSign(a, text, X, Y - 13, color, rgb);
@@ -1073,7 +1102,7 @@ function park(a: Art, p: Place) {
   for (let i = 0; i < 70; i++) {
     const tx = x + 6 + a.rand() * (w - 12);
     const ty = y + 10 + a.rand() * (h - 14);
-    if (Math.abs(ty - cy) < 5 || Math.abs(tx - cx) < 5) continue;
+    if (Math.abs(ty - cy) < 6 || Math.abs(tx - cx) < 6 || (Math.abs(ty - cy) < 12 && Math.abs(tx - cx) < 14)) continue;
     if (Math.hypot(tx - (cx + 20), (ty - (cy - 22)) * 2.4) < 30) continue;
     if (a.rand() < 0.3) pine(a, Math.round(tx), Math.round(ty), 9 + Math.floor(a.rand() * 5));
     else tree(a, Math.round(tx), Math.round(ty), 2 + Math.floor(a.rand() * 3));
@@ -1416,9 +1445,9 @@ function signBlock(a: Art, p: Place, text: string, color: string, rgb: string, v
   const { x, y, w, h } = placeRect(p);
   const fy = y + h - SIDEWALK + 0.4;
   if (vertical) {
-    later(a, x + w - 22, fy - 0.3, x + w - 16, fy, 36, () => sprite(a, x + w - 19, fy, () => neonVertical(a, text, x + w - 22, fy - 36, color, rgb), 0));
+    later(a, x + w - 22, fy - 0.3, x + w - 16, fy, 36, () => standS(a, fy, () => neonVertical(a, text, x + w - 22, fy - 36, color, rgb), 0));
   } else {
-    later(a, x + w / 2 - 8, fy - 0.3, x + w / 2 + 8, fy, 20, () => sprite(a, x + w / 2, fy, () => neonSign(a, text, x + w / 2, fy - 19, color, rgb), 0));
+    later(a, x + w / 2 - 8, fy - 0.3, x + w / 2 + 8, fy, 20, () => standS(a, fy, () => neonSign(a, text, x + w / 2, fy - 19, color, rgb), 0));
   }
 }
 
@@ -1466,7 +1495,7 @@ function fence(a: Art, x: number, y: number, w: number, hoarding: boolean) {
 /** Cartel sobre postes, de pie. */
 function boardSign(a: Art, text: string, cx: number, cy: number, board: string, ink: string) {
   later(a, cx - 6, cy - 0.5, cx + 6, cy, 14, () =>
-    sprite(a, cx, cy, () => {
+    standS(a, cy, () => {
       const w = textWidth(text) + 4;
       const x = Math.round(cx - w / 2);
       const y = cy - 13;
@@ -1480,22 +1509,38 @@ function boardSign(a: Art, text: string, cx: number, cy: number, board: string, 
 }
 
 function crane(a: Art, x: number, y: number, h: number) {
-  later(a, x - 2, y - 2, x + 2, y, h + 4, () =>
-    sprite(a, x, y, () => {
-      for (let yy = y - h; yy < y; yy += 2) {
-        fine(a.base, x, yy, 0.8, 2, '#f2c230');
-        fine(a.base, x + 2, yy, 0.8, 2, '#f2c230');
-        fine(a.base, x + ((yy / 2) % 2 ? 1 : 0), yy, 2, 0.6, '#c99a1e');
+  later(a, x - 1.5, y - 3, x + 1.5, y, h + 4, () => {
+    groundShadow(a, x - 1.5, y - 3, 3, 3, h * 0.5, 0.18);
+    const lattice = () => {
+      for (let v = 0; v < h; v += 2) {
+        fine(a.base, 0, v, 3, 0.4, '#c99a1e');
+        fine(a.base, (v / 2) % 2 ? 0 : 2.4, v, 0.6, 2, '#c99a1e');
       }
-      rect(a.base, x - 12, y - h, 30, 2, '#f2c230');
-      for (let xx = x - 12; xx < x + 18; xx += 3) fine(a.base, xx, y - h + 1, 0.8, 0.8, '#c99a1e');
-      rect(a.base, x - 11, y - h + 2, 4, 3, '#55595f');
-      fine(a.base, x + 15, y - h + 2, 0.5, 11, '#14101f');
-      rect(a.base, x + 14, y - h + 13, 3, 2, '#7a5232');
-      rect(a.lights, x + 1, y - h - 1, 1, 1, '#ff3b3b');
-      rect(a.snow, x - 12, y - h - 1, 30, 1, 'rgba(245,250,255,0.9)');
-    }),
-  );
+    };
+    box(a, x - 1.5, y - 3, 3, 3, h, { top: '#f2c230', south: 'rgba(242,194,48,0.35)', east: 'rgba(201,154,30,0.35)' }, {
+      snow: false,
+      south: () => {
+        fill(a.base, x - 1.5, 0, 0.6, h, '#f2c230');
+        fill(a.base, x + 0.9, 0, 0.6, h, '#f2c230');
+        plane(a, [x - 1.5, y, h], [1, 0, 0], [0, 0, -1], lattice);
+      },
+      east: () => {
+        fill(a.base, 2.4, 0, 0.6, h, '#c99a1e');
+        plane(a, [x + 1.5, y, h], [0, -1, 0], [0, 0, -1], lattice);
+      },
+    });
+    // pluma a lo largo de la calle, con contrapeso y gancho
+    standS(a, y - 1.5, () => {
+      const t = y - 1.5 - h;
+      rect(a.base, x - 12, t - 2, 30, 2, '#f2c230');
+      for (let xx = x - 12; xx < x + 18; xx += 3) fine(a.base, xx, t - 1, 0.8, 0.8, '#c99a1e');
+      rect(a.base, x - 11, t, 4, 3, '#55595f');
+      fine(a.base, x + 15, t, 0.5, 11, '#14101f');
+      rect(a.base, x + 14, t + 11, 3, 2, '#7a5232');
+      rect(a.lights, x, t - 3, 1, 1, '#ff3b3b');
+      rect(a.snow, x - 12, t - 3, 30, 1, 'rgba(245,250,255,0.9)');
+    }, 0);
+  });
 }
 
 function emptyLot(a: Art, l: LotDef, sold: boolean) {
@@ -2053,50 +2098,47 @@ function streets(a: Art, lamps: { x: number; y: number }[]) {
   river(a);
 }
 
-/** Cabinas, buzones, quioscos, bocas de incendio y basura en la acera sur. */
+/** Cabinas, buzones, quioscos, bocas de incendio y basura en la acera sur (pequeños volúmenes). */
 function sidewalkProps(a: Art, x: number, y: number, d: District) {
-  const sy = y + BLOCK_H - 1.2;
+  const sy = y + BLOCK_H - 3.6;
   const spots = [x + 14, x + 30, x + 46, x + 62];
   const poor = DISTRICTS[d].poor;
+  const vol = (px: number, w: number, dd: number, h: number, col: BoxCol, o: Parameters<typeof box>[7] = {}) =>
+    later(a, px, sy, px + w, sy + dd, h + 2, () => {
+      groundShadow(a, px, sy, w, dd, h, 0.18);
+      box(a, px, sy, w, dd, h, col, o);
+    });
   for (const px of spots) {
     const roll = a.rand();
-    const at = (h: number, fn: () => void) => later(a, px, sy - 0.5, px + 3, sy, h, () => sprite(a, px, sy, fn));
     if (roll < 0.12) {
       // cabina telefónica
-      at(12, () => {
-        rect(a.base, px, sy - 11, 4, 10, '#9a9ea6');
-        rect(a.base, px + 1, sy - 10, 2, 5, '#6fa7c7');
-        rect(a.base, px, sy - 12, 4, 1, '#2f6fb3');
-        rect(a.lights, px + 1, sy - 10, 2, 5, 'rgba(220,240,255,0.8)');
+      vol(px, 2.6, 2.6, 9, { top: '#2f6fb3', south: '#9a9ea6', east: '#7a7e86' }, {
+        south: () => {
+          fill(a.base, px + 0.5, 1.5, 1.6, 5, '#6fa7c7');
+          fill(a.lights, px + 0.5, 1.5, 1.6, 5, 'rgba(220,240,255,0.8)');
+          fill(a.base, px, 0, 2.6, 1, '#2f6fb3');
+        },
+        east: () => fill(a.base, 0.5, 1.5, 1.6, 5, '#5f97b7'),
       });
     } else if (roll < 0.22) {
       // buzón azul
-      at(6, () => {
-        rect(a.base, px, sy - 5, 3, 4, '#2f5fa8');
-        rect(a.base, px, sy - 5, 3, 1, '#4f7fc8');
-        rect(a.base, px, sy - 1, 1, 1, '#1a1a1f');
-        rect(a.base, px + 2, sy - 1, 1, 1, '#1a1a1f');
-      });
+      vol(px, 2, 1.6, 4, { top: '#4f7fc8', south: '#2f5fa8', east: '#234a88' }, { south: () => fill(a.base, px + 0.4, 1, 1.2, 0.4, '#14101f') });
     } else if (roll < 0.3 && (d === 'midtown' || d === 'chinatown')) {
       // quiosco de prensa
-      at(10, () => {
-        rect(a.base, px - 2, sy - 8, 8, 7, '#3a7a4a');
-        rect(a.base, px - 3, sy - 9, 10, 2, '#2a5a3a');
-        rect(a.base, px - 1, sy - 6, 6, 3, '#f4efe2');
-        rect(a.base, px, sy - 5, 1, 1, '#e8414f');
-        rect(a.base, px + 2, sy - 5, 2, 1, '#2f6fb3');
-        rect(a.lights, px - 1, sy - 6, 6, 3, 'rgba(255,230,170,0.6)');
+      vol(px - 2, 6, 2.6, 6, { top: '#2a5a3a', south: '#3a7a4a', east: '#2a5a3a' }, {
+        south: () => {
+          fill(a.base, px - 1.4, 1.5, 4.8, 2.4, '#f4efe2');
+          fill(a.base, px - 1, 2, 1, 0.8, '#e8414f');
+          fill(a.base, px + 1, 2, 1.6, 0.8, '#2f6fb3');
+          fill(a.lights, px - 1.4, 1.5, 4.8, 2.4, 'rgba(255,230,170,0.6)');
+        },
       });
     } else if (roll < 0.4) {
-      at(4, () => rect(a.base, px, sy - 3, 2, 3, '#c0392b')); // boca de incendios
+      vol(px, 1.2, 1.2, 2.4, { top: '#e8414f', south: '#c0392b', east: '#8e2a20' }); // boca de incendios
     } else if (poor && roll < 0.72) {
-      // bolsas de basura y cubos
-      at(5, () => {
-        rect(a.base, px, sy - 3, 3, 3, '#1f1f24');
-        rect(a.base, px + 3, sy - 2, 3, 2, '#2a2a30');
-        rect(a.base, px + 1, sy - 4, 1, 1, '#3a3a40');
-        rect(a.base, px + 6, sy - 4, 3, 4, '#6a6e74');
-      });
+      // bolsas de basura y un cubo
+      vol(px, 2.4, 2, 2, { top: '#2a2a30', south: '#1f1f24', east: '#151518' });
+      vol(px + 3, 2, 2, 3.4, { top: '#8a8e94', south: '#6a6e74', east: '#4a4e54' });
     }
   }
 }
@@ -2150,28 +2192,41 @@ function river(a: Art) {
     });
   };
   later(a, x - 10, top, x + RIVER_W + 10, top + 0.4, TH, () => cables(top));
+  // Torres: dos pilares (la calzada pasa entre ellos) y un dintel con arcos.
+  const stone = { top: '#8a7560', south: '#b8a488', east: '#8a7560' };
+  const PD = 4;
+  const pier = (tx: number, py: number) =>
+    box(a, tx, py, 8, PD, TH - 20, stone, {
+      south: () => patch(a.base, 'ladrillo', tx, 0, 8, TH - 20),
+      east: () => patch(a.base, 'ladrillo', 0, 0, PD, TH - 20),
+    });
   for (const tx of towers) {
-    later(a, tx, top, tx + 8, top + D, TH + 4, () => {
+    later(a, tx, top, tx + 8, top + PD, TH + 4, () => {
       groundShadow(a, tx, top, 8, D, TH * 0.4, 0.2);
-      box(a, tx, top, 8, D, TH, { top: '#8a7560', south: '#b8a488', east: '#8a7560' }, {
+      pier(tx, top);
+      box(a, tx, top, 8, D, 20, stone, {
+        z: TH - 20,
         south: () => {
-          patch(a.base, 'ladrillo', tx, 0, 8, TH);
+          patch(a.base, 'ladrillo', tx, 0, 8, 20);
           fill(a.base, tx - 0.5, 0, 9, 2, '#9a8570');
         },
         east: () => {
-          // arcos góticos por los que pasa la calzada
-          for (const u of [3, D - 9]) {
-            fill(a.base, u, 14, 6, TH - 14, '#3a3040');
-            poly(a.base, [u, 14.2, u + 6, 14.2, u + 3, 9], '#3a3040');
-          }
-          patch(a.base, 'ladrillo', 0, 0, D, TH);
+          patch(a.base, 'ladrillo', 0, 0, D, 20);
           fill(a.base, 0, 0, D, 2, '#7a6550');
+          // arco ojival sobre la calzada
+          poly(a.base, [PD, 20.2, D - PD, 20.2, D / 2, 12], '#3a3040');
+          for (const u of [6, D - 9]) {
+            fill(a.base, u, 5, 3, 6, '#3a3040');
+            poly(a.base, [u, 5.2, u + 3, 5.2, u + 1.5, 3], '#3a3040');
+          }
         },
         top: () => fill(a.lights, tx + 3, top + D / 2 - 1, 2, 2, '#ff3b3b'),
       });
     });
+    // el pilar sur va delante de los coches que cruzan
+    later(a, tx, top + D - PD, tx + 8, top + D, TH - 18, () => pier(tx, top + D - PD), true);
   }
-  later(a, x - 10, top + D - 0.4, x + RIVER_W + 10, top + D, TH, () => cables(top + D));
+  later(a, x - 10, top + D - 0.4, x + RIVER_W + 10, top + D, TH, () => cables(top + D), true);
 }
 
 // --------------------------------------------------------------------------
@@ -2182,8 +2237,9 @@ function sugarFactory(a: Art, p: Place) {
   const { x, y, w, h } = placeRect(p);
   rect(a.base, x + SIDEWALK, y + SIDEWALK, w - 6, h - 6, '#5f5c58');
   building(a, x + 4, y + 6, w - 8, 26, 34, { facadeColor: '#8e3b2e', roof: '#4a4850', fireEscape: true, win: 3 });
-  chimney(a, x + 14, y + 4, 62);
-  chimney(a, x + w - 16, y + 4, 54);
+  // chimeneas sobre la azotea de la fábrica (no atraviesan el edificio)
+  chimney(a, x + 14, y + 12, 30, 34);
+  chimney(a, x + w - 16, y + 12, 24, 34);
   later(a, x + w / 2 - 6, y + 31.5, x + w / 2 + 6, y + 32, 34, () =>
     onSouth(a, y + 32.05, 34, () => {
       fill(a.base, x + w / 2 - 14, 3, 28, 9, '#1d1d24');
@@ -2270,7 +2326,7 @@ function racetrack(a: Art, p: Place) {
       }),
     );
   }
-  later(a, cx - 8, y + h - 3.5, cx + 8, y + h - 3, 20, () => sprite(a, cx, y + h - 3, () => neonSign(a, 'RACES', cx, y + h - 22, '#7dff6a', '125,255,106')));
+  later(a, cx - 8, y + h - 3.5, cx + 8, y + h - 3, 20, () => standS(a, y + h - 3, () => neonSign(a, 'RACES', cx, y + h - 22, '#7dff6a', '125,255,106')));
 }
 
 function coneyIsland(a: Art, p: Place) {
@@ -2285,8 +2341,8 @@ function coneyIsland(a: Art, p: Place) {
   rect(a.snow, x, y, w, h - 10, 'rgba(240,246,255,0.8)');
   // noria (de pie, de frente a la cámara)
   const cx = x + 36, cy = y + 26, R = 24;
-  later(a, cx - 6, cy - 2, cx + 6, cy + 2, R * 2 + 10, () =>
-    sprite(a, cx, cy, () => {
+  later(a, cx - R, cy - 2, cx + R, cy + 2, R * 2 + 10, () =>
+    standS(a, cy, () => {
       const top = cy - R - 6;
       fine(a.base, cx - 9, top + R, 1, R + 6, '#c9c4bc');
       fine(a.base, cx + 8, top + R, 1, R + 6, '#c9c4bc');
@@ -2306,7 +2362,7 @@ function coneyIsland(a: Art, p: Place) {
   );
   // montaña rusa: estructura de madera
   later(a, x + 70, y + 20, x + w - 8, y + 24, 30, () =>
-    sprite(a, x + 70, y + 24, () => {
+    standS(a, y + 24, () => {
       for (let xx = x + 70; xx < x + w - 8; xx += 0.5) {
         const yy = y + 2 - Math.abs(Math.sin((xx - x) / 9)) * 22;
         fine(a.base, xx, yy, 0.6, 0.6, '#f4efe2');
@@ -2314,7 +2370,7 @@ function coneyIsland(a: Art, p: Place) {
       }
     }),
   );
-  later(a, x + w - 58, y + h - 16.5, x + w - 42, y + h - 16, 22, () => sprite(a, x + w - 50, y + h - 16, () => neonSign(a, 'CONEY ISLAND', x + w - 50, y + h - 36, '#ff4f9a', '255,79,154')));
+  later(a, x + w - 58, y + h - 16.5, x + w - 42, y + h - 16, 22, () => standS(a, y + h - 16, () => neonSign(a, 'CONEY ISLAND', x + w - 50, y + h - 36, '#ff4f9a', '255,79,154')));
 }
 
 // --------------------------------------------------------------------------
@@ -2370,7 +2426,7 @@ function megaSite(a: Art, m: (typeof MEGA)[number], st: 'obras' | 'listo' | unde
           glow(a.lights, lx, y - 22, 22, '255,255,230', 0.45);
         });
       }
-      sprite(a, cx, y + h - 4, () => neonSign(a, 'DODGERS', cx, y + h - 18, '#4ff0ff', '79,240,255'));
+      standS(a, y + h - 4, () => neonSign(a, 'DODGERS', cx, y + h - 18, '#4ff0ff', '79,240,255'));
     });
   } else if (m.id === 'puerto') {
     rect(a.base, x + 2, y + 2, w - 4, h - 4, '#8d8a86');
@@ -2459,8 +2515,8 @@ function timesSquareReform(a: Art, p: Place, st: 'obras' | 'listo' | undefined) 
   rect(a.base, x + 2, y + h - 3, w - 4, 3, '#a8352c');
   for (let k = x + 4; k < x + w - 4; k += 8) rect(a.base, k, y + h - 3, 2, 3, '#c8452e');
   // pantalla gigante en lo alto del edificio central
-  later(a, x + w / 2 - 10, y + 24, x + w / 2 + 10, y + 25, 80, () =>
-    sprite(a, x + w / 2, y + 25, () => {
+  later(a, x + w / 2 - 22, y + 24, x + w / 2 + 22, y + 25, 80, () =>
+    standS(a, y + 25, () => {
       const top = y + 25 - 74;
       rect(a.base, x + w / 2 - 22, top, 44, 20, '#101018');
       const cols = ['#ff4f9a', '#4ff0ff', '#ffcc33', '#7dff6a'];
@@ -2516,6 +2572,8 @@ export interface MapLayer {
   neon: HTMLCanvasElement | null;
   snow: HTMLCanvasElement | null;
   wet?: HTMLCanvasElement;
+  /** Píxeles del lienzo base por unidad del mapa. */
+  scale: number;
   /** Franjas a dibujar (en unidades, relativas al lienzo); sin ellas, el lienzo entero. */
   bands?: { x: number; y: number; w: number; h: number }[];
 }
@@ -2666,7 +2724,7 @@ export function generateCityMap(seed = 1985, look?: CityLook | null): CityMapArt
   const gy = OY - 12;
   const gw = MAP_W + MAP_H + 24;
   const gh = (MAP_W + MAP_H) / 2 + 24;
-  const g = { base: layer(gx, gy, gw, gh, ART_SCALE, true), lights: layer(gx, gy, gw, gh, 1, true), neon: layer(gx, gy, gw, gh, 1, true), snow: layer(gx, gy, gw, gh, 1, true) };
+  const g = { base: layer(gx, gy, gw, gh, GROUND_SCALE, true), lights: layer(gx, gy, gw, gh, 1, true), neon: layer(gx, gy, gw, gh, 1, true), snow: layer(gx, gy, gw, gh, 1, true) };
   const a = new Art(rand, seed);
   a.base = g.base.ctx;
   a.ground = g.base.ctx;
@@ -2728,13 +2786,13 @@ export function generateCityMap(seed = 1985, look?: CityLook | null): CityMapArt
   if (a.used.neon) mergeNeon(g.base.c, g.lights.c, g.neon.c);
 
   // Volúmenes: un lienzo por celda de profundidad, de atrás hacia delante.
-  const byCell = new Map<string, { c: number; r: number; items: Item[] }>();
+  const byCell = new Map<string, { c: number; r: number; items: Item[]; front: boolean }>();
   for (const it of a.queue) {
     const c = cellCol((it.x0 + it.x1) / 2);
     const r = cellRow((it.y0 + it.y1) / 2);
-    const k = `${c},${r}`;
+    const k = `${c},${r}${it.front ? 'f' : ''}`;
     let cell = byCell.get(k);
-    if (!cell) byCell.set(k, (cell = { c, r, items: [] }));
+    if (!cell) byCell.set(k, (cell = { c, r, items: [], front: !!it.front }));
     cell.items.push(it);
   }
   const cells: MapLayer[] = [];
@@ -2771,7 +2829,8 @@ export function generateCityMap(seed = 1985, look?: CityLook | null): CityMapArt
       y: y0,
       w,
       h,
-      depth: cellDepth(cell.c, cell.r),
+      depth: cellDepth(cell.c, cell.r) + (cell.front ? 9.6 : 0),
+      scale: ART_SCALE,
       base: L.base.c,
       lights: a.used.lights ? L.lights.c : null,
       neon: null,
@@ -2780,7 +2839,7 @@ export function generateCityMap(seed = 1985, look?: CityLook | null): CityMapArt
     });
   }
   return {
-    ground: { key: 'ground', x: gx, y: gy, w: gw, h: gh, depth: -1000, base: g.base.c, lights: g.lights.c, neon: null, snow: g.snow.c, wet: wet.c },
+    ground: { key: 'ground', x: gx, y: gy, w: gw, h: gh, depth: -1000, scale: GROUND_SCALE, base: g.base.c, lights: g.lights.c, neon: null, snow: g.snow.c, wet: wet.c },
     cells,
     lamps,
     signals: a.signals,

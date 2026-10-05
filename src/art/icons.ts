@@ -174,6 +174,26 @@ const ICONS: Record<string, string[]> = {
     '............', '.yyy.ggg.yy.', '.yyyggggyyy.', '.ybyggggyby.', '.ybbggggybb.', '.yybgggbyyb.',
     '.yyybgbbyyy.', '.yrybbbyyyy.', '.yrrybyyyyy.', '.yyyybyyyyy.', '.yyy.yyy.yy.', '............',
   ],
+  nota: [
+    '..kkkkkkkk..', '..kyyyyyyk..', '..kyYYYYyk..', '..kyyyyyyk..', '..kyYYYyyk..', '..kyyyyyyk..',
+    '..kyYYYYyk..', '..kyyyyykNN.', '..kyYYyykNn.', '..kyyyyykn..', '..kkkkkkkk..', '............',
+  ],
+  calc: [
+    '.AAAAAAAAAA.', '.AccccccccA.', '.AcckkkkccA.', '.AccccccccA.', '.AAAAAAAAAA.', '.AwwAwwAwwA.',
+    '.AwwAwwAwwA.', '.AAAAAAAAAA.', '.AwwAwwAyyA.', '.AwwAwwAyyA.', '.AAAAAAAAAA.', '............',
+  ],
+  sol: [
+    '...y...y....', '....y.y.....', '.y.yyyyy.y..', '..yyYyyyy...', 'yyyYyyyyyy..', '..yyyyywww..',
+    '.y.yyywwwww.', '...y.wwwwwww', '....wwwwwwww', '.....aaaaaa.', '............', '............',
+  ],
+  musica: [
+    '.....kkkkkk.', '.....kbbbbk.', '.....k....k.', '.....k....k.', '.....k....k.', '.....k....k.',
+    '.....k....k.', '...kkk..kkk.', '..kbbk.kbbk.', '..kbbk.kbbk.', '...kk...kk..', '............',
+  ],
+  huella: [
+    '...kkkkk....', '..k.....k...', '.k.kkkkk.k..', '.k.k...k.k..', 'k.k.kkk.k.k.', 'k.k.k.k.k.k.',
+    'k.k.k.k.k.k.', 'k.k.k...k.k.', '.k.k.kkk.k..', '.k.k....k...', '..k.kkkk....', '............',
+  ],
   estrella: [
     '.....yy.....', '.....yy.....', '....yyyy....', 'yyyyyyyyyyyy', '.yyyyyyyyyy.', '..yyyyyyyy..',
     '...yyyyyy...', '..yyyyyyyy..', '..yyy..yyy..', '.yyy....yyy.', '.yy......yy.', '............',

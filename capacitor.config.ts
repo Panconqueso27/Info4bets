@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.laciudad.juego',
-  appName: 'La Ciudad',
+  appName: 'Pixelopolis',
   webDir: 'dist',
   backgroundColor: '#120c24',
   android: {

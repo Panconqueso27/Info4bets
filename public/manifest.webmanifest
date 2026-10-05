@@ -1,7 +1,7 @@
 {
-  "name": "La Ciudad",
-  "short_name": "La Ciudad",
-  "description": "Life sim de supervivencia en una ciudad de los 80.",
+  "name": "Pixelopolis",
+  "short_name": "Pixelopolis",
+  "description": "Pixelopolis · Pixel Town Builder: life sim en una ciudad de los 80.",
   "start_url": "./",
   "display": "standalone",
   "orientation": "portrait",

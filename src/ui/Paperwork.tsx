@@ -1,71 +1,189 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { Letters } from './AnimText';
 import { MINUTES_PER_POINT } from '../core/game';
 import { play } from '../platform/audio';
-import { useSwipe } from './useSwipe';
 
 /**
- * Minijuego "Papeleo" (alcalde): 1 minuto despachando documentos.
- * Derecha = APROBAR, izquierda = RECHAZAR. Los documentos fraudulentos
- * esconden una señal (cuñados, efectivo, fechas imposibles, sin firma...).
- * Cada acierto descuenta 10 minutos de la jornada.
+ * Minijuego "Papeleo" (alcalde), al estilo de un puesto de control:
+ * cada expediente trae un documento y la ficha del registro municipal. Con
+ * el escáner de huellas, la lámpara ultravioleta y el reglamento hay que
+ * decidir si se APRUEBA o se RECHAZA (y por qué). Cada pocos expedientes
+ * entra en vigor una norma nueva. Los errores traen citaciones.
  */
-const GAME_SECONDS = 60;
+const GAME_SECONDS = 90;
+/** Citaciones que se perdonan antes de restar puntos. */
+const FREE_CITATIONS = 2;
 
-interface Doc {
-  id: number;
-  kind: string;
-  company: string;
-  amount: string;
-  date: string;
-  signed: boolean;
-  note: string;
-  fraud: boolean;
-  /** Campo con la señal sospechosa (para resaltarlo tras decidir). */
-  flag?: 'company' | 'amount' | 'date' | 'signed' | 'note';
+type Flaw = 'empresa' | 'huella' | 'fecha' | 'agua' | 'caducada' | 'firmas';
+
+const REASONS: { id: Flaw; label: string }[] = [
+  { id: 'empresa', label: 'Empresa / licencia' },
+  { id: 'huella', label: 'Huella' },
+  { id: 'agua', label: 'Marca de agua' },
+  { id: 'caducada', label: 'Licencia caducada' },
+  { id: 'firmas', label: 'Faltan firmas' },
+  { id: 'fecha', label: 'Fecha imposible' },
+];
+
+const FLAW_TEXT: Record<Flaw, string> = {
+  empresa: 'La empresa o el nº de licencia no coinciden con el registro.',
+  huella: 'La huella del documento no era la del registro.',
+  fecha: 'La fecha del documento no existe.',
+  agua: 'No tenía la marca de agua del Ayuntamiento.',
+  caducada: 'La licencia de la empresa estaba caducada.',
+  firmas: 'Más de $500.000 con una sola firma.',
+};
+
+/** Normas del reglamento: entran en vigor según los expedientes despachados. */
+const RULES: { from: number; flaw: Flaw; text: string }[] = [
+  { from: 0, flaw: 'empresa', text: 'La empresa y el nº de licencia deben coincidir con la ficha del registro.' },
+  { from: 0, flaw: 'huella', text: 'La huella del solicitante debe coincidir con la del registro. Usa el escáner.' },
+  { from: 0, flaw: 'fecha', text: 'Rechaza documentos con fechas que no existen.' },
+  { from: 3, flaw: 'agua', text: 'Los documentos auténticos llevan la marca de agua del Ayuntamiento (lámpara UV).' },
+  { from: 6, flaw: 'caducada', text: 'Rechaza si la licencia de la empresa caducó antes de hoy.' },
+  { from: 9, flaw: 'firmas', text: 'Más de $500.000 necesita DOS firmas: interventor y tesorero.' },
+];
+
+const KINDS = ['Permiso de obra', 'Contrato de limpieza', 'Compra de patrullas', 'Licencia de bar', 'Reparación de puente', 'Subvención cultural', 'Alumbrado público', 'Contrato del metro', 'Recogida de basuras', 'Asfaltado de avenida'];
+const COMPANIES = ['Hudson Builders', 'Bronx Clean Co.', 'Liberty Supplies', 'Empire Lights', 'Queens Motors', 'Brooklyn Bridge & Sons', 'Manhattan Paving', 'Harlem Glass', 'Staten Freight', 'Atlas Concrete'];
+const PEOPLE = ['F. Delgado', 'M. O’Brien', 'S. Goldberg', 'L. Moretti', 'J. Washington', 'R. Kowalski', 'A. Chen', 'T. Murphy', 'E. Rossi', 'D. Novak'];
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const DAYS_IN = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+const rnd = (n: number) => Math.floor(Math.random() * n);
+const pick = <T,>(a: T[]) => a[rnd(a.length)];
+const fmtDate = (d: number, m: number, y = 1985) => `${d} de ${MONTHS[m]} de ${y}`;
+const money = (n: number) => `$${n.toLocaleString('es').replace(/,/g, '.')}`;
+
+/** Erratas sutiles: una letra cambiada o dos intercambiadas. */
+function misspell(s: string): string {
+  const letters = [...s];
+  const idx = letters.map((c, i) => (/[a-z]/.test(c) ? i : -1)).filter((i) => i > 0);
+  const i = pick(idx);
+  if (Math.random() < 0.5 && i + 1 < letters.length && /[a-z]/.test(letters[i + 1])) [letters[i], letters[i + 1]] = [letters[i + 1], letters[i]];
+  else letters[i] = letters[i] === 'e' ? 'a' : letters[i] === 'o' ? 'u' : letters[i] === 'n' ? 'm' : 'e';
+  const out = letters.join('');
+  return out === s ? s.replace(/s\b/, 'z') : out;
 }
 
-const KINDS = ['Permiso de obra', 'Contrato de limpieza', 'Compra de patrullas', 'Licencia de bar', 'Reparación de puente', 'Subvención cultural', 'Alumbrado público', 'Contrato del metro'];
-const COMPANIES = ['Hudson Builders', 'Bronx Clean Co.', 'Liberty Supplies', 'Empire Lights', 'Queens Motors', 'Brooklyn Bridge & Sons', 'Manhattan Paving'];
-const FRAUD_COMPANIES = ['Hermanos del Alcalde S.A.', 'Tu Cuñado & Asociados', 'Empresa Fantasma Ltd.'];
-const NOTES = ['Licitación pública Nº 4471', 'Revisado por intervención', 'Presupuesto aprobado en pleno', 'Tres ofertas comparadas'];
-const FRAUD_NOTES = ['Pago en efectivo, sin factura', 'Adjudicado sin licitación', 'Comisión del 30% "por gestión"'];
+interface Case {
+  id: number;
+  kind: string;
+  person: string;
+  company: string;
+  license: string;
+  amount: number;
+  date: string;
+  signatures: number;
+  watermark: boolean;
+  print: number;
+  reg: { company: string; license: string; print: number; expiry: string; expired: boolean; person: string };
+  flaw: Flaw | null;
+}
 
-const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
-const money = () => `$${(Math.floor(Math.random() * 90) + 10) * 1000}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-
-function newDoc(id: number): Doc {
-  const doc: Doc = {
+function newCase(id: number, today: { d: number; m: number }, done: number): Case {
+  const company = pick(COMPANIES);
+  const license = `NY-${1000 + rnd(9000)}`;
+  const print = 1 + rnd(1e6);
+  const person = pick(PEOPLE);
+  const big = Math.random() < 0.35;
+  const amount = big ? (510 + rnd(450)) * 1000 : (10 + rnd(480)) * 1000;
+  const m = rnd(today.m + 1);
+  const d = 1 + rnd(m === today.m ? today.d : DAYS_IN[m]);
+  const ey = 1985 + 1 + rnd(2);
+  const c: Case = {
     id,
     kind: pick(KINDS),
-    company: pick(COMPANIES),
-    amount: money(),
-    date: `${1 + Math.floor(Math.random() * 28)} de ${pick(['marzo', 'abril', 'mayo', 'junio', 'octubre'])} de 1985`,
-    signed: true,
-    note: pick(NOTES),
-    fraud: Math.random() < 0.45,
+    person,
+    company,
+    license,
+    amount,
+    date: fmtDate(d, m),
+    signatures: amount > 500_000 ? 2 : 1 + rnd(2),
+    watermark: true,
+    print,
+    reg: { company, license, print, expiry: fmtDate(1 + rnd(28), rnd(12), ey), expired: false, person },
+    flaw: null,
   };
-  if (doc.fraud) {
-    const flag = pick(['company', 'amount', 'date', 'signed', 'note'] as const);
-    doc.flag = flag;
-    if (flag === 'company') doc.company = pick(FRAUD_COMPANIES);
-    if (flag === 'amount') doc.amount = pick(['$9.999.999', '$12.000.000', '$7.777.777']);
-    if (flag === 'date') doc.date = pick(['31 de febrero de 1985', '30 de febrero de 1985', '32 de enero de 1985']);
-    if (flag === 'signed') doc.signed = false;
-    if (flag === 'note') doc.note = pick(FRAUD_NOTES);
+  if (Math.random() < 0.5) {
+    const active = RULES.filter((r) => r.from <= done).map((r) => r.flaw);
+    const flaw = pick(active);
+    c.flaw = flaw;
+    if (flaw === 'empresa') {
+      if (Math.random() < 0.5) c.company = misspell(company);
+      else c.license = `NY-${(Number(license.slice(3)) + 1 + rnd(8)) % 9000 + 1000}`;
+    }
+    if (flaw === 'huella') c.print = print + 7 + rnd(1000);
+    if (flaw === 'fecha') c.date = pick(['31 de febrero de 1985', '30 de febrero de 1985', '31 de abril de 1985', '31 de junio de 1985', '31 de septiembre de 1985']);
+    if (flaw === 'agua') c.watermark = false;
+    if (flaw === 'caducada') {
+      const em = rnd(today.m + 1);
+      c.reg.expiry = fmtDate(1 + rnd(em === today.m ? Math.max(1, today.d - 1) : 28), em);
+      c.reg.expired = true;
+    }
+    if (flaw === 'firmas') {
+      c.amount = (510 + rnd(450)) * 1000;
+      c.signatures = 1;
+    }
   }
-  return doc;
+  return c;
+}
+
+/** Huella dactilar dibujada a partir de una semilla (las falsas se parecen, pero no son iguales). */
+function Fingerprint({ seed, size = 54, scan = false }: { seed: number; size?: number; scan?: boolean }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const k = 2;
+    c.width = size * k;
+    c.height = size * k;
+    const ctx = c.getContext('2d')!;
+    ctx.scale(k, k);
+    let s = seed;
+    const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    ctx.clearRect(0, 0, size, size);
+    ctx.strokeStyle = scan ? '#7dff9a' : '#2a2050';
+    ctx.lineWidth = 1.2;
+    const cx = size / 2 + (r() - 0.5) * 6;
+    const cy = size / 2 + (r() - 0.5) * 6;
+    const tilt = (r() - 0.5) * 0.8;
+    const whorl = r() < 0.5;
+    for (let i = 1; i < 11; i++) {
+      const rx = i * (size / 26) * (1 + r() * 0.08);
+      const ry = rx * (whorl ? 1.25 : 1.6);
+      const gap = r() * Math.PI * 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, tilt, gap, gap + Math.PI * (1.55 + r() * 0.35));
+      ctx.stroke();
+    }
+    // rasgos únicos: islas y bifurcaciones
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.arc(size * (0.2 + r() * 0.6), size * (0.2 + r() * 0.6), 1 + r() * 2, 0, Math.PI * (1 + r()));
+      ctx.stroke();
+    }
+  }, [seed, size, scan]);
+  return <canvas ref={ref} class="fingerprint" style={{ width: size, height: size }} />;
 }
 
 type Phase = 'intro' | 'play' | 'end';
 
 export function Paperwork({ onFinish, onClose }: { onFinish: (points: number) => void; onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>('intro');
-  const [doc, setDoc] = useState(() => newDoc(1));
+  const [today] = useState(() => ({ d: 5 + rnd(20), m: 3 + rnd(7) }));
+  const [done, setDone] = useState(0);
+  const [cs, setCs] = useState(() => newCase(1, today, 0));
   const [score, setScore] = useState(0);
-  const [mistakes, setMistakes] = useState(0);
+  const [citations, setCitations] = useState(0);
   const [left, setLeft] = useState(GAME_SECONDS);
-  const [stamp, setStamp] = useState<null | { approve: boolean; ok: boolean }>(null);
+  const [uv, setUv] = useState(false);
+  const [scan, setScan] = useState<null | 'running' | 'match' | 'nomatch'>(null);
+  const [rules, setRules] = useState(false);
+  const [newRule, setNewRule] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [stamp, setStamp] = useState<null | { approve: boolean; ok: boolean; bonus: boolean; why?: string }>(null);
+  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (phase !== 'play') return;
@@ -81,33 +199,58 @@ export function Paperwork({ onFinish, onClose }: { onFinish: (points: number) =>
     }, 200);
     return () => clearInterval(id);
   }, [phase]);
+  useEffect(() => () => void (scanTimer.current && clearTimeout(scanTimer.current)), []);
 
-  const decide = (approve: boolean) => {
-    if (phase !== 'play' || stamp) return;
-    const ok = approve !== doc.fraud;
-    play.stamp();
-    if (ok) {
-      setScore((s) => s + 1);
-      setTimeout(() => play.coin(), 120);
-    } else {
-      setMistakes((m) => m + 1);
-      setTimeout(() => play.error(), 120);
-    }
-    setStamp({ approve, ok });
-    setTimeout(
-      () => {
-        setStamp(null);
-        setDoc(newDoc(doc.id + 1));
-      },
-      ok ? 380 : 900,
-    );
+  const runScan = () => {
+    if (scan === 'running' || stamp) return;
+    play.click();
+    setScan('running');
+    scanTimer.current = setTimeout(() => {
+      const match = cs.print === cs.reg.print;
+      setScan(match ? 'match' : 'nomatch');
+      if (match) play.good();
+      else play.error();
+    }, 900);
   };
 
-  const { drag, hint, handlers } = useSwipe({ allowUp: false, onRelease: (d) => d && decide(d === 'right') });
-  const flagged = (f: Doc['flag']) => (stamp && !stamp.ok && doc.flag === f ? 'flagged' : '');
+  const next = () => {
+    const n = done + 1;
+    setDone(n);
+    const unlocked = RULES.find((r) => r.from === n);
+    if (unlocked) {
+      setNewRule(unlocked.text);
+      play.achievement();
+    }
+    setCs(newCase(cs.id + 1, today, n));
+    setUv(false);
+    setScan(null);
+    setStamp(null);
+    setRejecting(false);
+  };
+
+  const decide = (approve: boolean, reason?: Flaw) => {
+    if (phase !== 'play' || stamp) return;
+    const ok = approve === !cs.flaw;
+    const bonus = !approve && ok && reason === cs.flaw;
+    play.stamp();
+    if (ok) {
+      setScore((s) => s + 1 + (bonus ? 1 : 0));
+      setTimeout(() => play.coin(), 120);
+    } else {
+      const c = citations + 1;
+      setCitations(c);
+      if (c > FREE_CITATIONS) setScore((s) => Math.max(0, s - 1));
+      setTimeout(() => play.error(), 120);
+    }
+    setRejecting(false);
+    setStamp({ approve, ok, bonus, why: !ok ? (cs.flaw ? FLAW_TEXT[cs.flaw] : 'El expediente estaba en regla.') : undefined });
+    setTimeout(next, ok ? (bonus ? 700 : 450) : 1600);
+  };
+
+  const active = RULES.filter((r) => r.from <= done);
 
   return (
-    <div class="minigame desk">
+    <div class="minigame desk papers">
       <div class="mg-head">
         <span class="mg-title">PAPELEO</span>
         <span class={`mg-timer ${left <= 10 ? 'hot' : ''}`}>⏱ {left}s</span>
@@ -115,60 +258,144 @@ export function Paperwork({ onFinish, onClose }: { onFinish: (points: number) =>
           ✔ {score} · −{score * MINUTES_PER_POINT} min
         </span>
       </div>
-      <div class="desk-area">
-        <div class="desk-hint left" style={{ opacity: hint === 'left' ? 1 : 0.35 }}>
-          ✖ RECHAZAR
-        </div>
-        <div class="desk-hint right" style={{ opacity: hint === 'right' ? 1 : 0.35 }}>
-          APROBAR ✔
-        </div>
-        <div
-          class="paper"
-          key={doc.id}
-          style={{ transform: `translate(${drag.dx}px, 0) rotate(${drag.dx / 18}deg)`, transition: drag.active ? 'none' : 'transform 0.2s' }}
-          {...handlers}
-        >
+      <div class="papers-bar">
+        <span>📅 Hoy: {fmtDate(today.d, today.m)}</span>
+        <span class={`cites ${citations > FREE_CITATIONS ? 'hot' : ''}`}>📄 Citaciones {citations}/{FREE_CITATIONS}</span>
+      </div>
+      <div class="papers-desk">
+        <div class={`paper doc ${uv ? 'uv' : ''}`} key={cs.id}>
           <div class="paper-top">
             <span>CITY OF NEW YORK</span>
-            <span>Nº {String(1000 + doc.id * 37).slice(-4)}</span>
+            <span>Nº {String(1000 + cs.id * 37).slice(-4)}</span>
           </div>
-          <div class="paper-kind">{doc.kind}</div>
+          <div class="paper-kind">{cs.kind}</div>
           <dl>
+            <dt>Solicitante</dt>
+            <dd>{cs.person}</dd>
             <dt>Empresa</dt>
-            <dd class={flagged('company')}>{doc.company}</dd>
+            <dd>{cs.company}</dd>
+            <dt>Licencia</dt>
+            <dd>{cs.license}</dd>
             <dt>Importe</dt>
-            <dd class={flagged('amount')}>{doc.amount}</dd>
+            <dd class={cs.amount > 500_000 ? 'big' : ''}>{money(cs.amount)}</dd>
             <dt>Fecha</dt>
-            <dd class={flagged('date')}>{doc.date}</dd>
-            <dt>Nota</dt>
-            <dd class={flagged('note')}>{doc.note}</dd>
+            <dd>{cs.date}</dd>
           </dl>
-          <div class={`sign ${flagged('signed')}`}>
-            Firma del interventor: <span class="sig">{doc.signed ? 'J. Morrison' : '________'}</span>
+          <div class="doc-foot">
+            <div class="sigs">
+              <span>
+                Interventor: <i class="sig">J. Morrison</i>
+              </span>
+              <span>
+                Tesorero: <i class="sig">{cs.signatures > 1 ? 'R. Banks' : '________'}</i>
+              </span>
+            </div>
+            <div class={`print-box ${scan === 'running' ? 'scanning' : ''}`}>
+              <Fingerprint seed={cs.print} size={50} scan={scan === 'running'} />
+              <small>huella</small>
+            </div>
           </div>
+          {uv && <div class={`uv-mark ${cs.watermark ? '' : 'none'}`}>{cs.watermark ? 'NYC ★ CITY HALL ★ NYC ★ CITY HALL ★ NYC ★ CITY HALL ★' : 'SIN MARCA'}</div>}
           {stamp && <div class={`paper-stamp ${stamp.approve ? 'ok' : 'no'}`}>{stamp.approve ? 'APROBADO' : 'RECHAZADO'}</div>}
-          {stamp && !stamp.ok && <div class="paper-wrong">{doc.fraud ? '¡Era un fraude!' : 'Era legítimo'}</div>}
+          {stamp?.bonus && <div class="paper-bonus">¡Bien visto! +1</div>}
+        </div>
+        <div class="registry">
+          <div class="reg-head">REGISTRO MUNICIPAL</div>
+          <div class="reg-body">
+            <div>
+              <b>{cs.reg.company}</b>
+              <small>Licencia {cs.reg.license}</small>
+              <small>Rep.: {cs.reg.person}</small>
+              <small>Válida hasta {cs.reg.expiry}</small>
+            </div>
+            <div class="print-box">
+              <Fingerprint seed={cs.reg.print} size={42} />
+            </div>
+          </div>
         </div>
       </div>
-      <div class="desk-buttons">
-        <button class="trade-btn sell" onClick={() => decide(false)}>
-          ✖ RECHAZAR
+      {scan && scan !== 'running' && <div class={`scan-result ${scan}`}>{scan === 'match' ? '✔ HUELLAS COINCIDEN · 97%' : '✖ HUELLAS NO COINCIDEN · 41%'}</div>}
+      <div class="papers-tools">
+        <button class={`tool-btn ${scan ? 'used' : ''}`} onClick={runScan}>
+          🔍 Escáner
         </button>
-        <button class="trade-btn buy" onClick={() => decide(true)}>
-          APROBAR ✔
+        <button
+          class={`tool-btn ${uv ? 'on' : ''}`}
+          onClick={() => {
+            play.click();
+            setUv(!uv);
+          }}
+        >
+          🟣 Lámpara UV
+        </button>
+        <button class="tool-btn" onClick={() => setRules(true)}>
+          📕 Normas <small>{active.length}</small>
         </button>
       </div>
+      {rejecting ? (
+        <div class="reject-reasons">
+          <small>¿Por qué lo rechazas? (acertar el motivo da +1)</small>
+          <div>
+            {REASONS.filter((r) => active.some((a) => a.flaw === r.id)).map((r) => (
+              <button key={r.id} onClick={() => decide(false, r.id)}>
+                {r.label}
+              </button>
+            ))}
+            <button class="cancel" onClick={() => setRejecting(false)}>
+              Volver
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div class="desk-buttons">
+          <button class="trade-btn sell" onClick={() => !stamp && setRejecting(true)}>
+            ✖ RECHAZAR
+          </button>
+          <button class="trade-btn buy" onClick={() => decide(true)}>
+            APROBAR ✔
+          </button>
+        </div>
+      )}
+      {stamp && !stamp.ok && (
+        <div class="citation">
+          <b>CITACIÓN</b>
+          <span>{stamp.why}</span>
+          {citations > FREE_CITATIONS && <small>−1 punto</small>}
+        </div>
+      )}
+      {rules && (
+        <div class="mg-overlay rulebook" onClick={() => setRules(false)}>
+          <h3>Reglamento</h3>
+          <ol>
+            {active.map((r) => (
+              <li key={r.flaw}>{r.text}</li>
+            ))}
+          </ol>
+          <button class="btn">Cerrar</button>
+        </div>
+      )}
+      {newRule && phase === 'play' && (
+        <div class="mg-overlay rulebook" onClick={() => setNewRule(null)}>
+          <div class="kicker">NUEVA NORMA EN VIGOR</div>
+          <p>{newRule}</p>
+          <button class="btn">Entendido</button>
+        </div>
+      )}
       {phase === 'intro' && (
         <div class="mg-overlay">
-          <h3><Letters text="Despacho del alcalde" /></h3>
+          <h3>
+            <Letters text="Despacho del alcalde" />
+          </h3>
           <p>
-            Aprueba los documentos legítimos (desliza a la <b>derecha</b>) y rechaza los fraudulentos (a la <b>izquierda</b>). Busca cuñados,
-            pagos en efectivo, fechas imposibles o firmas que faltan.
+            Revisa cada expediente con la ficha del <b>registro</b>: empresa, licencia y huella (usa el <b>escáner</b>). Más adelante entran normas nuevas:
+            marca de agua (<b>lámpara UV</b>), licencias caducadas y dobles firmas.
             <br />
-            Cada acierto descuenta <b>{MINUTES_PER_POINT} minutos</b> de tu jornada.
+            Al rechazar, di el motivo: si aciertas, <b>+1</b>. Cada error es una <b>citación</b>; a partir de la tercera, restan.
+            <br />
+            Cada punto descuenta <b>{MINUTES_PER_POINT} minutos</b> de tu jornada.
           </p>
           <button class="btn big-cta" onClick={() => setPhase('play')}>
-            Empezar
+            Abrir el despacho
           </button>
           <button class="btn secondary" onClick={onClose}>
             Ahora no
@@ -177,10 +404,12 @@ export function Paperwork({ onFinish, onClose }: { onFinish: (points: number) =>
       )}
       {phase === 'end' && (
         <div class="mg-overlay">
-          <h3><Letters text="¡Tiempo!" /></h3>
+          <h3>
+            <Letters text="¡Fin de la ventanilla!" />
+          </h3>
           <div class="mg-big">{score}</div>
           <p>
-            documentos bien despachados ({mistakes} errores) · tu jornada se acorta <b>{score * MINUTES_PER_POINT} minutos</b>
+            puntos · {done} expedientes · {citations} citaciones · tu jornada se acorta <b>{score * MINUTES_PER_POINT} minutos</b>
           </p>
           <button class="btn big-cta" onClick={() => onFinish(score)}>
             Volver al despacho

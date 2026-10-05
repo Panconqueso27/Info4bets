@@ -1,8 +1,7 @@
 import * as audio from '../platform/audio';
 import { lowFx, setLowFx } from '../scene/CityScene';
-import { PixelIcon } from './PixelIcon';
 
-const missionsLeft = (s: GameState) => (s.missions?.date === s.today.date ? s.missions.list.filter((m) => !m.done).length : 0);
+export const missionsLeft = (s: GameState) => (s.missions?.date === s.today.date ? s.missions.list.filter((m) => !m.done).length : 0);
 import { StatsView } from './Extras';
 import { Letters, Words } from './AnimText';
 import { useEffect, useRef, useState } from 'preact/hooks';
@@ -86,16 +85,7 @@ export function Hud({ state, now }: { state: GameState; now: number }) {
   );
 }
 
-export function Dock({
-  state,
-  now,
-  onStart,
-  onRetire,
-  onOpenEvent,
-  onPanel,
-  onMinigame,
-  onErrand,
-}: {
+export interface DockProps {
   state: GameState;
   now: number;
   onStart: () => void;
@@ -104,7 +94,19 @@ export function Dock({
   onPanel: (p: Panel) => void;
   onMinigame: () => void;
   onErrand: () => void;
-}) {
+}
+
+/** Lo principal del día (ir a trabajar, la jornada, el reparto): la pantalla de inicio del móvil. */
+export function DockMain({
+  state,
+  now,
+  onStart,
+  onRetire,
+  onOpenEvent,
+  onPanel,
+  onMinigame,
+  onErrand,
+}: DockProps) {
   const role = ROLES[state.character.role];
   const shift = state.shift;
   const block = canStartShift(state, now);
@@ -202,32 +204,17 @@ export function Dock({
     );
   }
 
-  return (
-    <div class="dock compact">
-      {state.pending.length > 0 && (
-        <button class="pending-pill" onClick={onOpenEvent}>
-          ⚠ {state.pending.length === 1 ? '1 suceso' : `${state.pending.length} sucesos`}
-        </button>
-      )}
-      {body}
-      <div class="dock-tools">
-        {TOOLS.filter((t) => !t.role || t.role === state.character.role).map((t) => (
-          <button key={t.id + t.label} class={`tool ${t.id === 'bolsa' && marketSession(state, now) ? 'live' : ''}`} onClick={() => onPanel(t.id)}>
-            <span class="tool-ic">
-              <PixelIcon id={t.icon} size={2} />
-              {t.id === 'extras' && missionsLeft(state) > 0 && <i class="tool-badge">{missionsLeft(state)}</i>}
-            </span>
-            {t.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+  void onPanel;
+  void onOpenEvent;
+  return <div class="dock-main">{body}</div>;
 }
+
+/** ¿La Bolsa está abierta ahora? (el icono se ilumina en el móvil). */
+export const marketLive = (state: GameState, now: number) => !!marketSession(state, now);
 
 export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu' | 'personas' | 'armario' | 'stats' | 'extras' | 'propiedades' | 'copia';
 
-const TOOLS: { id: Panel; icon: string; label: string; role?: Role }[] = [
+export const TOOLS: { id: Panel; icon: string; label: string; role?: Role }[] = [
   { id: 'bolsa', icon: 'grafica', label: 'Bolsa' },
   { id: 'extras', icon: 'diana', label: 'Extras' },
   { id: 'propiedades', icon: 'edificio', label: 'Propiedad' },

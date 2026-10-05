@@ -10,13 +10,18 @@ import { CharacterCanvas } from './CharacterCanvas';
 export function TitleScreen({ hasSave, onContinue, onNew }: { hasSave: boolean; onContinue: () => void; onNew: () => void }) {
   return (
     <div class="screen title-screen">
-      <div class="logo">
-        <h1>
-          <span class="neon-line">LA</span>
-          <span class="neon-line">CIUDAD</span>
+      <div class="logo pxl">
+        <h1 class="pxl-title" aria-label="Pixelopolis">
+          <span class="pxl-back" aria-hidden="true">
+            PIXELOPOLIS
+          </span>
+          <span class="pxl-front">PIXELOPOLIS</span>
+          <span class="pxl-shine" aria-hidden="true">
+            PIXELOPOLIS
+          </span>
         </h1>
+        <div class="pxl-band">PIXEL TOWN BUILDER</div>
         <div class="sub">NUEVA YORK · 1985</div>
-        <div class="note">(título provisional)</div>
       </div>
       <div class="stack">
         {hasSave && (

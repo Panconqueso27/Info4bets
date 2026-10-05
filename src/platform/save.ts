@@ -89,7 +89,7 @@ export function exportCode(): string | null {
 export function importCode(code: string): string | null {
   try {
     const clean = code.trim().replace(/\s+/g, '');
-    if (!clean.startsWith(PREFIX)) return 'Ese código no es una copia de La Ciudad.';
+    if (!clean.startsWith(PREFIX)) return 'Ese código no es una copia de Pixelopolis.';
     const bin = atob(clean.slice(PREFIX.length));
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
     const data = JSON.parse(new TextDecoder().decode(bytes)) as { save: string; extra?: Record<string, string> };

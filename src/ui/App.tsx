@@ -44,7 +44,8 @@ import { DevPanel, devWeather } from './DevPanel';
 import type { Weather } from '../core/weather';
 import { MarketTerminal } from './Market';
 import { AchievementsModal, AgendaModal, EndingModal, NewsModal, UpgradeModal } from './Panels';
-import { Dock, GameOverModal, Hud, LogModal, MenuModal, Toast, eventNotification, type Panel } from './Play';
+import { GameOverModal, Hud, LogModal, MenuModal, Toast, eventNotification, type Panel } from './Play';
+import { Phone } from './Phone';
 import { DecisionCard, ResultCard } from './Cards';
 import { markTutorial, PeopleModal, RewardModal, StatsModal, TUTORIAL, TutorialBubble, tutorialSeen, WardrobeModal } from './Extras';
 import { globalCosmetics, keepCosmetics, otherFor, rememberCharacter } from '../platform/legacy';
@@ -75,7 +76,7 @@ import { BlockModal, LotCard, MegaCard, PropertiesModal, type CityActions } from
 import { Modal } from './Panels';
 import { cityLook, citySignature, LOT_BY_ID, MEGA_BY_ID } from '../core/lots';
 import { applyHotdogs, auctionLot, betBaseball, betRace, buyBond, buyRastro, buyTicket, racesOpen, rastroOpen, startClasses, startTaxi } from '../core/economy';
-import { BackupModal, BaseballModal, BondsModal, ContestResultModal, ContestsModal, ExtrasModal, LotteryModal, RaceModal, RastroModal, type ExtraPanel } from './Extras7';
+import { BackupModal, BaseballModal, BondsModal, ContestResultModal, ContestsModal, ExtrasModal, LotteryModal, RaceModal, RastroModal, type ExtraPanel, type ExtrasActions } from './Extras7';
 import { Hotdogs } from './games/Street';
 import { RADIO_PLACE } from '../core/radio';
 import { Breakdance, Eating, Marathon, SimonGame, type ContestInfo } from './games/Contests';
@@ -422,6 +423,45 @@ export function App() {
     }
   };
 
+  // Acciones de Extras: las usan el panel de Extras y la agenda de contactos del móvil.
+  const extrasActions: ExtrasActions = {
+    onRadio: (id) => {
+          act((s, t) => takeRadioJob(s, id, t));
+          setPanel(null);
+    },
+    onErrand: () => {
+          act(startErrand);
+          setPanel(null);
+    },
+    onTaxi: () => {
+          act(startTaxi);
+          setPanel(null);
+    },
+    onClasses: () => {
+          act(startClasses);
+          setPanel(null);
+    },
+    onHotdogs: () => {
+          setPanel(null);
+          setMinigame('hotdogs');
+    },
+    onOpen: (p) => {
+          setPanel(null);
+          setExtra(p);
+    },
+    onAction: (id) =>
+          act((s, t) => {
+            startAction(s, id, t);
+            setPanel(null);
+            setShowEvent(true);
+          }),
+    onAuction: () => {
+          const free = Object.keys(LOT_BY_ID).find((id) => !state.lots?.[id]);
+          setPanel(free ? 'propiedades' : null);
+          if (!free) setToast({ title: 'SUBASTA', text: 'No quedan solares libres.' });
+          else setToast({ title: 'SUBASTA', text: 'Elige un solar libre en la pestaña Obras y pulsa "Subastarlo".' });
+    },
+  };
   // Un solo panel a la vez, por orden de prioridad.
   let overlay = null;
   if (state.gameOver && !outcome) overlay = <GameOverModal state={state} onNew={quit} />;
@@ -528,48 +568,7 @@ export function App() {
     overlay = <PropertiesModal state={state} now={now} {...cityActions} onBuyVending={() => act(buyVending)} onRepairVending={() => act(repairVending)} onClose={closePanel} />;
   else if (panel === 'extras')
     overlay = (
-      <ExtrasModal
-        state={state}
-        now={now}
-        onClose={closePanel}
-        onRadio={(id) => {
-          act((s, t) => takeRadioJob(s, id, t));
-          setPanel(null);
-        }}
-        onErrand={() => {
-          act(startErrand);
-          setPanel(null);
-        }}
-        onTaxi={() => {
-          act(startTaxi);
-          setPanel(null);
-        }}
-        onClasses={() => {
-          act(startClasses);
-          setPanel(null);
-        }}
-        onHotdogs={() => {
-          setPanel(null);
-          setMinigame('hotdogs');
-        }}
-        onOpen={(p) => {
-          setPanel(null);
-          setExtra(p);
-        }}
-        onAction={(id) =>
-          act((s, t) => {
-            startAction(s, id, t);
-            setPanel(null);
-            setShowEvent(true);
-          })
-        }
-        onAuction={() => {
-          const free = Object.keys(LOT_BY_ID).find((id) => !state.lots?.[id]);
-          setPanel(free ? 'propiedades' : null);
-          if (!free) setToast({ title: 'SUBASTA', text: 'No quedan solares libres.' });
-          else setToast({ title: 'SUBASTA', text: 'Elige un solar libre en la pestaña Obras y pulsa "Subastarlo".' });
-        }}
-      />
+      <ExtrasModal state={state} now={now} onClose={closePanel} {...extrasActions}       />
     );
   else if (panel === 'bolsa')
     overlay = <MarketTerminal state={state} now={now} onBet={(tk, dir, stake) => act((s, t) => placeBet(s, tk, dir, stake, t))} onClose={closePanel} />;
@@ -645,7 +644,8 @@ export function App() {
     <>
       <Hud state={state} now={now} />
       {!overlay && !minigame && <Minimap state={state} />}
-      <Dock
+      <Phone
+        extras={extrasActions}
         state={state}
         now={now}
         onStart={() => {

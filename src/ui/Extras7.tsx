@@ -409,7 +409,7 @@ export function BackupModal({ onClose }: { onClose: () => void }) {
   };
   const share = async () => {
     try {
-      await navigator.share({ title: 'La Ciudad · copia de seguridad', text: code });
+      await navigator.share({ title: 'Pixelopolis · copia de seguridad', text: code });
     } catch {
       /* cancelado */
     }

@@ -5,7 +5,6 @@ import {
   BRIDGE_STREET,
   MANHATTAN_COLS,
   RIVER_X,
-  RIVER_W,
   streetSpan,
   aveDir,
   stDir,
@@ -32,7 +31,7 @@ import {
   stY,
   walkX,
   walkY,
-  ART_SCALE,
+  setArtScale,
   iso,
   depthAt,
   prismHit,
@@ -114,6 +113,9 @@ interface Car {
   cross: number[];
 }
 
+/** Los remolcadores no bajan hasta el puerto de cruceros. */
+const BOAT_MAX = blockY(7);
+
 /** Ciclo de semáforos: avenidas y calles se alternan. */
 const SIGNAL_MS = 7000;
 
@@ -157,7 +159,7 @@ export class CityScene extends Phaser.Scene {
   private mapSig = '\u0000';
   private mapImgs: Phaser.GameObjects.Image[] = [];
   /** Lienzos de cada capa del mapa, para hornear la nieve en la base. */
-  private mapSets: { key: string; base: HTMLCanvasElement; snow: HTMLCanvasElement | null; wet?: HTMLCanvasElement; imgs: Phaser.GameObjects.Image[]; bands: { x: number; y: number; w: number; h: number }[] }[] = [];
+  private mapSets: { key: string; base: HTMLCanvasElement; snow: HTMLCanvasElement | null; wet?: HTMLCanvasElement; imgs: Phaser.GameObjects.Image[]; bands: { x: number; y: number; w: number; h: number }[]; scale: number }[] = [];
   private bakedMode = '';
   /** Trozos del mapa: solo se dibujan los que ve la cámara. */
   private chunks: MapImg[] = [];
@@ -274,7 +276,7 @@ export class CityScene extends Phaser.Scene {
     // píxeles de pantalla por píxel del juego (para que el HUD y el panel no tapen los bordes)
     const k = Math.max(0.5, this.scale.displaySize.width / Math.max(1, this.scale.gameSize.width));
     const top = 110 / k / zoom;
-    const bottom = 150 / k / zoom;
+    const bottom = 70 / k / zoom;
     cam.setBounds(PAD * 0.4, -top, ISO_W - PAD * 0.8, ISO_H + top + bottom);
     const W = this.scale.width;
     const H = this.scale.height;
@@ -436,6 +438,7 @@ export class CityScene extends Phaser.Scene {
     this.bases = [];
     this.lightImgs = [];
     this.chunks = [];
+    setArtScale(RES >= 2 ? 3 : 2);
     const art = generateCityMap(1985, m.city);
     this.heights = art.heights;
     const addSet = (set: MapLayer) => {
@@ -449,14 +452,14 @@ export class CityScene extends Phaser.Scene {
         bands.forEach((b, i) => t.add(`b${i}`, 0, b.x * k, b.y * k, Math.min(b.w * k, t.source[0].width - b.x * k), Math.min(b.h * k, t.source[0].height - b.y * k)));
       };
       this.textures.addCanvas(`${key}-base`, set.base);
-      frames(`${key}-base`, ART_SCALE);
+      frames(`${key}-base`, set.scale);
       if (set.lights) {
         this.textures.addCanvas(`${key}-lights`, set.lights);
         frames(`${key}-lights`, 1);
       }
       const baseImgs: Phaser.GameObjects.Image[] = [];
       bands.forEach((b, i) => {
-        const base = this.add.image(set.x + b.x, set.y + b.y, `${key}-base`, `b${i}`).setOrigin(0).setDepth(set.depth).setScale(1 / ART_SCALE);
+        const base = this.add.image(set.x + b.x, set.y + b.y, `${key}-base`, `b${i}`).setOrigin(0).setDepth(set.depth).setScale(1 / set.scale);
         const imgs = [base];
         baseImgs.push(base);
         this.bases.push(base);
@@ -470,7 +473,7 @@ export class CityScene extends Phaser.Scene {
         this.world.add(imgs);
         this.chunks.push({ imgs, x0: set.x + b.x, y0: set.y + b.y, x1: set.x + b.x + b.w, y1: set.y + b.y + b.h });
       });
-      this.mapSets.push({ key, base: set.base, snow: set.snow, wet: set.wet, imgs: baseImgs, bands });
+      this.mapSets.push({ key, base: set.base, snow: set.snow, wet: set.wet, imgs: baseImgs, bands, scale: set.scale });
     };
     addSet(art.ground);
     for (const c of art.cells) addSet(c);
@@ -519,7 +522,8 @@ export class CityScene extends Phaser.Scene {
         }
         const t = this.textures.addCanvas(key, c)!;
         t.setFilter(Phaser.Textures.FilterMode.LINEAR);
-        m.bands.forEach((b, i) => t.add(`b${i}`, 0, b.x * ART_SCALE, b.y * ART_SCALE, Math.min(b.w * ART_SCALE, c.width - b.x * ART_SCALE), Math.min(b.h * ART_SCALE, c.height - b.y * ART_SCALE)));
+        const k = m.scale;
+        m.bands.forEach((b, i) => t.add(`b${i}`, 0, b.x * k, b.y * k, Math.min(b.w * k, c.width - b.x * k), Math.min(b.h * k, c.height - b.y * k)));
       }
       m.imgs.forEach((img, i) => img.setTexture(key, `b${i}`));
     }
@@ -608,7 +612,7 @@ export class CityScene extends Phaser.Scene {
     // remolcadores en el East River
     for (let i = 0; i < 2; i++) {
       const dir = i ? -1 : 1;
-      const p = { x: RIVER_X + (i ? RIVER_W - 18 : 18), y: rand() * MAP_H };
+      const p = { x: RIVER_X + (i ? 42 : 31), y: rand() * BOAT_MAX };
       const img = this.anchored(0, 0, 'tugboat');
       this.put(img, p);
       this.world.add(img);
@@ -1429,9 +1433,14 @@ export class CityScene extends Phaser.Scene {
     // remolcadores
     for (const b of this.boats) {
       b.p.y += b.dir * b.speed * (delta / 1000);
-      if (b.p.y > MAP_H + 10) b.p.y = -10;
-      if (b.p.y < -10) b.p.y = MAP_H + 10;
+      if (b.p.y > BOAT_MAX) b.p.y = -10;
+      if (b.p.y < -10) b.p.y = BOAT_MAX;
       this.put(b.img, b.p);
+      // pasa por debajo del puente (se esconde) y se desvanece en los extremos
+      const deck = stY(BRIDGE_STREET);
+      const under = Phaser.Math.Clamp((Math.abs(b.p.y - deck) - 12) / 8, 0, 1);
+      const ends = Phaser.Math.Clamp(Math.min(b.p.y + 10, BOAT_MAX - b.p.y) / 12, 0, 1);
+      b.img.setAlpha(Math.min(under, ends));
     }
     // el minimapa sabe qué ve la cámara (4 veces por segundo)
     if (time - this.viewAt > 250) {

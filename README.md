@@ -1,8 +1,8 @@
-# La Ciudad *(título provisional)*
+# Pixelopolis · Pixel Town Builder
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: beta 0.9.0**
+**Versión actual: beta 0.10.0**
 
 ## Probar la beta
 
@@ -21,6 +21,35 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.10.0
+
+- **Nuevo nombre y logo: Pixelopolis · Pixel Town Builder.** Hay un logo dorado en la portada y un icono nuevo para la app y la pantalla de carga.
+- **Arte isométrico revisado:**
+  - Los carteles, letreros de neón, la noria, la montaña rusa y las grúas están en perspectiva, pegados a la ciudad, en vez de girados hacia la cámara.
+  - Las cabinas, buzones, quioscos y bocas de incendio son pequeños volúmenes.
+  - Nada se cruza:
+    - las chimeneas van en los patios o sobre las azoteas;
+    - los contenedores tienen cada uno su hueco;
+    - los coches pasan entre los pilares de las torres del puente;
+    - los remolcadores pasan por debajo del puente y no atraviesan el crucero.
+  - **Más calidad con zoom:** los edificios se dibujan al triple de resolución (al doble en el modo ahorro).
+- **El móvil de tapa:**
+  - El panel de abajo es un móvil plegado del que solo se ve la tapa metálica, con una pantallita que muestra la hora y el estado del día.
+  - Al tocarlo se despliega con una animación de bisagra. Dentro están la jornada y todas las opciones de siempre.
+  - Trae aplicaciones nuevas:
+    - **Contactos** que te llaman con trabajo;
+    - **Notas**;
+    - **Calculadora**;
+    - **Reloj**;
+    - **El tiempo** con la previsión de 3 días;
+    - **Música**.
+- **Papeleo del alcalde al estilo puesto de control:**
+  - Cada expediente trae un documento y la ficha del registro municipal.
+  - Herramientas: escáner de huellas, lámpara ultravioleta para la marca de agua y reglamento.
+  - Cada pocos expedientes entra una norma nueva: licencias caducadas y dobles firmas.
+  - Al rechazar se elige el motivo; si aciertas, ganas un punto extra.
+  - Los errores dan citaciones.
 
 ## Novedades 0.9.0
 
