@@ -457,6 +457,35 @@ export function thunder(delay = 0.4) {
   tone(48, t, 1.8, 'sine', 0.2, 30, ambBus);
 }
 
+/** Choque de coches (más flojo cuanto más lejos de la cámara). */
+export function crashSound(vol = 1) {
+  if (!ctx || !ambBus || !prefs.ambient || vol <= 0.02) return;
+  const t = ctx.currentTime + 0.02;
+  noise(t, 0.5, 0.55 * vol, 500, 0.6, ambBus);
+  noise(t, 0.25, 0.4 * vol, 2600, 1.2, ambBus);
+  tone(80, t, 0.35, 'square', 0.18 * vol, 40, ambBus);
+  // cristales
+  for (let i = 0; i < 5; i++) tone(3000 + Math.random() * 2500, t + 0.06 + i * 0.05, 0.06, 'triangle', 0.05 * vol, undefined, ambBus);
+}
+
+/** Sirena de policía que se acerca (dos tonos, unos segundos). */
+export function sirenSound(vol = 1, secs = 3) {
+  if (!ctx || !ambBus || !prefs.ambient || vol <= 0.02) return;
+  const t = ctx.currentTime + 0.02;
+  for (let i = 0; i < secs * 2; i++) tone(i % 2 ? 660 : 880, t + i * 0.5, 0.48, 'square', 0.035 * vol, undefined, ambBus);
+}
+
+/** Avión que pasa alto (rumor grave) o helicóptero (golpes del rotor). */
+export function aircraftSound(kind: 'avion' | 'helicoptero', vol = 1, secs = 6) {
+  if (!ctx || !ambBus || !prefs.ambient || vol <= 0.02) return;
+  const t = ctx.currentTime + 0.02;
+  if (kind === 'avion') {
+    for (let i = 0; i < secs; i++) noise(t + i * 0.9, 1.4, 0.12 * vol * Math.sin((Math.PI * (i + 0.5)) / secs), 140, 0.5, ambBus);
+  } else {
+    for (let i = 0; i < secs * 11; i++) noise(t + i / 11, 0.05, 0.16 * vol, 180, 0.9, ambBus);
+  }
+}
+
 function bird(t: number, out: AudioNode) {
   const base = 2600 + Math.random() * 1600;
   const n = 2 + Math.floor(Math.random() * 4);

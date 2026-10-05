@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: 0.11.0**
+**Versión actual: 0.12.0**
 
 ## Probar la beta
 
@@ -21,6 +21,24 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.12.0
+
+- **Clima según el zoom:**
+  - De cerca, las gotas y los copos son grandes y hay pocos; de lejos, más pequeños, más numerosos y más lentos.
+  - Con lluvia hay salpicaduras en el suelo, y la tormenta trae más viento.
+  - Al cambiar el zoom, la lluvia se recoloca sola.
+- **Accidentes de tráfico al azar:**
+  - De vez en cuando un coche se come al de delante. Pasa más con lluvia, nieve o tormenta, y de noche.
+  - Quedan parados con humo, cristales en el suelo, luces de emergencia y un cono de aviso encima. Los coches de detrás hacen cola.
+  - A los pocos segundos llega la policía con la sirena por el carril de al lado. A veces acude también un helicóptero de la tele.
+  - Al rato todo se despeja.
+  - Solo ocurren en tramos que se ven desde la cámara (no detrás de un rascacielos).
+- **Aviones y helicópteros:**
+  - Los aviones cruzan el cielo en línea recta, con su sombra en el suelo de día y luces de navegación de noche.
+  - Si el aeropuerto de Brooklyn está construido, algunos aterrizan o despegan de su pista.
+  - Los helicópteros dan vueltas sobre Times Square, el parque, la Bolsa o un accidente. De noche llevan foco, y con tormenta o nieve no salen.
+  - Todo suena (choque, sirena, motores) con el volumen según la distancia a la cámara.
 
 ## Novedades 0.11.0
 

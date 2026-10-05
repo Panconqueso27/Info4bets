@@ -37,6 +37,7 @@ import {
   prismHit,
   isoCarTexture,
   isoBoatTexture,
+  isoPlaneTexture,
   ISO_W,
   ISO_H,
   PAD,
@@ -53,7 +54,7 @@ import type { Look } from '../core/types';
 import { randomLook } from '../art/character';
 import { bridge, type SceneModel, type Spot } from './bridge';
 import { drawPet, drawVending, upscaleOutline } from '../art/sprites';
-import { thunder } from '../platform/audio';
+import { aircraftSound, crashSound, sirenSound, thunder } from '../platform/audio';
 import { drawIcon } from '../art/icons';
 import { MEGA } from '../core/lots';
 
@@ -111,6 +112,40 @@ interface Car {
   max: number;
   /** Cruces de su recorrido (para los semáforos). */
   cross: number[];
+  /** Parado por un accidente hasta este momento. */
+  crashUntil?: number;
+  /** Coche de policía que acude: se para aquí hasta leaveAt y luego se va. */
+  stopAt?: number;
+  leaveAt?: number;
+  /** Coche temporal (la policía): desaparece al salir del mapa. */
+  temp?: boolean;
+  /** Luces que van con el coche (sirenas). */
+  extras?: Phaser.GameObjects.Image[];
+}
+
+/** Avión o helicóptero: vuela a una altura z y proyecta su sombra en el suelo. */
+interface Aircraft {
+  kind: 'avion' | 'helicoptero';
+  img: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
+  shadow: Phaser.GameObjects.Image;
+  /** Foco del helicóptero de noche. */
+  beam?: Phaser.GameObjects.Image;
+  lights: Phaser.GameObjects.Image[];
+  p: WP;
+  /** Avanza un paso; devuelve false cuando ha terminado su vuelo. */
+  step: (dt: number) => boolean;
+  /** Dirección en pantalla (para girar el sprite y poner las luces). */
+  hx: number;
+  hy: number;
+  soundAt: number;
+}
+
+/** Accidente en curso: los coches implicados, sus efectos y cuándo se despeja. */
+interface Accident {
+  cars: Car[];
+  at: { x: number; y: number };
+  until: number;
+  fx: Phaser.GameObjects.GameObject[];
 }
 
 /** Los remolcadores no bajan hasta el puerto de cruceros. */
@@ -205,6 +240,14 @@ export class CityScene extends Phaser.Scene {
   private drift = 0;
   private userPannedAt = -99999;
   private nextLightning = 0;
+  /** Zoom con el que se generó la lluvia (si cambia mucho, se rehace). */
+  private weatherZoom = 0;
+  private ripples: Phaser.GameObjects.Bob[] = [];
+  private accident: Accident | null = null;
+  private nextAccident = 0;
+  private aircraft: Aircraft[] = [];
+  private nextPlane = 0;
+  private nextHeli = 0;
   private drag: { x: number; y: number; sx: number; sy: number; moved: boolean } | null = null;
   private pinch: { d: number; zoom: number } | null = null;
 
@@ -222,6 +265,10 @@ export class CityScene extends Phaser.Scene {
     this.buildMap(bridge.get());
 
     this.spawnTraffic();
+    // el primer accidente y los primeros vuelos, no nada más empezar
+    this.nextAccident = 45_000 + Math.random() * 60_000;
+    this.nextPlane = 12_000 + Math.random() * 20_000;
+    this.nextHeli = 50_000 + Math.random() * 60_000;
     this.spawnPedestrians();
     this.spawnLife();
 
@@ -262,7 +309,7 @@ export class CityScene extends Phaser.Scene {
       this.cameras.main.pan(p.x, p.y, 450, 'Sine.easeInOut');
     });
 
-    if (import.meta.env.DEV) (window as any).__city = this;
+    if (import.meta.env.DEV) Object.assign(window as any, { __city: this, __iso: iso });
     const unsub = bridge.subscribe((m) => this.onModel(m));
     this.events.once('shutdown', () => unsub());
     this.onModel(bridge.get(), true);
@@ -300,6 +347,13 @@ export class CityScene extends Phaser.Scene {
         }
       }
     });
+    for (const axis of ['x', 'y'] as const) {
+      const t = isoPlaneTexture(axis);
+      const key = `plane-${axis}`;
+      this.textures.addCanvas(key, t.canvas);
+      this.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
+      this.textures.get(key).customData = { anchor: { x: t.ox / t.canvas.width, y: t.oy / t.canvas.height } };
+    }
     const b = isoBoatTexture();
     this.textures.addCanvas('tugboat', b.canvas);
     this.textures.get('tugboat').setFilter(Phaser.Textures.FilterMode.LINEAR);
@@ -335,7 +389,7 @@ export class CityScene extends Phaser.Scene {
     };
     // Atlas de gotas: lluvia cercana y lejana, copos grande y pequeño.
     const dc = document.createElement('canvas');
-    dc.width = 16;
+    dc.width = 20;
     dc.height = 8;
     const d = dc.getContext('2d')!;
     d.fillStyle = 'rgba(207,230,255,0.75)';
@@ -350,11 +404,19 @@ export class CityScene extends Phaser.Scene {
     d.fillRect(11, 1, 1, 1);
     d.fillStyle = 'rgba(255,255,255,0.95)';
     d.fillRect(13, 0, 2, 2);
+    // salpicadura de una gota en el suelo
+    d.fillStyle = 'rgba(220,235,255,0.7)';
+    d.fillRect(16, 1, 1, 1);
+    d.fillRect(18, 1, 1, 1);
+    d.fillRect(17, 0, 1, 1);
+    d.fillStyle = 'rgba(220,235,255,0.35)';
+    d.fillRect(16, 2, 3, 1);
     const dt = this.textures.addCanvas('fx-drops', dc)!;
     dt.add('rain', 0, 0, 0, 2, 8);
     dt.add('rain-far', 0, 4, 0, 1, 5);
     dt.add('snow', 0, 8, 0, 4, 3);
     dt.add('snow-s', 0, 13, 0, 2, 2);
+    dt.add('ripple', 0, 16, 0, 3, 3);
     tex('cloud', 90, 50, (ctx) => {
       ctx.fillStyle = '#0a0818';
       ctx.beginPath();
@@ -406,6 +468,51 @@ export class CityScene extends Phaser.Scene {
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, 8, 8);
     });
+    tex('air-shadow', 32, 16, (ctx) => {
+      const g = ctx.createRadialGradient(16, 8, 0, 16, 8, 16);
+      g.addColorStop(0, 'rgba(10,8,20,0.9)');
+      g.addColorStop(0.6, 'rgba(10,8,20,0.6)');
+      g.addColorStop(1, 'rgba(10,8,20,0)');
+      ctx.fillStyle = g;
+      ctx.save();
+      ctx.scale(1, 0.5);
+      ctx.beginPath();
+      ctx.arc(16, 16, 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+    // Helicóptero (dos fotogramas del rotor), morro a la derecha
+    {
+      const c = document.createElement('canvas');
+      c.width = 36;
+      c.height = 16;
+      const h = c.getContext('2d')!;
+      for (let f = 0; f < 2; f++) {
+        const o = f * 18;
+        const px = (x: number, y: number, w: number, hh: number, col: string) => {
+          h.fillStyle = col;
+          h.fillRect(o + x, y, w, hh);
+        };
+        px(1, 6, 7, 1, '#2a2a33'); // cola
+        px(0, 4, 2, 3, '#c0392b');
+        px(7, 5, 7, 5, '#c0392b'); // cuerpo
+        px(8, 5, 6, 2, '#e8564a');
+        px(11, 6, 3, 2, '#6fa7c7'); // cabina
+        px(12, 6, 1, 1, '#cfe6ff');
+        px(7, 11, 8, 1, '#2a2a33'); // patines
+        px(8, 10, 1, 1, '#2a2a33');
+        px(13, 10, 1, 1, '#2a2a33');
+        px(10, 3, 1, 2, '#2a2a33'); // eje
+        if (f === 0) px(1, 2, 17, 1, 'rgba(40,40,50,0.85)');
+        else {
+          px(5, 2, 9, 1, 'rgba(40,40,50,0.85)');
+          px(9, 1, 1, 3, 'rgba(40,40,50,0.6)');
+        }
+      }
+      const t = this.textures.addCanvas('heli', c)!;
+      t.add('0', 0, 0, 0, 18, 16);
+      t.add('1', 0, 18, 0, 18, 16);
+    }
     tex('sig', 2, 2, (ctx) => {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, 2, 2);
@@ -776,6 +883,7 @@ export class CityScene extends Phaser.Scene {
       else lanes.set(c.lane, [c]);
     }
     const v = this.cameras.main.worldView;
+    const gone: Car[] = [];
     for (const c of this.cars) {
       const pos = c.pos;
       const front = pos + (c.dir * c.len) / 2;
@@ -798,7 +906,18 @@ export class CityScene extends Phaser.Scene {
         const gap = (o.pos - pos) * c.dir;
         if (gap > 0 && gap < c.len + 5) next = pos + c.dir * Math.max(0, gap - c.len - 5) * 0.5;
       }
+      // accidente: los coches implicados no se mueven (los de detrás esperan en la cola)
+      if (c.crashUntil && time < c.crashUntil) next = pos;
+      // la policía avanza hasta el accidente, se queda allí y luego se va
+      if (c.stopAt !== undefined && time < (c.leaveAt ?? 0)) {
+        const rem = (c.stopAt - pos) * c.dir;
+        next = rem <= 0.3 ? pos : pos + c.dir * Math.min(rem, Math.abs(next - pos));
+      }
       c.pos = next;
+      if (c.temp && (next > c.max || next < c.min)) {
+        gone.push(c);
+        continue;
+      }
       if (next > c.max) c.pos = c.min;
       if (next < c.min) c.pos = c.max;
       const wx = c.axis === 'v' ? c.off : c.pos;
@@ -809,8 +928,18 @@ export class CityScene extends Phaser.Scene {
       if (c.img.visible !== vis) {
         c.img.setVisible(vis);
         c.light.setVisible(vis);
+        for (const e of c.extras ?? []) e.setVisible(vis);
       }
       if (!vis) continue;
+      if (c.extras) {
+        // sirenas: roja y azul alternando encima del coche
+        const top = iso(wx, wy, 4.6);
+        const on = Math.floor(time / 260) % 2;
+        c.extras.forEach((e, i) => {
+          e.setPosition(top.x + (i ? 1.6 : -1.6), top.y).setAlpha(on === i ? 1 : 0.15);
+          depthOf(e, depthAt(wx, wy) + 0.06);
+        });
+      }
       c.img.setPosition(s.x, s.y);
       depthOf(c.img, depthAt(wx, wy));
       depthOf(c.light, c.img.depth + 0.05);
@@ -818,6 +947,341 @@ export class CityScene extends Phaser.Scene {
       const hy = c.axis === 'v' ? wy + c.dir * 9 : wy;
       const hs = iso(hx, hy, 1);
       c.light.setPosition(hs.x, hs.y);
+    }
+    for (const c of gone) {
+      c.img.destroy();
+      c.light.destroy();
+      for (const e of c.extras ?? []) e.destroy();
+      this.cars.splice(this.cars.indexOf(c), 1);
+    }
+  }
+
+  /** Posición en el plano de un coche. */
+  private carAt(c: Car) {
+    return { x: c.axis === 'v' ? c.off : c.pos, y: c.axis === 'v' ? c.pos : c.off };
+  }
+
+  /**
+   * ¿Algún edificio de delante tapa este punto de la calle desde la cámara?
+   * Se mira el píxel real de las manzanas que se dibujan por delante.
+   */
+  private occluded(x: number, y: number) {
+    const mine = depthAt(x, y);
+    for (const z of [1, 4]) {
+      const s = iso(x, y, z);
+      for (const ch of this.chunks) {
+        const img = ch.imgs[0];
+        if (img.depth <= mine || s.x < ch.x0 || s.x >= ch.x1 || s.y < ch.y0 || s.y >= ch.y1) continue;
+        const k = 1 / img.scaleX;
+        const fx = Math.floor((s.x - img.x) * k);
+        const fy = Math.floor((s.y - img.y) * k);
+        if ((this.textures.getPixelAlpha(fx, fy, img.texture.key, img.frame.name) ?? 0) > 40) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Volumen de un sonido según lo lejos que pase de la cámara. */
+  private nearVol(x: number, y: number, z = 0) {
+    const s = iso(x, y, z);
+    const c = this.cameras.main.midPoint;
+    const d = Math.hypot(s.x - c.x, s.y - c.y) * (this.cameras.main.zoom / RES);
+    return Phaser.Math.Clamp(1 - d / 420, 0, 1);
+  }
+
+  /**
+   * Accidentes: de vez en cuando un coche se come al de delante (más con
+   * lluvia, nieve o de noche). Quedan parados con humo, cristales y las
+   * luces de emergencia; los de detrás hacen cola; llega la policía y, al
+   * rato, todo se despeja.
+   */
+  private maybeAccident(time: number) {
+    if (time < this.nextAccident || this.accident) return;
+    const w = bridge.get().weather;
+    const risk = (w === 'tormenta' ? 0.4 : w === 'nieve' ? 0.5 : w === 'lluvia' ? 0.6 : 1) * (this.light.night > 0.5 ? 0.75 : 1);
+    this.nextAccident = time + (70_000 + Math.random() * 110_000) * risk * (this.low ? 1.6 : 1);
+    if (!bridge.get().role) return;
+    const v = this.cameras.main.worldView;
+    // preferimos un choque que se vea: coches dentro de la cámara, en marcha, con otro justo detrás
+    const pairs: [Car, Car][] = [];
+    for (const c of this.cars) {
+      if (c.temp || c.crashUntil || !c.img.visible) continue;
+      const s = iso(this.carAt(c).x, this.carAt(c).y);
+      if (s.x < v.x + 20 || s.x > v.right - 20 || s.y < v.y + 60 || s.y > v.bottom - 60) continue;
+      for (const o of this.cars) {
+        if (o === c || o.lane !== c.lane || o.temp || o.crashUntil) continue;
+        const gap = (c.pos - o.pos) * c.dir;
+        if (gap > c.len && gap < c.len + 22) {
+          // los dos coches (ya juntos tras el golpe) tienen que verse desde la cámara
+          const q = this.carAt(c);
+          const bp = c.pos - c.dir * (c.len + 0.4);
+          const qb = c.axis === 'v' ? { x: c.off, y: bp } : { x: bp, y: c.off };
+          if (!this.occluded(q.x, q.y) && !this.occluded(qb.x, qb.y) && !this.occluded((q.x + qb.x) / 2, (q.y + qb.y) / 2)) pairs.push([c, o]);
+        }
+      }
+    }
+    if (!pairs.length) {
+      this.nextAccident = time + 12_000;
+      return;
+    }
+    const [front, back] = pairs[Math.floor(Math.random() * pairs.length)];
+    back.pos = front.pos - front.dir * (front.len + 0.4);
+    const until = time + 34_000;
+    front.crashUntil = until;
+    back.crashUntil = until;
+    const a = this.carAt(front);
+    const b = this.carAt(back);
+    const at = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const fx: Phaser.GameObjects.GameObject[] = [];
+    // cristales y piezas por el suelo
+    for (let i = 0; i < 6; i++) {
+      const p = iso(at.x + (Math.random() - 0.5) * 6, at.y + (Math.random() - 0.5) * 6);
+      const d = this.add.image(p.x, p.y, 'sig').setScale(0.35 + Math.random() * 0.3).setTint(i % 2 ? 0xcfe6ff : 0x2a2a33).setDepth(depthAt(at.x, at.y) - 0.4);
+      fx.push(d);
+    }
+    // humo del capó
+    for (let i = 0; i < 2; i++) {
+      const p = iso(a.x, a.y, 3);
+      const sm = this.add.image(p.x, p.y, 'steam').setOrigin(0.5, 1).setTint(0x8a8a90).setAlpha(0).setDepth(depthAt(a.x, a.y) + 0.3);
+      this.tweens.add({ targets: sm, y: p.y - 16, alpha: { from: 0.7, to: 0 }, scale: { from: 0.6, to: 2 }, duration: 2400, delay: i * 1200, repeat: -1 });
+      fx.push(sm);
+    }
+    // luces de emergencia (parpadean)
+    for (const c of [front, back]) {
+      const q = this.carAt(c);
+      for (const side of [-1, 1]) {
+        const p = iso(q.x + (c.axis === 'h' ? side * 4 : 2.5), q.y + (c.axis === 'v' ? side * 4 : 2.5), 1.5);
+        const h = this.add.image(p.x, p.y, 'sig').setScale(0.7).setTint(0xffa020).setBlendMode(Phaser.BlendModes.ADD).setDepth(depthAt(q.x, q.y) + 0.07);
+        this.tweens.add({ targets: h, alpha: { from: 1, to: 0.1 }, duration: 380, yoyo: true, repeat: -1 });
+        fx.push(h);
+      }
+    }
+    // aviso flotante: en isométrico los edificios de delante pueden tapar la calle
+    const mk = iso(at.x, at.y, 20);
+    const cone = this.add.image(mk.x, mk.y, 'mk-cono').setOrigin(0.5, 1).setDepth(100003);
+    this.tweens.add({ targets: cone, y: mk.y - 4, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    fx.push(cone);
+    this.world.add(fx);
+    crashSound(this.nearVol(at.x, at.y));
+    this.accident = { cars: [front, back], at, until, fx };
+    // la policía llega por el carril de al lado y se para junto al accidente
+    this.time.delayedCall(5000, () => this.sendPolice(front, until));
+    // y si es de día y no hay tormenta, un helicóptero de la tele se acerca a mirar
+    if (this.light.night < 0.6 && bridge.get().weather !== 'tormenta' && Math.random() < 0.6) this.time.delayedCall(9000, () => this.spawnHeli(at));
+    this.time.delayedCall(until - time, () => {
+      for (const o of fx) o.destroy();
+      this.accident = null;
+    });
+  }
+
+  private sendPolice(crashed: Car, until: number) {
+    if (!crashed.img.active) return;
+    // el carril vecino: simétrico respecto al centro de la calzada
+    const center =
+      crashed.axis === 'v'
+        ? aveX(Array.from({ length: AVES }, (_, i) => i).sort((p, q) => Math.abs(aveX(p) - crashed.off) - Math.abs(aveX(q) - crashed.off))[0])
+        : stY(Array.from({ length: ROWS + 1 }, (_, j) => j).sort((p, q) => Math.abs(stY(p) - crashed.off) - Math.abs(stY(q) - crashed.off))[0]);
+    const off = center * 2 - crashed.off;
+    const twin = this.cars.find((o) => o.axis === crashed.axis && Math.abs(o.off - off) < 0.5 && o.dir === crashed.dir);
+    const img = this.anchored(0, 0, `car-${crashed.axis === 'v' ? 'y' : 'x'}-p`);
+    const light = this.add.image(0, 0, 'headlight').setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setScale(0.55, 0.4);
+    const extras = [0xff3b3b, 0x3b7bff].map((t) => this.add.image(0, 0, 'sig').setTint(t).setScale(0.8).setBlendMode(Phaser.BlendModes.ADD));
+    this.world.add([img, light, ...extras]);
+    img.setTint(this.cars[0]?.img.tintTopLeft ?? 0xffffff);
+    const stopAt = crashed.pos + crashed.dir * 2;
+    this.cars.push({
+      img,
+      light,
+      extras,
+      axis: crashed.axis,
+      dir: crashed.dir,
+      lane: twin?.lane ?? `police-${off}`,
+      speed: 30,
+      len: 10,
+      pos: stopAt - crashed.dir * 90,
+      off,
+      min: crashed.min,
+      max: crashed.max,
+      cross: [],
+      stopAt,
+      leaveAt: until + 1500,
+      temp: true,
+    });
+    const at = this.carAt(crashed);
+    sirenSound(this.nearVol(at.x, at.y), 4);
+  }
+
+  // ---------------------------------------------------------------- aviones y helicópteros
+
+  /** Pista del aeropuerto de Brooklyn (si está construido). */
+  private runway() {
+    if (bridge.get().city?.mega?.aeropuerto !== 'listo') return null;
+    const r = placeRect({ id: 'plaza', label: '', c: 6, r: 0, cw: 2, rh: 2 });
+    return { x0: r.x + 8, x1: r.x + r.w - 8, y: r.y + r.h / 2 };
+  }
+
+  private addAircraft(kind: Aircraft['kind'], p: WP, step: Aircraft['step']) {
+    const img =
+      kind === 'avion' ? this.anchored(0, 0, 'plane-x').setScale(1 / 3) : this.add.sprite(0, 0, 'heli', '0').setOrigin(0.5, 0.7);
+    img.setDepth(150000);
+    const shadow = this.add.image(0, 0, 'air-shadow').setDepth(-500).setScale(kind === 'avion' ? 1.1 : 0.45, kind === 'avion' ? 1.1 : 0.45);
+    const lights = [0xff3b3b, 0x3dff7a, 0xffffff].map((t) => this.add.image(0, 0, 'sig').setTint(t).setScale(0.8).setBlendMode(Phaser.BlendModes.ADD).setDepth(150001));
+    const beam = kind === 'helicoptero' ? this.add.image(0, 0, 'headlight').setBlendMode(Phaser.BlendModes.ADD).setScale(1.6, 0.9).setDepth(-490).setAlpha(0) : undefined;
+    this.world.add([img, shadow, ...lights, ...(beam ? [beam] : [])]);
+    const a: Aircraft = { kind, img, shadow, beam, lights, p, step, hx: 1, hy: 0, soundAt: 0 };
+    this.aircraft.push(a);
+    return a;
+  }
+
+  /** Un avión cruza el cielo de punta a punta (o aterriza / despega si hay aeropuerto). */
+  private spawnPlane() {
+    const rw = this.runway();
+    const roll = Math.random();
+    if (rw && roll < 0.35) {
+      // aproximación: entra por el oeste y baja hasta la pista
+      const p: WP = { x: rw.x0 - 560, y: rw.y, z: 150 };
+      let rolling = 0;
+      const a = this.addAircraft('avion', p, (dt) => {
+        if (p.x < rw.x0 + 20) {
+          p.x += 52 * dt;
+          p.z = Math.max(0, 150 * ((rw.x0 + 20 - p.x) / 580));
+        } else {
+          rolling += dt;
+          p.x += Math.max(4, 40 - rolling * 9) * dt;
+          p.z = 0;
+          if (rolling > 6) a.img.setAlpha(Math.max(0, a.img.alpha - dt));
+        }
+        return rolling < 7.2;
+      });
+      return;
+    }
+    if (rw && roll < 0.6) {
+      // despegue: rueda por la pista y sube hacia el este
+      const p: WP = { x: rw.x0 + 10, y: rw.y, z: 0 };
+      let t = 0;
+      this.addAircraft('avion', p, (dt) => {
+        t += dt;
+        const v = Math.min(55, 8 + t * 9);
+        p.x += v * dt;
+        if (p.x > rw.x0 + 70) p.z = (p.z ?? 0) + v * 0.32 * dt;
+        return p.x < MAP_W + 420;
+      });
+      return;
+    }
+    // vuelo de crucero: alto, recto, a lo largo de uno de los ejes de la ciudad
+    const alongX = Math.random() < 0.5;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const far = 300;
+    const p: WP = alongX ? { x: dir > 0 ? -far : MAP_W + far, y: 40 + Math.random() * (MAP_H - 80), z: 170 } : { x: 40 + Math.random() * (MAP_W - 80), y: dir > 0 ? -far : MAP_H + far, z: 170 };
+    const a = this.addAircraft('avion', p, (dt) => {
+      if (alongX) p.x += dir * 60 * dt;
+      else p.y += dir * 60 * dt;
+      return alongX ? p.x > -far - 1 && p.x < MAP_W + far + 1 : p.y > -far - 1 && p.y < MAP_H + far + 1;
+    });
+    a.img.setTexture(alongX ? 'plane-x' : 'plane-y');
+    const an = (this.textures.get(alongX ? 'plane-x' : 'plane-y').customData as { anchor: { x: number; y: number } }).anchor;
+    a.img.setOrigin(an.x, an.y).setRotation(dir < 0 ? Math.PI : 0);
+  }
+
+  /** Helicóptero: llega a un sitio, da vueltas encima un rato y se va. */
+  private spawnHeli(target?: { x: number; y: number }) {
+    if (this.aircraft.some((x) => x.kind === 'helicoptero')) return;
+    const spots = (['plaza', 'parque', 'bolsa', 'alcaldia', 'coney', 'hipodromo'] as PlaceId[]).map((id) => placeCenter(PLACE_BY_ID[id]));
+    const t = target ?? spots[Math.floor(Math.random() * spots.length)];
+    const ang0 = Math.random() * Math.PI * 2;
+    const start = { x: t.x + Math.cos(ang0) * 700, y: t.y + Math.sin(ang0) * 700 };
+    const exitAng = ang0 + Math.PI * (0.6 + Math.random() * 0.8);
+    const p: WP = { x: start.x, y: start.y, z: 60 };
+    const R = 46;
+    let phase: 'in' | 'orbit' | 'out' = 'in';
+    let orbit = 0;
+    let ang = 0;
+    this.addAircraft('helicoptero', p, (dt) => {
+      if (phase === 'in' || phase === 'out') {
+        const goal = phase === 'in' ? { x: t.x + Math.cos(ang0) * R, y: t.y + Math.sin(ang0) * R } : { x: t.x + Math.cos(exitAng) * 760, y: t.y + Math.sin(exitAng) * 760 };
+        const dx = goal.x - p.x;
+        const dy = goal.y - p.y;
+        const d = Math.hypot(dx, dy);
+        const v = 42 * dt;
+        if (d <= v) {
+          if (phase === 'out') return false;
+          phase = 'orbit';
+          ang = ang0;
+        } else {
+          p.x += (dx / d) * v;
+          p.y += (dy / d) * v;
+        }
+      } else {
+        orbit += dt;
+        ang += dt * 0.55;
+        p.x = t.x + Math.cos(ang) * R;
+        p.y = t.y + Math.sin(ang) * R;
+        if (orbit > 22) phase = 'out';
+      }
+      return true;
+    });
+  }
+
+  private moveAircraft(time: number, dt: number) {
+    const w = bridge.get().weather;
+    if (time > this.nextPlane) {
+      this.nextPlane = time + 55_000 + Math.random() * 90_000;
+      if (this.aircraft.filter((a) => a.kind === 'avion').length < 2) this.spawnPlane();
+    }
+    if (time > this.nextHeli) {
+      this.nextHeli = time + 110_000 + Math.random() * 140_000;
+      if (w !== 'tormenta' && w !== 'nieve') this.spawnHeli();
+    }
+    const night = this.light.night;
+    const day = night < 0.55;
+    const v = this.cameras.main.worldView;
+    for (const a of [...this.aircraft]) {
+      const before = { x: a.p.x, y: a.p.y, z: a.p.z ?? 0 };
+      if (!a.step(dt)) {
+        for (const o of [a.img, a.shadow, a.beam, ...a.lights]) o?.destroy();
+        this.aircraft.splice(this.aircraft.indexOf(a), 1);
+        continue;
+      }
+      const z = a.p.z ?? 0;
+      const s = iso(a.p.x, a.p.y, z);
+      const sb = iso(before.x, before.y, before.z);
+      if (Math.abs(s.x - sb.x) + Math.abs(s.y - sb.y) > 0.01) {
+        a.hx = s.x - sb.x;
+        a.hy = s.y - sb.y;
+      }
+      a.img.setPosition(s.x, s.y);
+      // en tierra (aterrizando o despegando) va con la profundidad de su sitio
+      a.img.setDepth(z < 6 ? depthAt(a.p.x, a.p.y) + 0.2 : 150000);
+      a.img.setTint(this.cars[0]?.img.tintTopLeft ?? 0xffffff);
+      if (a.kind === 'helicoptero') {
+        const hs = a.img as Phaser.GameObjects.Sprite;
+        hs.setFrame(String(Math.floor(time / 45) % 2));
+        hs.setFlipX(a.hx < 0);
+      }
+      // sombra en el suelo, hacia el noreste (el sol viene del suroeste); de noche no hay
+      const sh = iso(a.p.x + z * 0.45, a.p.y - z * 0.22, 0);
+      a.shadow.setPosition(sh.x, sh.y).setVisible(day && w !== 'tormenta').setAlpha(Math.max(0.16, 0.34 - z / 900));
+      if (a.beam) {
+        a.beam.setVisible(!day);
+        const g = iso(a.p.x, a.p.y, 0);
+        a.beam.setPosition(g.x, g.y).setAlpha(!day ? 0.55 : 0);
+      }
+      // luces de navegación: roja a babor, verde a estribor y destello blanco
+      const len = Math.hypot(a.hx, a.hy) || 1;
+      const nx = -a.hy / len;
+      const ny = a.hx / len;
+      const span = a.kind === 'avion' ? 10 : 4;
+      a.lights[0].setPosition(s.x - nx * span, s.y - ny * span * 0.5);
+      a.lights[1].setPosition(s.x + nx * span, s.y + ny * span * 0.5);
+      a.lights[2].setPosition(s.x, s.y - 2).setAlpha(Math.floor(time / 120) % 9 === 0 ? 1 : 0);
+      a.lights[0].setAlpha(night > 0.3 ? 1 : 0.35);
+      a.lights[1].setAlpha(night > 0.3 ? 1 : 0.35);
+      // se oye al pasar cerca de la cámara
+      const inView = s.x > v.x - 60 && s.x < v.right + 60 && s.y > v.y - 60 && s.y < v.bottom + 60;
+      if (inView && time > a.soundAt) {
+        a.soundAt = time + (a.kind === 'avion' ? 9000 : 3000);
+        aircraftSound(a.kind, a.kind === 'avion' ? 0.7 : Math.max(0.3, this.nearVol(a.p.x, a.p.y, z)), a.kind === 'avion' ? 7 : 3);
+      }
     }
   }
 
@@ -1303,44 +1767,72 @@ export class CityScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Lluvia y nieve en una cámara aparte, a tamaño de pantalla. Se adaptan
+   * al zoom: de cerca, gotas y copos grandes y pocos; de lejos, pequeños,
+   * más numerosos y más lentos (están más lejos). Con lluvia, salpicaduras
+   * en el suelo; con tormenta, más viento.
+   */
   private drawWeather(delta: number) {
     const w = bridge.get().weather;
     const W = this.scale.width;
     const H = this.scale.height;
-    if (w !== this.weatherShown) {
+    const k = Phaser.Math.Clamp(this.cameras.main.zoom / RES, 0.55, 2.2);
+    const rain = w === 'lluvia' || w === 'tormenta';
+    const snow = w === 'nieve';
+    if (w !== this.weatherShown || Math.abs(k - this.weatherZoom) > 0.18) {
       this.weatherShown = w;
+      this.weatherZoom = k;
       this.precip.clear();
       this.drops = [];
-      // las gotas se dibujan a escala 2 (la vista tiene el doble de resolución)
-      this.precip.setScale(RES);
-      const snow = w === 'nieve';
-      const n = w === 'tormenta' ? 140 : snow ? 90 : w === 'lluvia' ? 95 : 0;
-      for (let i = 0; i < (this.low ? n / 2 : n); i++) {
-        const s = 0.6 + Math.random() * 0.8;
-        const frame = snow ? (s > 1.1 ? 'snow' : 'snow-s') : s > 1 ? 'rain' : 'rain-far';
-        this.drops.push({ bob: this.precip.create((Math.random() * W) / RES, (Math.random() * H) / RES, frame), s });
+      this.ripples = [];
+      // tamaño de cada gota en pantalla: resolución × zoom (nunca más pequeña que 1 píxel)
+      const sc = RES * Math.max(0.75, Math.sqrt(k));
+      this.precip.setScale(sc);
+      const base = w === 'tormenta' ? 150 : snow ? 100 : w === 'lluvia' ? 100 : 0;
+      const n = Math.round(base * Phaser.Math.Clamp(1.25 / k, 0.7, 1.7) * (this.low ? 0.5 : 1));
+      for (let i = 0; i < n; i++) {
+        const sp = 0.6 + Math.random() * 0.8;
+        const frame = snow ? (sp > 1.1 ? 'snow' : 'snow-s') : sp > 1 ? 'rain' : 'rain-far';
+        this.drops.push({ bob: this.precip.create((Math.random() * W) / sc, (Math.random() * H) / sc, frame), s: sp });
       }
+      if (rain && !this.low) for (let i = 0; i < Math.round(26 / Math.sqrt(k)); i++) this.ripples.push(this.precip.create(-10, -10, 'ripple'));
       this.precip.setVisible(n > 0);
       // La cámara del clima solo trabaja si hay algo que dibujar.
       this.uiCam.setVisible(n > 0 || w === 'tormenta');
       this.lastLightAt = 0;
     }
     if (this.drops.length) {
-      const snow = w === 'nieve';
+      const sc = this.precip.scaleX;
+      const vw = W / sc;
+      const vh = H / sc;
+      // de lejos todo cae más despacio en pantalla; la tormenta trae viento
+      const fall = Math.sqrt(k);
+      const wind = w === 'tormenta' ? 0.11 : 0.05;
+      const gust = snow ? Math.sin(this.time.now / 2300) * 0.012 : 0;
       for (const d of this.drops) {
         const b = d.bob;
         if (snow) {
-          b.y += delta * 0.012 * d.s;
-          b.x += Math.sin((b.y + d.s * 100) / 18) * 0.2;
+          b.y += delta * 0.014 * d.s * fall;
+          b.x += Math.sin((b.y + d.s * 100) / 18) * 0.2 + delta * gust;
         } else {
-          b.y += delta * 0.22 * d.s;
-          b.x -= delta * 0.05 * d.s;
+          b.y += delta * 0.24 * d.s * fall;
+          b.x -= delta * wind * d.s * fall;
         }
-        if (b.y > H / RES) {
+        if (b.y > vh) {
           b.y = -8;
-          b.x = Math.random() * (W / RES + 30);
+          b.x = Math.random() * (vw + 40);
         }
-        if (b.x < -4) b.x = W / RES;
+        if (b.x < -6) b.x = vw + 4;
+        if (b.x > vw + 6) b.x = -4;
+      }
+      // salpicaduras: aparecen un instante en sitios al azar (solo en la mitad de abajo de la vista)
+      for (const r of this.ripples) {
+        if (Math.random() < 0.08) {
+          r.x = Math.random() * vw;
+          r.y = vh * (0.25 + Math.random() * 0.7);
+          r.setAlpha(1);
+        } else r.setAlpha(Math.max(0, r.alpha - delta * 0.004));
       }
     }
     // relámpagos
@@ -1450,8 +1942,10 @@ export class CityScene extends Phaser.Scene {
     }
     this.drawWeather(delta);
 
-    // tráfico y peatones
+    // tráfico, accidentes, aviones y peatones
     this.moveTraffic(delta / 1000, time);
+    this.maybeAccident(time);
+    this.moveAircraft(time, Math.min(0.1, delta / 1000));
     for (const wk of this.walkers) this.put(wk.sprite, wk.p);
     if (this.otherSprite && this.otherLabel) {
       this.put(this.otherSprite, this.otherP);

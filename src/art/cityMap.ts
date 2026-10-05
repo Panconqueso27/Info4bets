@@ -2909,3 +2909,42 @@ export function isoBoatTexture(scale = 4) {
   box(a, 2, 5, 2, 2, 3, { top: '#14101f', south: '#2a2a33' }, { z: 5.5, snow: false });
   return { canvas: L1.c, ox: (c.x - rx) * scale, oy: (c.y - ry) * scale };
 }
+
+/**
+ * Avión visto desde arriba, proyectado en isométrico (el morro hacia +x o
+ * +y). Para volar en sentido contrario basta con girar la imagen 180°.
+ */
+export function isoPlaneTexture(axis: 'x' | 'y', scale = 3) {
+  const L = 30;
+  const S = 26;
+  const w = axis === 'x' ? L : S;
+  const d = axis === 'x' ? S : L;
+  const c = iso(w / 2, d / 2);
+  const rx = iso(0, d).x - 2;
+  const ry = iso(0, 0).y - 2;
+  const L1 = layer(rx, ry, w + d + 4, (w + d) / 2 + 4, scale);
+  const scratch = layer(rx, ry, w + d + 4, (w + d) / 2 + 4, scale);
+  const a = new Art(() => 0.5, 1);
+  a.base = L1.ctx;
+  a.ground = scratch.ctx;
+  a._lights = scratch.ctx;
+  a._neon = scratch.ctx;
+  a._snow = scratch.ctx;
+  // dibujo en "coordenadas de avión": u a lo largo del fuselaje, v a lo ancho
+  const P = (u: number, v: number) => (axis === 'x' ? [u, v + S / 2] : [S / 2 - v, u]);
+  const shape = (pts: [number, number][], col: string) => poly(a.base, pts.flatMap(([u, v]) => P(u, v)), col);
+  onTop(a, 0, () => {
+    // alas, estabilizadores, fuselaje y cabina
+    shape([[11, -1.2], [16, -1.2], [12, -12.5], [9.5, -12.5]], '#c9ced8');
+    shape([[11, 1.2], [16, 1.2], [12, 12.5], [9.5, 12.5]], '#aeb4c0');
+    shape([[1, -0.8], [4.5, -0.8], [2.5, -5], [0.6, -5]], '#c9ced8');
+    shape([[1, 0.8], [4.5, 0.8], [2.5, 5], [0.6, 5]], '#aeb4c0');
+    shape([[0, -1.3], [26, -1.3], [29.5, 0], [26, 1.3], [0, 1.3]], '#f1f3f7');
+    shape([[0, 0.3], [26, 0.3], [29.5, 0], [26, 1.3], [0, 1.3]], '#d8dce4');
+    shape([[24.5, -0.8], [27, -0.6], [27, 0.6], [24.5, 0.8]], '#26304a');
+    // franja azul de la compañía y motores
+    shape([[3, -0.4], [24, -0.4], [24, 0.4], [3, 0.4]], '#2f6fb3');
+    for (const v of [-6, 6]) shape([[12.5, v - 0.7], [15.5, v - 0.7], [15.5, v + 0.7], [12.5, v + 0.7]], '#55595f');
+  });
+  return { canvas: L1.c, ox: (c.x - rx) * scale, oy: (c.y - ry) * scale };
+}
