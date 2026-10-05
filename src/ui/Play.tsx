@@ -1,5 +1,3 @@
-import * as audio from '../platform/audio';
-import { lowFx, setLowFx } from '../scene/CityScene';
 
 export const missionsLeft = (s: GameState) => (s.missions?.date === s.today.date ? s.missions.list.filter((m) => !m.done).length : 0);
 import { StatsView } from './Extras';
@@ -212,7 +210,7 @@ export function DockMain({
 /** ¿La Bolsa está abierta ahora? (el icono se ilumina en el móvil). */
 export const marketLive = (state: GameState, now: number) => !!marketSession(state, now);
 
-export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu' | 'personas' | 'armario' | 'stats' | 'extras' | 'propiedades' | 'copia';
+export type Panel = 'bolsa' | 'agenda' | 'mejora' | 'logros' | 'diario' | 'menu' | 'personas' | 'armario' | 'stats' | 'extras' | 'propiedades' | 'copia' | 'ajustes' | 'privacidad' | 'creditos';
 
 export const TOOLS: { id: Panel; icon: string; label: string; role?: Role }[] = [
   { id: 'bolsa', icon: 'grafica', label: 'Bolsa' },
@@ -279,7 +277,9 @@ export function MenuModal({
   onQuit,
   onOpen,
   onTutorial,
+  onTitle,
 }: {
+  onTitle: () => void;
   role: Role;
   devEnabled: boolean;
   onToggleDev: () => void;
@@ -289,13 +289,6 @@ export function MenuModal({
   onTutorial: () => void;
 }) {
   const [confirm, setConfirm] = useState(false);
-  const [sound, setSound] = useState(audio.getPrefs());
-  const [low, setLow] = useState(lowFx());
-  const toggle = (k: 'sfx' | 'music' | 'ambient') => {
-    audio.unlock();
-    audio.setPrefs({ [k]: !sound[k] });
-    setSound(audio.getPrefs());
-  };
   const r = ROLES[role];
   return (
     <div class="modal-wrap" onClick={onClose}>
@@ -326,23 +319,11 @@ export function MenuModal({
           </button>
         </div>
         <div class="menu-grid" style={{ marginBottom: 12 }}>
-          <button class={`btn secondary ${sound.sfx ? 'on' : ''}`} onClick={() => toggle('sfx')}>
-            {sound.sfx ? '🔊 Sonido' : '🔇 Sonido'}
+          <button class="btn secondary" onClick={() => onOpen('ajustes')}>
+            ⚙ Ajustes
           </button>
-          <button class={`btn secondary ${sound.music ? 'on' : ''}`} onClick={() => toggle('music')}>
-            {sound.music ? '🎵 Música' : '🔇 Música'}
-          </button>
-          <button class={`btn secondary ${sound.ambient ? 'on' : ''}`} onClick={() => toggle('ambient')}>
-            {sound.ambient ? '🌧 Ambiente' : '🔇 Ambiente'}
-          </button>
-          <button
-            class={`btn secondary ${low ? '' : 'on'}`}
-            onClick={() => {
-              setLowFx(!low);
-              setLow(!low);
-            }}
-          >
-            {low ? '🔋 Ahorro' : '✨ Efectos'}
+          <button class="btn secondary" onClick={onTitle}>
+            🏠 Portada y partidas
           </button>
         </div>
         <div class="stack">
@@ -358,7 +339,7 @@ export function MenuModal({
             </>
           ) : (
             <button class="btn danger" onClick={() => setConfirm(true)}>
-              Abandonar partida
+              Borrar esta partida
             </button>
           )}
           <button class="btn secondary" onClick={onClose}>

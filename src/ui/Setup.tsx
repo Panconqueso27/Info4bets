@@ -6,8 +6,9 @@ import { defaultLook, HAIR_COLORS, OUTFIT_COLORS, randomLook, SKINS, type Option
 import { ROLES } from '../core/roles';
 import type { Character, Look, Role } from '../core/types';
 import { CharacterCanvas } from './CharacterCanvas';
+import { GAME_VERSION } from './System';
 
-export function TitleScreen({ hasSave, onContinue, onNew }: { hasSave: boolean; onContinue: () => void; onNew: () => void }) {
+export function TitleScreen({ hasSave, onContinue, onNew, onSaves, onSettings }: { hasSave: boolean; onContinue: () => void; onNew: () => void; onSaves: () => void; onSettings: () => void }) {
   return (
     <div class="screen title-screen">
       <div class="logo pxl">
@@ -32,6 +33,15 @@ export function TitleScreen({ hasSave, onContinue, onNew }: { hasSave: boolean; 
         <button class={`btn ${hasSave ? 'secondary' : ''}`} onClick={onNew}>
           Nueva partida
         </button>
+        <div class="title-row">
+          <button class="btn secondary" onClick={onSaves}>
+            💾 Partidas
+          </button>
+          <button class="btn secondary" onClick={onSettings}>
+            ⚙ Ajustes
+          </button>
+        </div>
+        <small class="title-version">v{GAME_VERSION}</small>
       </div>
     </div>
   );

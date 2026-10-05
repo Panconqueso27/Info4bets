@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: beta 0.10.0**
+**Versión actual: 0.11.0**
 
 ## Probar la beta
 
@@ -21,6 +21,20 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.11.0
+
+- **Partidas guardadas:** hasta 5 ranuras, con nombre, papel, día, dinero y cuándo jugaste cada una. Desde la portada puedes continuar la última, jugar otra, empezar una nueva o borrarla. La partida de versiones anteriores pasa sola a la ranura 1.
+- **Lo imprescindible de un juego publicado:**
+  - El **botón Atrás de Android** cierra lo que haya abierto (primero el móvil, luego los paneles) y vuelve a la portada. Desde la portada sale del juego.
+  - **Ajustes:** música, efectos, sonido de la calle, vibración, notificaciones, calidad gráfica y letra grande.
+  - **Privacidad** y **Créditos** dentro del juego, y número de versión en la portada.
+  - La partida se guarda al salir de la app o bloquear el móvil, y cada pocos minutos se hace una copia de respaldo por si la principal se estropea.
+  - Si algo falla, aparece una pantalla para reintentar o sacar el código de la partida, en vez de quedarse en blanco.
+- **Preparado para Google Play:**
+  - versión de publicación sin depuración y firma configurable;
+  - ID de paquete definitivo `com.pixelopolis.townbuilder`;
+  - ficha, política de privacidad, icono, gráfico y capturas en `play-store/`, con la guía en `play-store/GUIA.md`.
 
 ## Novedades 0.10.0
 

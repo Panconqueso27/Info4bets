@@ -4,6 +4,8 @@ import { render } from 'preact';
 import { restoreNativeSave } from './platform/save';
 import { createGame } from './scene/CityScene';
 import { App } from './ui/App';
+import { ErrorBoundary } from './ui/System';
+import { applySettings } from './platform/settings';
 import './ui/fonts.css';
 import './ui/styles.css';
 
@@ -20,4 +22,12 @@ document.fonts.load('8px "Press Start 2P"').finally(() => {
   if (import.meta.env.DEV) (window as any).__game = game;
 });
 // En la app, la partida guardada en el almacenamiento nativo se recupera antes de mostrar nada.
-restoreNativeSave().finally(() => render(<App />, ui));
+applySettings();
+restoreNativeSave().finally(() =>
+  render(
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>,
+    ui,
+  ),
+);

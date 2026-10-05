@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.laciudad.juego',
+  appId: 'com.pixelopolis.townbuilder',
   appName: 'Pixelopolis',
   webDir: 'dist',
   backgroundColor: '#120c24',

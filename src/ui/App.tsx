@@ -37,7 +37,11 @@ import { addDays, startOfDay } from '../core/time';
 import type { Character, GameState, Role } from '../core/types';
 import * as clock from '../platform/clock';
 import * as notify from '../platform/notify';
-import { deleteGame, loadGame, saveGame } from '../platform/save';
+import { activeSlot, deleteGame, deleteSlot, firstFreeSlot, listSlots, loadGame, saveGame, setActiveSlot } from '../platform/save';
+import { getSettings } from '../platform/settings';
+import { App as NativeApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { CreditsModal, PrivacyModal, SavesScreen, SettingsModal } from './System';
 import { bridge, type Spot } from '../scene/bridge';
 import { PLACE_BY_ID, ROLE_PLACES } from '../art/cityMap';
 import { DevPanel, devWeather } from './DevPanel';
@@ -91,6 +95,7 @@ type Screen =
   | { id: 'role' }
   | { id: 'identity'; role: Role }
   | { id: 'look'; role: Role; name: string; age: number }
+  | { id: 'saves' }
   | { id: 'play' };
 
 function spotFor(s: GameState, now: number): Spot {
@@ -122,6 +127,8 @@ export function App() {
   const [target, setTarget] = useState<string | null>(null);
   const [extra, setExtra] = useState<ExtraPanel | null>(null);
   const [contestResult, setContestResult] = useState<{ id: string; result: ContestResult } | null>(null);
+  /** Ajustes, privacidad y créditos desde la portada. */
+  const [sysModal, setSysModal] = useState<'ajustes' | 'privacidad' | 'creditos' | null>(null);
   const moneyRef = useRef<number | null>(null);
   const cheer = useRef(0);
   const cityRef = useRef({ sig: '\u0000', look: cityLook(null) });
@@ -129,6 +136,47 @@ export function App() {
 
   const state = game.current;
   const playing = screen.id === 'play' && state;
+
+  // Botón Atrás de Android (y Escape en el ordenador): cierra lo que haya abierto,
+  // vuelve a la portada y, desde la portada, sale de la app.
+  const backRef = useRef<() => void>(() => {});
+  backRef.current = () => {
+    const ev = new CustomEvent('lc-back', { cancelable: true });
+    if (!window.dispatchEvent(ev)) return;
+    if (sysModal) return setSysModal(sysModal === 'ajustes' ? null : 'ajustes');
+    if (screen.id === 'role' || screen.id === 'saves') return setScreen({ id: 'title' });
+    if (screen.id === 'identity') return setScreen({ id: 'role' });
+    if (screen.id === 'look') return setScreen({ id: 'identity', role: screen.role });
+    if (screen.id === 'title') {
+      if (Capacitor.isNativePlatform()) NativeApp.exitApp();
+      return;
+    }
+    if (minigame === 'menu') return setMinigame(null);
+    if (minigame) return setToast({ title: 'MINIJUEGO', text: 'Termínalo o usa su botón para salir.' });
+    if (reward) return setReward(null);
+    if (outcome) return setOutcome(null);
+    if (contestResult) return setContestResult(null);
+    if (extra) return setExtra(null);
+    if (target) return setTarget(null);
+    if (panel === 'privacidad' || panel === 'creditos') return setPanel('ajustes');
+    if (panel === 'ajustes') return setPanel('menu');
+    if (panel) return setPanel(null);
+    if (showEvent) return setShowEvent(false);
+    toTitle();
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && backRef.current();
+    window.addEventListener('keydown', onKey);
+    let off: (() => void) | null = null;
+    if (Capacitor.isNativePlatform())
+      NativeApp.addListener('backButton', () => backRef.current())
+        .then((h) => (off = () => h.remove()))
+        .catch(() => {});
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      off?.();
+    };
+  }, []);
 
   const commit = () => {
     if (game.current) saveGame(game.current);
@@ -145,7 +193,11 @@ export function App() {
     };
     tick();
     const id = setInterval(tick, 1000);
-    const onVisible = () => document.visibilityState === 'visible' && tick();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick();
+      // Al salir de la app (o bloquear el móvil) se guarda en el momento.
+      else if (game.current) saveGame(game.current);
+    };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearInterval(id);
@@ -314,7 +366,7 @@ export function App() {
   // Notificaciones programadas: sucesos, fin de jornada y recordatorio diario.
   useEffect(() => {
     const s = game.current;
-    if (!s || s.gameOver) return notify.scheduleAll([], clock.now(), clock.getSpeed());
+    if (!s || s.gameOver || !getSettings().notifications) return notify.scheduleAll([], clock.now(), clock.getSpeed());
     const role = ROLES[s.character.role];
     const list = [];
     if (s.shift && !s.shift.cancelled) {
@@ -337,7 +389,7 @@ export function App() {
     const tomorrow = startOfDay(addDays(s.today.date, 1)) + REMINDER_HOUR * 3_600_000;
     list.push({ id: `rem-${tomorrow}`, at: tomorrow, title: `🔥 Racha de ${s.streak} días`, body: `No olvides ir ${role.toWorkplace} hoy o perderás la racha.` });
     notify.scheduleAll(list, clock.now(), clock.getSpeed());
-  }, [state?.shift?.startedAt, state?.shift?.endsAt, state?.errand?.endsAt, state?.shift?.cancelled, state?.gameOver, state?.today.date, state?.streak, clock.getSpeed(), citySignature(state) + JSON.stringify(state?.bonds ?? [])]);
+  }, [state?.shift?.startedAt, state?.shift?.endsAt, state?.errand?.endsAt, state?.shift?.cancelled, state?.gameOver, state?.today.date, state?.streak, clock.getSpeed(), citySignature(state) + JSON.stringify(state?.bonds ?? []), getSettings().notifications]);
 
   const begin = (c: Character) => {
     deleteGame();
@@ -346,6 +398,46 @@ export function App() {
     setEndingSeen(false);
     commit();
     setScreen({ id: 'play' });
+  };
+
+  /** Cambia de partida: limpia lo de la anterior y carga la de la ranura. */
+  const resetSession = () => {
+    notify.clearAll();
+    seenPending.current.clear();
+    setPanel(null);
+    setOutcome(null);
+    setShowEvent(false);
+    setMinigame(null);
+    setExtra(null);
+    setTarget(null);
+    setReward(null);
+    setEndingSeen(false);
+  };
+  const openSlot = (slot: number) => {
+    if (game.current && screen.id === 'play') saveGame(game.current);
+    setActiveSlot(slot);
+    resetSession();
+    game.current = loadGame();
+    setScreen({ id: game.current ? 'play' : 'role' });
+    setVersion((v) => v + 1);
+  };
+  const newInSlot = (slot: number) => {
+    setActiveSlot(slot);
+    resetSession();
+    game.current = null;
+    setScreen({ id: 'role' });
+  };
+  /** Continuar: la última partida que se jugó. */
+  const continueLast = () => {
+    const last = listSlots()
+      .filter((x) => x.state)
+      .sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0))[0];
+    if (last) openSlot(last.slot);
+  };
+  const toTitle = () => {
+    if (game.current) saveGame(game.current);
+    resetSession();
+    setScreen({ id: 'title' });
   };
 
   const quit = () => {
@@ -392,8 +484,40 @@ export function App() {
             onDone={begin}
           />
         );
+      case 'saves':
+        return (
+          <SavesScreen
+            active={activeSlot()}
+            now={now}
+            onPlay={openSlot}
+            onNew={newInSlot}
+            onDelete={(slot) => {
+              deleteSlot(slot);
+              if (slot === activeSlot()) game.current = null;
+              setVersion((v) => v + 1);
+            }}
+            onBack={() => setScreen({ id: 'title' })}
+          />
+        );
       default:
-        return <TitleScreen hasSave={!!state} onContinue={() => setScreen({ id: 'play' })} onNew={() => setScreen({ id: 'role' })} />;
+        return (
+          <>
+            <TitleScreen
+              hasSave={listSlots().some((x) => x.state)}
+              onContinue={continueLast}
+              onNew={() => {
+                const free = firstFreeSlot();
+                if (free) newInSlot(free);
+                else setScreen({ id: 'saves' });
+              }}
+              onSaves={() => setScreen({ id: 'saves' })}
+              onSettings={() => setSysModal('ajustes')}
+            />
+            {sysModal === 'ajustes' && <SettingsModal onClose={() => setSysModal(null)} onOpen={setSysModal} />}
+            {sysModal === 'privacidad' && <PrivacyModal onClose={() => setSysModal('ajustes')} />}
+            {sysModal === 'creditos' && <CreditsModal onClose={() => setSysModal('ajustes')} />}
+          </>
+        );
     }
   }
 
@@ -603,6 +727,9 @@ export function App() {
         }}
       />
     );
+  else if (panel === 'ajustes') overlay = <SettingsModal onClose={() => setPanel('menu')} onOpen={setPanel} />;
+  else if (panel === 'privacidad') overlay = <PrivacyModal onClose={() => setPanel('ajustes')} />;
+  else if (panel === 'creditos') overlay = <CreditsModal onClose={() => setPanel('ajustes')} />;
   else if (panel === 'menu')
     overlay = (
       <MenuModal
@@ -615,6 +742,7 @@ export function App() {
         }}
         onClose={closePanel}
         onQuit={quit}
+        onTitle={toTitle}
         onOpen={setPanel}
         onTutorial={() => {
           resetTutorial();
@@ -700,6 +828,7 @@ export function App() {
 }
 
 function vibrate(pattern: number | number[]) {
+  if (!getSettings().vibrate) return;
   try {
     navigator.vibrate?.(pattern);
   } catch {

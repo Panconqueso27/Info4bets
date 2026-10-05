@@ -68,6 +68,17 @@ export function Phone(p: PhoneProps) {
     }, 520);
   };
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+  // Atrás: primero vuelve al inicio del móvil y luego lo pliega.
+  useEffect(() => {
+    if (!open) return;
+    const onBack = (e: Event) => {
+      e.preventDefault();
+      if (app !== 'home') setApp('home');
+      else doClose();
+    };
+    window.addEventListener('lc-back', onBack);
+    return () => window.removeEventListener('lc-back', onBack);
+  }, [open, app, anim]);
 
   // Al abrir un panel del juego, el móvil se pliega solo.
   const wrap = <A extends unknown[]>(fn: (...a: A) => void) => (...a: A) => {
@@ -125,7 +136,7 @@ export function Phone(p: PhoneProps) {
               <div class="phone-speaker" />
               <div class="phone-screen">
                 <div class="phone-status">
-                  <span class="sig">
+                  <span class="phone-sig">
                     <i />
                     <i />
                     <i />
