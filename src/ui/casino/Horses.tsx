@@ -424,6 +424,8 @@ interface Sim {
   plan: RacePlan | null;
   t: number;
   cam: number;
+  /** Desfase suavizado de la cámara respecto al que va en cabeza. */
+  camOff: number;
   freeze: number;
   frozeDone: boolean;
   finishedAt: number;
@@ -441,7 +443,55 @@ function lengthsText(margin: number, finish: number): string {
   if (len < 0.35) return 'por una cabeza';
   if (len < 0.75) return 'por medio cuerpo';
   if (len < 1.3) return 'por un cuerpo';
-  return `por ${Math.round(len * 2) / 2} cuerpos`.replace('.5', ' y medio');
+  const half = Math.round(len * 2) / 2;
+  const whole = Math.floor(half);
+  return `por ${whole === 1 ? 'un cuerpo' : `${whole} cuerpos`}${half > whole ? ' y medio' : ''}`;
+}
+
+/** Clasificación en directo bajo la pista. */
+function LiveBoard({ sim, field }: { sim: { current: Sim }; field: Horse[] }) {
+  const [rows, setRows] = useState<{ h: number; gap: number; done: boolean }[]>([]);
+  const [left, setLeft] = useState(TRACK_METRES);
+  useEffect(() => {
+    const upd = () => {
+      const s = sim.current;
+      const plan = s.plan;
+      if (!plan) return;
+      const t = Math.max(0, s.t);
+      const st = standings(plan, t);
+      const lead = progress(plan.runners[st[0]], t);
+      setLeft(Math.max(0, Math.round((TRACK_METRES * (1 - Math.min(1, lead))) / 10) * 10));
+      setRows(
+        st.map((h) => {
+          const r = plan.runners[h];
+          const done = progress(r, t) >= 1;
+          const gap = done ? (r.finish - plan.runners[plan.order[0]].finish) * (TRACK_LEN / r.finish) / 30 : ((lead - progress(r, t)) * TRACK_LEN) / 30;
+          return { h, gap, done };
+        }),
+      );
+    };
+    upd();
+    const id = setInterval(upd, 180);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div class="hr-board">
+      <div class="hr-board-head">
+        <span>CLASIFICACIÓN</span>
+        <span>{left > 0 ? `Faltan ${left} m` : 'Llegada'}</span>
+      </div>
+      {rows.map((r, i) => (
+        <div key={r.h} class={`hr-board-row ${sim.current.myHorses.has(r.h) ? 'mine' : ''}`} style={{ transform: `translateY(0)`, order: i }}>
+          <b class="hr-pos">{i + 1}º</b>
+          <Silk horse={field[r.h]} size={16} />
+          <span class="hr-bname">
+            <i>{field[r.h].no}</i> {field[r.h].name}
+          </span>
+          <span class="hr-gap">{i === 0 ? (r.done ? 'GANADOR' : 'CABEZA') : `+${r.gap.toFixed(1)} c.`}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 const ANNOUNCER = { ...randomPerson(4242), wear: 'traje' as const, hair: 'sombrero' as const, outfit: '#2f6fb3', name: 'Locutor' };
@@ -467,7 +517,7 @@ export function HorseRace(p: CasinoTableProps) {
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const alive = useRef(true);
   const settleRef = useRef<(() => void) | null>(null);
-  const sim = useRef<Sim>({ phase: 'bet', field, sprites: [], plan: null, t: 0, cam: -60, freeze: 0, frozeDone: false, finishedAt: 0, dust: [], myHorses: new Set(), flash: 0 });
+  const sim = useRef<Sim>({ phase: 'bet', field, sprites: [], plan: null, t: 0, cam: -60, camOff: 0, freeze: 0, frozeDone: false, finishedAt: 0, dust: [], myHorses: new Set(), flash: 0 });
   const events = useRef<{ say: (s: string, mood?: 'normal' | 'feliz' | 'nervios') => void; onWinner: () => void; onDone: () => void }>(null!);
 
   const later = (ms: number, f: () => void) => alive.current && timers.current.push(setTimeout(() => alive.current && f(), ms));
@@ -525,7 +575,7 @@ export function HorseRace(p: CasinoTableProps) {
     const low = lowFx();
 
     const frame = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       const s = sim.current;
       const plan = s.plan;
@@ -598,9 +648,19 @@ export function HorseRace(p: CasinoTableProps) {
       // ---- cámara
       const xs = s.field.map((_, h) => horseX(plan, h, s.phase === 'race' ? s.t : 0));
       const leadX = Math.max(...xs);
-      let target = s.phase === 'bet' || !plan || s.t <= 0 ? -W * 0.45 : leadX - W * 0.66;
+      // encuadre: el que va en cabeza a la derecha y, si cabe, el grueso del pelotón
+      const sorted = [...xs].sort((a, b) => b - a);
+      const pack = sorted[Math.min(3, sorted.length - 1)];
+      let target = s.phase === 'bet' || !plan || s.t <= 0 ? -W * 0.45 : Math.max(leadX - W * 0.8, Math.min(leadX - W * 0.6, pack - W * 0.18));
       if (s.frozeDone && s.freeze > 0) target = START_X + TRACK_LEN - W * 0.6;
-      s.cam += (target - s.cam) * Math.min(1, dt * (s.freeze > 0 ? 8 : 3.2));
+      if (plan && s.phase === 'race' && s.t > 0 && s.freeze <= 0 && !s.frozeDone) {
+        // se suaviza el encuadre, no la posición: la cámara no se queda atrás
+        s.camOff += (target - leadX - s.camOff) * Math.min(1, dt * 2.5);
+        s.cam = leadX + s.camOff;
+      } else {
+        s.cam += (target - s.cam) * Math.min(1, dt * (s.freeze > 0 ? 8 : 3.2));
+        s.camOff = s.cam - leadX;
+      }
       const cam = Math.round(s.cam);
 
       // ---- escena
@@ -965,7 +1025,7 @@ export function HorseRace(p: CasinoTableProps) {
   const styleName = { puntero: 'Puntero', medio: 'Regular', remontador: 'Remontador' };
 
   return (
-    <div class={`hr-room hr-${phase} ${shake.cls}`}>
+    <div class={`hr-room hr-ph-${phase} ${shake.cls}`}>
       <div class="mg-head hr-head">
         <button class="btn small secondary" disabled={racing} onClick={p.onExit}>
           ◀ Vestíbulo
@@ -976,9 +1036,13 @@ export function HorseRace(p: CasinoTableProps) {
       <div class="hr-top">
         <Talker person={ANNOUNCER} talk={talk} scale={2} class="hr-announcer" />
       </div>
-      <div class={`hr-track ${photo ? `hr-photo-${photo}` : ''}`} ref={wrapRef}>
-        <canvas ref={cvRef} class="hr-canvas" />
-        {photo && <div class="hr-photo-banner">{photo === 'foto' ? 'FOTO FINISH' : '¡LLEGADA!'}</div>}
+      <div class="hr-stage">
+        <div class={`hr-track ${photo ? `hr-photo-${photo}` : ''}`} ref={wrapRef}>
+          <canvas ref={cvRef} class="hr-canvas" />
+          {photo && <div class="hr-photo-banner">{photo === 'foto' ? 'FOTO FINISH' : '¡LLEGADA!'}</div>}
+          {msg && <div class="hr-msg">{msg}</div>}
+        </div>
+        {phase !== 'bet' && <LiveBoard sim={sim} field={field} />}
         {phase === 'result' && result && (
           <div class="hr-podium">
             <div class="hr-podium-title">RESULTADO OFICIAL</div>
@@ -1011,7 +1075,6 @@ export function HorseRace(p: CasinoTableProps) {
           </div>
         )}
         <PopLayer pops={pops} />
-        {msg && <div class="hr-msg">{msg}</div>}
       </div>
       {phase === 'bet' && (
         <>

@@ -81,8 +81,8 @@ export function Traffic(p: MiniProps) {
   };
 
   useEffect(() => {
-    if (mini.playing) speak('¡Hora punta en la Quinta! Usted manda, alcalde.', 'normal', true);
-  }, [mini.playing]);
+    if (mini.phase === 'count') speak('¡Hora punta en la Quinta! Usted manda, alcalde.', 'normal', true);
+  }, [mini.phase]);
   useEffect(() => {
     if (mini.combo > 0 && mini.combo % 5 === 0) speak(COP_STREAK, 'feliz');
   }, [mini.combo]);
@@ -380,8 +380,8 @@ export function Budget(p: MiniProps) {
   const { pops, pop } = usePops();
 
   useEffect(() => {
-    if (mini.playing) speak('Alcalde, firme solo lo que quepa en caja.', 'normal', true);
-  }, [mini.playing]);
+    if (mini.phase === 'count') speak('Alcalde, firme solo lo que quepa en caja.', 'normal', true);
+  }, [mini.phase]);
   useCountdownCue(mini.left, mini.playing, 10, () => speak('¡Diez segundos y cerramos el ejercicio!', 'nervios', true));
 
   // la sumadora imprime cada línea del ticket
@@ -508,11 +508,9 @@ export function Handshake(p: MiniProps) {
   const { pops, pop } = usePops();
 
   useEffect(() => {
-    if (mini.playing) {
-      speak('¡Sonrisa, alcalde! Y apriete fuerte.', 'feliz', true);
-      fx.crowd(1.5);
-    }
-  }, [mini.playing]);
+    if (mini.phase === 'count') speak('¡Sonrisa, alcalde! Y apriete fuerte.', 'feliz', true);
+    if (mini.phase === 'play') fx.crowd(1.5);
+  }, [mini.phase]);
   useEffect(() => {
     if (mini.combo > 0 && mini.combo % 6 === 0) {
       speak(MANAGER_STREAK, 'feliz');

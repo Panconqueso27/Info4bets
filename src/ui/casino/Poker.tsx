@@ -347,7 +347,7 @@ export function Poker(p: CasinoTableProps) {
       nextStreet(st);
       // nadie más puede apostar: se enseñan las cartas (all-in)
       if (st.toAct < 0 && liveCount(st) > 1) g.reveal = true;
-      g.status = g.status.map((s, i) => (st.seats[i].folded ? 'No va' : st.seats[i].allIn ? 'ALL-IN' : ''));
+      g.status = g.status.map((_, i) => (st.seats[i].folded ? 'No va' : st.seats[i].allIn ? 'ALL-IN' : ''));
       const street = st.street;
       say(-1, street === 1 ? 'El flop.' : street === 2 ? 'El turn.' : 'Y el river.');
       while (g.boardVis < st.board.length) {

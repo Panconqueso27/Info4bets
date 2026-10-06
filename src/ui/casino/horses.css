@@ -57,11 +57,20 @@
   background: #1a0b3a;
   transition: height 0.5s cubic-bezier(0.3, 1.1, 0.4, 1);
 }
-.hr-race .hr-track,
-.hr-result .hr-track {
-  flex: 1;
-  height: auto;
+.hr-stage {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+}
+.hr-ph-race .hr-stage,
+.hr-ph-result .hr-stage {
+  flex: 1;
+}
+.hr-ph-race .hr-track,
+.hr-ph-result .hr-track {
+  height: min(330px, 46vh);
 }
 .hr-canvas {
   position: absolute;
@@ -116,7 +125,8 @@
 /* ---- podio */
 .hr-podium {
   position: absolute;
-  inset: 0;
+  inset: 0 8px;
+  border-radius: 6px;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -124,7 +134,7 @@
   justify-content: center;
   gap: 10px;
   padding: 12px;
-  background: radial-gradient(ellipse at 50% 40%, rgba(40, 14, 70, 0.82), rgba(5, 3, 12, 0.94));
+  background: radial-gradient(ellipse at 50% 30%, rgba(48, 18, 84, 0.96), rgba(7, 4, 15, 0.985) 70%);
   animation: hr-pod-in 0.5s ease-out;
 }
 @keyframes hr-pod-in {
@@ -428,4 +438,75 @@
 }
 .lowfx .hr-net.good {
   animation: none;
+}
+
+/* ---- clasificación en directo */
+.hr-board {
+  flex: 1;
+  min-height: 0;
+  margin: 8px 8px 0;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  background: #07040f;
+  border: 2px solid #3b2d6b;
+  border-radius: 6px;
+  box-shadow: inset 0 0 12px rgba(79, 240, 255, 0.15);
+}
+.hr-board-head {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--pixel);
+  font-size: 8px;
+  color: var(--cyan, #4ff0ff);
+  padding: 2px 2px 4px;
+  border-bottom: 1px dashed #3b2d6b;
+}
+.hr-board-row {
+  flex: 1;
+  max-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 15px;
+}
+.hr-board-row:first-of-type {
+  background: rgba(255, 204, 51, 0.1);
+}
+.hr-board-row.mine {
+  box-shadow: inset 3px 0 0 var(--accent, #ffcc33);
+  background: rgba(255, 204, 51, 0.08);
+}
+.hr-pos {
+  width: 24px;
+  font-family: var(--pixel);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--accent, #ffcc33);
+}
+.hr-bname {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hr-bname i {
+  font-style: normal;
+  font-family: var(--pixel);
+  font-size: 9px;
+  padding: 1px 3px;
+  color: #14101f;
+  background: #fffaf0;
+  border-radius: 2px;
+}
+.hr-gap {
+  font-family: var(--pixel);
+  font-size: 8px;
+  color: #a99fc4;
 }

@@ -246,16 +246,20 @@ describe('carreras de caballos', () => {
         rnd,
       );
       const plan = planRace(field, order, rnd);
+      let backwards = 0;
+      let early = 0;
       for (const r of plan.runners) {
         let prev = -1;
         for (let t = 0; t < r.finish + 3; t += 0.02) {
           const x = progress(r, t);
-          expect(x).toBeGreaterThanOrEqual(prev - 1e-12);
-          if (t < r.finish - 1e-6) expect(x).toBeLessThan(1);
+          if (x < prev - 1e-12) backwards++;
+          if (t < r.finish - 1e-6 && x >= 1) early++;
           prev = x;
         }
         expect(progress(r, r.finish)).toBeCloseTo(1, 9);
       }
+      expect(backwards).toBe(0);
+      expect(early).toBe(0);
       const finishOrder = [...plan.runners].sort((a, b) => a.finish - b.finish).map((r) => r.horse);
       expect(finishOrder).toEqual(order);
       expect(standings(plan, plan.runners[order[5]].finish + 0.5)).toEqual(order);

@@ -2,7 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { randomPerson, type Mood } from '../../art/portrait';
 import { fx, play } from '../../platform/audio';
-import { PopLayer, Talker, usePops, useShake, useTalk } from '../games/stage';
+import { Bubble, PopLayer, Portrait, usePops, useShake, useTalk } from '../games/stage';
 import type { CasinoTableProps } from './types';
 import {
   ballAt,
@@ -71,9 +71,9 @@ type Mode = 'pleno' | 'caballo' | 'calle' | 'cuadro' | 'linea';
 const MODES: { id: Mode; name: string; pay: string; hint: string }[] = [
   { id: 'pleno', name: 'Pleno', pay: '35:1', hint: 'Toca un número' },
   { id: 'caballo', name: 'Caballo', pay: '17:1', hint: 'Toca dos números contiguos' },
-  { id: 'calle', name: 'Calle', pay: '11:1', hint: 'Toca un número: su fila de 3' },
-  { id: 'cuadro', name: 'Cuadro', pay: '8:1', hint: 'Toca la esquina superior izq. del cuadro' },
-  { id: 'linea', name: 'Línea', pay: '5:1', hint: 'Toca un número: su fila y la de abajo' },
+  { id: 'calle', name: 'Calle', pay: '11:1', hint: 'Toca un número: su fila' },
+  { id: 'cuadro', name: 'Cuadro', pay: '8:1', hint: 'Toca la esquina sup. izq.' },
+  { id: 'linea', name: 'Línea', pay: '5:1', hint: 'Toca: su fila y la siguiente' },
 ];
 
 type Phase = 'bet' | 'spin' | 'result';
@@ -815,8 +815,11 @@ export function Roulette(p: CasinoTableProps) {
         <span class="mg-score rl-money">{fmt(p.money)}</span>
       </div>
       <div class="rl-top">
-        <Talker person={CROUPIER} talk={talk} scale={2} class="rl-croupier" />
+        <Portrait person={CROUPIER} talking={talk.talking} mood={talk.mood} scale={2} class="rl-croupier" />
         <div class="rl-board">
+          <div class="rl-say">
+            <Bubble text={talk.line} k={talk.key} side="left" />
+          </div>
           <div class="rl-hist">
             {recent.map((n, i) => (
               <span key={`${history.length}-${i}`} class={`rl-h rl-h-${colorOf(n)} ${i === 0 ? 'rl-h-last' : ''}`}>

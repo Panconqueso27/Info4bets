@@ -289,11 +289,11 @@ export function planRace(field: Horse[], order: number[], rnd: Rng = Math.random
     else if (rank > 1) t += 0.06 + rnd() * (rank > 3 ? 0.7 : 0.4);
     const st = field[h].style;
     // los remontadores van detrás a mitad de carrera; el ganador a veces remonta mucho
-    let shape = st === 'puntero' ? 0.022 + rnd() * 0.018 : st === 'remontador' ? -0.022 - rnd() * 0.018 : (rnd() - 0.5) * 0.02;
-    if (rank === 0 && rnd() < 0.35) shape = -0.04 - rnd() * 0.01;
+    let shape = st === 'puntero' ? 0.008 + rnd() * 0.01 : st === 'remontador' ? -0.008 - rnd() * 0.01 : (rnd() - 0.5) * 0.01;
+    if (rank === 0 && rnd() < 0.35) shape = -0.02 - rnd() * 0.008;
     const wobble: [number, number][] = [
-      [(rnd() - 0.5) * 0.012, 2],
-      [(rnd() - 0.5) * 0.008, 3],
+      [(rnd() - 0.5) * 0.008, 2],
+      [(rnd() - 0.5) * 0.005, 3],
     ];
     runners[h] = { horse: h, rank, finish: t, shape, wobble };
   });

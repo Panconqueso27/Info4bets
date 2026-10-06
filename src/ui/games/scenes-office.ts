@@ -206,6 +206,86 @@ export function useCountdownCue(left: number, playing: boolean, at: number, fn: 
   }, [left, playing]);
 }
 
+// --- gente del público (bustos de píxel) -----------------------------------
+
+export interface Crowdie {
+  skin: string;
+  hair: string;
+  coat: string;
+  tie: string;
+  hat: boolean;
+  glasses: boolean;
+  bald: boolean;
+}
+const SKIN_TONES = ['#f2d0b0', '#deac84', '#c18a5c', '#9a6440', '#6c4228'];
+const COATS = ['#3a3a46', '#5a4a3a', '#2f4f6e', '#6e5a3a', '#4a2e3a', '#7a7a80', '#c0392b', '#2e8b57', '#e2a23b', '#7b4fa0', '#e8619e', '#2f6fb3'];
+const HAIRS = ['#1c1818', '#4a2e1c', '#8a5a2b', '#d8b45e', '#b5442c', '#c9c4bc'];
+/** Aspecto fijo de la persona i del público. */
+export const crowdie = (i: number): Crowdie => ({
+  skin: SKIN_TONES[Math.floor(hash(i * 3 + 1) * 5)],
+  hair: HAIRS[Math.floor(hash(i * 5 + 2) * 6)],
+  coat: COATS[Math.floor(hash(i * 7 + 3) * COATS.length)],
+  tie: ['#b22234', '#2f6fb3', '#e2a23b', '#14101f'][Math.floor(hash(i * 11) * 4)],
+  hat: hash(i * 13) < 0.16,
+  glasses: hash(i * 17) < 0.22,
+  bald: hash(i * 19) < 0.12,
+});
+
+/**
+ * Busto de alguien del público: cabeza de `hw` píxeles de ancho con la
+ * coronilla en (cx, top). `back` = de espaldas (sin cara).
+ */
+export function bust(ctx: CanvasRenderingContext2D, cx: number, top: number, hw: number, c: Crowdie, back = false) {
+  hw = Math.max(3, Math.round(hw));
+  const hh = Math.round(hw * 1.15);
+  const x0 = Math.round(cx - hw / 2);
+  const y0 = Math.round(top);
+  const sw = Math.round(hw * 2.5);
+  const sx = Math.round(cx - sw / 2);
+  const sy = y0 + hh;
+  // hombros redondeados
+  R(ctx, sx + 2, sy, sw - 4, 1, c.coat);
+  R(ctx, sx + 1, sy + 1, sw - 2, 1, c.coat);
+  R(ctx, sx, sy + 2, sw, hw * 2, c.coat);
+  R(ctx, sx + 2, sy, sw - 4, 1, shade(c.coat, 0.18));
+  if (!back) {
+    R(ctx, cx - 1, sy, 3, Math.max(2, hw / 2), '#e8e4d8');
+    R(ctx, cx, sy + 1, 1, Math.max(2, hw / 2 + 1), c.tie);
+    R(ctx, sx + Math.round(sw * 0.3), sy + 1, 1, hw, shade(c.coat, -0.25));
+    R(ctx, sx + Math.round(sw * 0.7), sy + 1, 1, hw, shade(c.coat, -0.25));
+  }
+  // cabeza con esquinas recortadas y orejas
+  R(ctx, x0 - 1, y0 + Math.round(hh * 0.4), hw + 2, 2, shade(c.skin, -0.12));
+  R(ctx, x0 + 1, y0, hw - 2, hh, c.skin);
+  R(ctx, x0, y0 + 1, hw, hh - 2, c.skin);
+  R(ctx, x0 + 1, y0 + hh - 1, hw - 2, 1, shade(c.skin, -0.18));
+  if (back) {
+    R(ctx, x0, y0, hw, hh - 2, c.bald ? shade(c.skin, -0.08) : c.hair);
+  } else {
+    if (!c.bald) {
+      R(ctx, x0, y0, hw, Math.max(1, Math.round(hh * 0.28)), c.hair);
+      R(ctx, x0, y0, 1, Math.round(hh * 0.55), c.hair);
+      R(ctx, x0 + hw - 1, y0, 1, Math.round(hh * 0.55), c.hair);
+    }
+    const ey = y0 + Math.round(hh * 0.5);
+    const ex = Math.max(1, Math.round(hw * 0.25));
+    if (c.glasses && hw >= 6) {
+      R(ctx, x0 + ex - 1, ey - 1, 3, 2, '#14101f');
+      R(ctx, x0 + hw - ex - 2, ey - 1, 3, 2, '#14101f');
+      R(ctx, x0 + ex + 1, ey - 1, hw - 2 * ex - 2, 1, '#14101f');
+    } else {
+      R(ctx, x0 + ex, ey, 1, 1, '#14101f');
+      R(ctx, x0 + hw - 1 - ex, ey, 1, 1, '#14101f');
+    }
+    if (hw >= 7) R(ctx, cx - 1, ey + Math.round(hh * 0.25), 2, 1, shade(c.skin, -0.35));
+  }
+  if (c.hat) {
+    R(ctx, x0 - 2, y0, hw + 4, 1, '#2a2420');
+    R(ctx, x0, y0 - Math.round(hw * 0.5), hw, Math.round(hw * 0.5), '#3a322a');
+    R(ctx, x0, y0 - 2, hw, 1, '#7a1e32');
+  }
+}
+
 // ===========================================================================
 // Semáforos: cruce de la Quinta con la 34 visto desde arriba
 // ===========================================================================
@@ -481,6 +561,27 @@ export function drawTraffic(ctx: CanvasRenderingContext2D, t: number, view: Traf
   }
   ctx.globalAlpha = 1;
 
+  // el agente Murphy en medio del cruce, con el brazo hacia el verde
+  {
+    const cx = 128;
+    const cy = 166;
+    ctx.globalAlpha = 0.35;
+    disc(ctx, cx + 2, cy + 2, 4, '#000');
+    ctx.globalAlpha = 1;
+    R(ctx, cx - 3, cy - 2, 7, 5, '#2f4f8e');
+    R(ctx, cx - 3, cy - 2, 7, 1, '#4a6aae');
+    R(ctx, cx - 1, cy - 1, 3, 3, '#1c2c5a');
+    R(ctx, cx, cy, 1, 1, '#ffcc33');
+    const wave = Math.floor(t * 4) % 2;
+    if (g === 'h') {
+      R(ctx, cx + 4, cy - 1 + wave, 6, 2, '#2f4f8e');
+      R(ctx, cx + 10, cy - 1 + wave, 2, 2, '#f4efe2');
+    } else {
+      R(ctx, cx - 1 + wave, cy - 8, 2, 6, '#2f4f8e');
+      R(ctx, cx - 1 + wave, cy - 10, 2, 2, '#f4efe2');
+    }
+    R(ctx, cx - 6, cy, 3, 2, '#2f4f8e');
+  }
   // semáforos
   const light = (x: number, y: number, on: boolean) => {
     R(ctx, x + 3, y + 17, 1, 6, '#2a2a30');
@@ -544,6 +645,15 @@ function paintPressBase(ctx: CanvasRenderingContext2D) {
   disc(ctx, 140, 30, 6, '#f4efe2');
   R(ctx, 140, 26, 1, 4, '#14101f');
   R(ctx, 140, 30, 3, 1, '#14101f');
+  // pancarta en la cortina (bajo la tarjeta de la pregunta)
+  R(ctx, 30, 108, 120, 16, '#c9a24a');
+  R(ctx, 31, 109, 118, 14, '#1c3a7a');
+  txtC(ctx, 'AYUNTAMIENTO DE NUEVA YORK', 90, 114, '#f4e6b0');
+  for (const x of [24, 156]) {
+    disc(ctx, x, 116, 6, '#c9a24a');
+    disc(ctx, x, 116, 4, '#1c3a7a');
+    R(ctx, x - 1, 113, 2, 6, '#c9a24a');
+  }
   // suelo de moqueta
   bands(ctx, 150, 290, W, ['#3a1e2e', '#40222f', '#462534', '#4c2838']);
 }
@@ -577,35 +687,38 @@ export function drawPress(ctx: CanvasRenderingContext2D, t: number, view: PressV
   txt(ctx, 'TV', 154, 100, '#c8ced2');
   // filas de periodistas (de atrás hacia delante)
   const react = t - view.react.t < 1.6;
-  for (const r of REPORTERS) {
-    const sc = [1, 1.35, 1.8][r.row];
-    const baseY = [150, 182, 222][r.row];
+  REPORTERS.forEach((r, i) => {
+    const hw = [6, 8, 11][r.row];
+    const baseY = [150, 180, 216][r.row];
     const bob = Math.round(Math.sin(t * (2 + r.row) + r.x) * (react && view.react.ok ? 2 : 0.6));
     const x = r.x;
     const y = baseY + bob;
-    const hw = Math.round(5 * sc);
-    // hombros
-    R(ctx, x - hw * 1.6, y + hw * 1.5, hw * 3.2, hw * 3, r.coat);
-    R(ctx, x - hw * 1.6, y + hw * 1.5, hw * 3.2, 1, shade(r.coat, 0.2));
-    // cabeza
-    R(ctx, x - hw / 2 - 1, y, hw + 2, hw + 3, r.skin);
-    R(ctx, x - hw / 2 - 1, y - 1, hw + 2, Math.ceil(hw / 2), r.hair);
-    if (r.hat) {
-      R(ctx, x - hw, y - 2, hw * 2, 2, '#2a2420');
-      R(ctx, x - hw / 2 - 1, y - Math.round(hw * 0.8), hw + 2, Math.round(hw * 0.8), '#3a322a');
+    const c = crowdie(i + 40);
+    // brazo levantado con libreta (piden turno o protestan)
+    const hand = (react && !view.react.ok && hash(i) < 0.6) || Math.sin(t * 0.7 + i * 2.3) > 0.82;
+    if (hand) {
+      const ax = x + hw * 1.1;
+      const wave = Math.round(Math.sin(t * 12 + i) * (react ? 2 : 0));
+      R(ctx, ax, y - hw + wave, Math.ceil(hw / 3), hw * 2.4, c.coat);
+      R(ctx, ax - 1, y - hw - 3 + wave, Math.ceil(hw / 3) + 2, 4, c.skin);
+      R(ctx, ax - 3, y - hw - 9 + wave, 7, 7, '#f4efe2');
+      R(ctx, ax - 2, y - hw - 7 + wave, 5, 1, '#8a8a9a');
+      R(ctx, ax - 2, y - hw - 5 + wave, 4, 1, '#8a8a9a');
     }
-    // mano levantada con libreta cuando reaccionan mal
-    if (react && !view.react.ok && hash(Math.floor(r.x)) < 0.5) {
-      R(ctx, x + hw * 1.4, y - hw - Math.round(Math.sin(t * 14 + r.x) * 2), 3 * sc, hw * 2.2, r.skin);
-    }
+    bust(ctx, x, y, hw, c);
     if (r.cam) {
-      const cx = x - hw - 2;
-      R(ctx, cx, y + 2, Math.round(7 * sc), Math.round(5 * sc), '#1a1a20');
-      R(ctx, cx + 1, y + 3, Math.round(3 * sc), Math.round(3 * sc), '#4a5a7a');
-      R(ctx, cx, y + 1, Math.round(3 * sc), 2, '#d8d8e0');
+      const cx = x - hw - 3;
+      const cw = Math.round(hw * 1.2);
+      R(ctx, cx, y + 2, cw, Math.round(cw * 0.75), '#1a1a20');
+      R(ctx, cx + 1, y + 3, Math.ceil(cw / 2), Math.ceil(cw / 2), '#4a5a7a');
+      R(ctx, cx, y + 1, Math.ceil(cw / 2), 2, '#d8d8e0');
       if (Math.random() < 0.006 + (react && view.react.ok ? 0.05 : 0)) view.flashes.push({ x: cx + 2, y: y + 2, t });
+    } else if (r.row === 2 && i % 3 === 0) {
+      // micro de radio con el cubo de la emisora
+      R(ctx, x + hw, y + hw, 2, hw + 4, '#2a2a30');
+      R(ctx, x + hw - 2, y + hw - 4, 6, 5, ['#c0392b', '#2f6fb3', '#e2a23b'][i % 3]);
     }
-  }
+  });
   // flashes de fotógrafo
   if (view.burst > 0) {
     for (let i = 0; i < view.burst; i++) view.flashes.push({ x: 20 + Math.random() * 140, y: 150 + Math.random() * 90, t: t + Math.random() * 0.5 });
@@ -801,6 +914,26 @@ function paintRallyBase(ctx: CanvasRenderingContext2D) {
     for (let x = (y / 8) % 2 ? 0 : 6; x < W; x += 12) R(ctx, x, y, 1, 8, '#7a7773');
   }
   for (let i = 0; i < 200; i++) R(ctx, hash(i * 3) * W, 116 + hash(i * 7) * 244, 1, 1, hash(i) < 0.5 ? '#9a9792' : '#82807b');
+  // rosetón central y alfombra roja del recorrido
+  for (let r = 44; r > 0; r -= 8) disc(ctx, 90, 236, r, r % 16 === 4 ? '#a19d97' : '#94918b');
+  for (let a = 0; a < 16; a++) R(ctx, 90 + Math.cos((a / 16) * Math.PI * 2) * 30, 236 + Math.sin((a / 16) * Math.PI * 2) * 30, 3, 3, '#b8b2a8');
+  disc(ctx, 90, 236, 6, '#c9a24a');
+  // farolas con banderolas a los lados
+  for (const x of [6, 172]) {
+    R(ctx, x, 130, 2, 170, '#2a2a30');
+    R(ctx, x - 2, 296, 6, 4, '#2a2a30');
+    R(ctx, x - 3, 124, 8, 6, '#2a2a30');
+    R(ctx, x - 2, 125, 6, 4, '#ffe9a8');
+    R(ctx, x + (x < 90 ? 2 : -8), 140, 8, 22, '#b22234');
+    R(ctx, x + (x < 90 ? 2 : -8), 146, 8, 4, '#e8e4d8');
+    R(ctx, x + (x < 90 ? 2 : -8), 152, 8, 2, '#2f6fb3');
+  }
+  // jardineras
+  for (const [x, y] of [[20, 312], [140, 312]]) {
+    R(ctx, x, y, 22, 10, '#6b3f22');
+    R(ctx, x, y, 22, 2, '#8a5a33');
+    for (let i = 0; i < 6; i++) disc(ctx, x + 3 + i * 3.4, y - 1, 2, ['#e8619e', '#ffcc33', '#c0392b'][i % 3]);
+  }
   // escenario
   R(ctx, 30, 74, 120, 28, '#2a2030');
   R(ctx, 30, 74, 120, 2, '#4a4050');
@@ -874,6 +1007,26 @@ export function drawRally(ctx: CanvasRenderingContext2D, t: number, view: RallyV
     for (let i = 0; i < 8; i++) R(ctx, x + Math.round(Math.sin(t * 3 + i / 2) * 1), y + 8 + i, 1, 1, '#e8e4d8');
     disc(ctx, x, y + 3, 3, b.c);
     R(ctx, x - 1, y + 1, 1, 2, '#ffffff');
+  }
+  // palomas que picotean
+  for (let i = 0; i < 4; i++) {
+    const px = (40 + i * 37 + Math.sin(t * 0.3 + i) * 10) % 180;
+    const py = 200 + i * 23;
+    const peck = Math.floor(t * 3 + i) % 3 === 0 ? 1 : 0;
+    R(ctx, px, py, 4, 2, '#7a7a88');
+    R(ctx, px + (i % 2 ? -1 : 3), py - 1 + peck, 2, 2, '#5a5a68');
+    R(ctx, px + 1, py + 2, 1, 1, '#c0392b');
+  }
+  // público de espaldas en primer plano
+  for (let i = 0; i < 9; i++) {
+    const x = 6 + i * 21 + hash(i * 3) * 6;
+    const jump = Math.round(Math.abs(Math.sin(t * (3 + cheer * 6) + i * 1.7)) * (1 + cheer * 4));
+    bust(ctx, x, 334 - jump - (i % 2) * 4, 12, crowdie(i + 200), true);
+    if (cheer > 0.2 || (i + Math.floor(t)) % 4 === 0) {
+      const c = crowdie(i + 200);
+      R(ctx, x + 10, 318 - jump - Math.round(Math.sin(t * 10 + i) * 2), 3, 14, c.coat);
+      R(ctx, x + 9, 314 - jump - Math.round(Math.sin(t * 10 + i) * 2), 5, 4, c.skin);
+    }
   }
   // confeti
   const n = lowFx() ? 14 : CONFETTI.length;

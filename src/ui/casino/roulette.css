@@ -39,21 +39,24 @@
   align-items: flex-end;
   gap: 8px;
   padding: 6px 10px 4px;
-  min-height: 92px;
+  min-height: 100px;
   background: linear-gradient(180deg, rgba(10, 6, 22, 0.8), rgba(10, 6, 22, 0.2));
 }
 .rl-croupier {
   flex: none;
-  position: static;
 }
-.rl-croupier .bubble {
-  position: absolute;
-  left: 82px;
-  top: 4px;
-  z-index: 25;
-  max-width: 230px;
+.rl-say {
+  min-height: 46px;
+  display: flex;
+  align-items: flex-end;
+  padding-left: 8px;
+}
+.rl-say .bubble {
+  max-width: 100%;
   font-size: 14px;
-  padding: 6px 9px;
+  line-height: 1.15;
+  padding: 5px 8px;
+  align-self: auto;
 }
 .rl-board {
   flex: 1;
@@ -480,8 +483,14 @@
   justify-content: space-between;
   align-items: center;
   padding: 4px 12px 0;
-  font-size: 15px;
+  font-size: 14px;
   min-height: 22px;
+  gap: 8px;
+  white-space: nowrap;
+}
+.rl-info > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rl-info b {
   color: var(--accent, #ffcc33);

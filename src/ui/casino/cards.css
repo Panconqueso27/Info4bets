@@ -245,6 +245,7 @@
   font-size: calc(var(--cw) * 0.16);
 }
 .pc-back {
+  transform: rotateY(180deg);
   background-color: #3a0f5c;
   background-image: radial-gradient(circle at 50% 50%, rgba(255, 79, 154, 0.55) 0 18%, rgba(0, 0, 0, 0) 19%),
     repeating-linear-gradient(45deg, rgba(255, 79, 154, 0.55) 0 2px, rgba(0, 0, 0, 0) 2px 7px),
