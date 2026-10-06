@@ -4,7 +4,7 @@ import { version } from '../../package.json';
 import * as audio from '../platform/audio';
 import { getSettings, setSettings } from '../platform/settings';
 import { exportCode, listSlots, MAX_SLOTS, type SlotInfo } from '../platform/save';
-import { lowFx, setLowFx } from '../scene/CityScene';
+import { GFX_HINTS, GFX_NAMES, gfxLevel, setGfxLevel, setShowFps, showFps, type GfxLevel } from '../platform/graphics';
 import { dayNumber } from '../core/game';
 import { ROLES } from '../core/roles';
 import { Letters } from './AnimText';
@@ -118,7 +118,8 @@ export function SavesScreen({ active, now, onPlay, onNew, onDelete, onBack }: { 
 export function SettingsModal({ onClose, onOpen }: { onClose: () => void; onOpen: (p: 'privacidad' | 'creditos') => void }) {
   const [sound, setSound] = useState(audio.getPrefs());
   const [st, setSt] = useState(getSettings());
-  const [low, setLow] = useState(lowFx());
+  const [gfx, setGfx] = useState<GfxLevel>(gfxLevel());
+  const [fps, setFps] = useState(showFps());
   const toggleSound = (k: 'sfx' | 'music' | 'ambient') => {
     audio.unlock();
     audio.setPrefs({ [k]: !sound[k] });
@@ -150,16 +151,48 @@ export function SettingsModal({ onClose, onOpen }: { onClose: () => void; onOpen
         <div class="settings-group">JUEGO</div>
         <Row label="Vibración" on={st.vibrate} onClick={() => toggle('vibrate')} />
         <Row label="Notificaciones" on={st.notifications} onClick={() => toggle('notifications')} hint="Fin de jornada, sucesos y recordatorio de la racha." />
-        <Row
-          label="Gráficos en alta calidad"
-          on={!low}
-          onClick={() => {
-            setLowFx(!low);
-            setLow(!low);
-          }}
-          hint={low ? 'Modo ahorro: más fluido en móviles sencillos.' : 'Se aplica del todo al volver a abrir el juego.'}
-        />
         <Row label="Letra grande" on={st.bigText} onClick={() => toggle('bigText')} />
+        <div class="settings-group">GRÁFICOS</div>
+        <div class="gfx-slider">
+          <div class="gfx-head">
+            <span>Calidad gráfica</span>
+            <b class={`gfx-badge lvl${gfx}`}>{GFX_NAMES[gfx]}</b>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={3}
+            step={1}
+            value={gfx}
+            aria-label="Calidad gráfica"
+            style={{ '--fill': `${(gfx / 3) * 100}%` }}
+            onInput={(e) => setGfx(Number((e.target as HTMLInputElement).value) as GfxLevel)}
+            onChange={(e) => {
+              const n = Number((e.target as HTMLInputElement).value) as GfxLevel;
+              setGfx(n);
+              audio.play.click();
+              setGfxLevel(n);
+            }}
+          />
+          <div class="gfx-ticks">
+            {GFX_NAMES.map((n, i) => (
+              <span key={n} class={i === gfx ? 'on' : ''}>
+                {n}
+              </span>
+            ))}
+          </div>
+          <small>{GFX_HINTS[gfx]} Se aplica al momento; si el móvil no llega a 40 fps, el juego baja un nivel solo.</small>
+        </div>
+        <Row
+          label="Mostrar FPS"
+          on={fps}
+          onClick={() => {
+            setShowFps(!fps);
+            setFps(!fps);
+            audio.play.click();
+          }}
+          hint="Contador de fotogramas por segundo en la esquina."
+        />
         <div class="settings-group">INFORMACIÓN</div>
         <div class="menu-grid">
           <button class="btn secondary" onClick={() => onOpen('privacidad')}>

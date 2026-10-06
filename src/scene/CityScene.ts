@@ -41,7 +41,9 @@ import {
   ISO_W,
   ISO_H,
   PAD,
+  RIVER_W,
   type MapLayer,
+  type WinSpot,
   type Place,
   type PlaceId,
 } from '../art/cityMap';
@@ -57,6 +59,7 @@ import { drawPet, drawVending, upscaleOutline } from '../art/sprites';
 import { aircraftSound, crashSound, sirenSound, thunder } from '../platform/audio';
 import { drawIcon } from '../art/icons';
 import { MEGA } from '../core/lots';
+import { gfxLevel, gfxProfile, lowFx, onGfxChange, setGfxLevel, showFps, type GfxLevel, type GfxProfile } from '../platform/graphics';
 
 /** Destino de un trabajo extra: un lugar del mapa o una manzana. */
 function destPlace(dest: string): Place {
@@ -79,7 +82,7 @@ interface WP {
 }
 
 /**
- * Resolución: 2 = alta (doble de detalle), 1 = ahorro (móviles lentos).
+ * Resolución: 3 = ultra, 2 = alta (doble de detalle), 1 = ahorro (móviles lentos).
  * La vista isométrica abarca más ciudad: 300 unidades de ancho.
  */
 let RES = 2;
@@ -119,6 +122,8 @@ interface Car {
   leaveAt?: number;
   /** Coche temporal (la policía): desaparece al salir del mapa. */
   temp?: boolean;
+  /** Velocidad actual: acelera y frena poco a poco. */
+  v?: number;
   /** Luces que van con el coche (sirenas). */
   extras?: Phaser.GameObjects.Image[];
 }
@@ -213,7 +218,34 @@ export class CityScene extends Phaser.Scene {
   private machines: Phaser.GameObjects.Image[] = [];
   /** Medición de fluidez para bajar la calidad sola en móviles lentos. */
   private perf = { t: 0, frames: 0, slow: 0, warm: 0 };
-  private low = lowFx();
+  /** Calidad gráfica en uso (se puede cambiar en directo desde Ajustes). */
+  private gfx: GfxProfile = gfxProfile();
+  private get low() {
+    return this.gfx.level === 0;
+  }
+  /** Destellos del agua. */
+  private glints: Phaser.GameObjects.Blitter | null = null;
+  private glintBobs: { bob: Phaser.GameObjects.Bob; ph: number; sp: number; x: number; y: number; river: boolean }[] = [];
+  /** Ventanas que se encienden y se apagan de noche (y teles). */
+  private winSpots: WinSpot[] = [];
+  private winFx: { img: Phaser.GameObjects.Image; until: number; tv: boolean; spot: WinSpot; next: number }[] = [];
+  private nextWin = 0;
+  private ambient = 0xffffff;
+  /** Humo de chimeneas. */
+  private smokeSrc: { x: number; y: number; z: number }[] = [];
+  private smokeFx: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
+  /** Bandadas de pájaros que cruzan de día. */
+  private birds: { img: Phaser.GameObjects.Image; vx: number; vy: number; ph: number }[] = [];
+  private nextBirds = 0;
+  /** Efectos de cámara: viñeta y resplandor nocturno. */
+  private fxBloom: Phaser.FX.Bloom | null = null;
+  private fxVignette: Phaser.FX.Vignette | null = null;
+  /** Inercia al soltar el mapa y zoom suave con la rueda. */
+  private fling: { vx: number; vy: number } | null = null;
+  private dragTrail: { x: number; y: number; t: number }[] = [];
+  private targetZoom: number | null = null;
+  private fpsEl: HTMLDivElement | null = null;
+  private fpsAt = 0;
   private flash!: Phaser.GameObjects.Rectangle;
   private uiCam!: Phaser.Cameras.Scene2D.Camera;
   private cars: Car[] = [];
@@ -265,7 +297,7 @@ export class CityScene extends Phaser.Scene {
     this.world = this.add.layer();
     this.buildMap(bridge.get());
 
-    this.spawnTraffic();
+    this.spawnTraffic(this.gfx.cars, 42);
     // el primer accidente y los primeros vuelos, no nada más empezar
     this.nextAccident = 45_000 + Math.random() * 60_000;
     this.nextPlane = 12_000 + Math.random() * 20_000;
@@ -299,6 +331,15 @@ export class CityScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.setBackgroundColor('#120c24');
     cam.setZoom(RES);
+    this.setupGlints();
+    this.setupPostFx();
+    this.nextBirds = 20_000 + Math.random() * 30_000;
+    const offGfx = onGfxChange((p) => this.applyGfx(p));
+    this.events.once('shutdown', () => offGfx());
+    this.fpsEl = document.createElement('div');
+    this.fpsEl.className = 'fps-meter';
+    document.body.appendChild(this.fpsEl);
+    this.events.once('shutdown', () => this.fpsEl?.remove());
     this.applyBounds();
     const mid = iso(MAP_W / 2, MAP_H / 2);
     cam.centerOn(mid.x, mid.y);
@@ -514,6 +555,51 @@ export class CityScene extends Phaser.Scene {
       t.add('0', 0, 0, 0, 18, 16);
       t.add('1', 0, 18, 0, 18, 16);
     }
+    // destellos del agua
+    {
+      const c = document.createElement('canvas');
+      c.width = 6;
+      c.height = 1;
+      const g = c.getContext('2d')!;
+      g.fillStyle = 'rgba(230,242,255,0.55)';
+      g.fillRect(0, 0, 3, 1);
+      g.fillRect(4, 0, 2, 1);
+      g.fillStyle = 'rgba(255,255,255,0.95)';
+      g.fillRect(1, 0, 1, 1);
+      const t = this.textures.addCanvas('glint', c)!;
+      t.add('g1', 0, 0, 0, 3, 1);
+      t.add('g2', 0, 4, 0, 2, 1);
+    }
+    // pájaro: alas arriba y abajo
+    {
+      const c = document.createElement('canvas');
+      c.width = 10;
+      c.height = 3;
+      const g = c.getContext('2d')!;
+      g.fillStyle = '#2a2a33';
+      g.fillRect(0, 0, 1, 1);
+      g.fillRect(1, 1, 1, 1);
+      g.fillRect(2, 2, 1, 1);
+      g.fillRect(3, 1, 1, 1);
+      g.fillRect(4, 0, 1, 1);
+      g.fillRect(5, 1, 5, 1);
+      g.fillRect(7, 2, 1, 1);
+      const t = this.textures.addCanvas('bird', c)!;
+      t.add('up', 0, 0, 0, 5, 3);
+      t.add('down', 0, 5, 0, 5, 3);
+    }
+    // ventana que cambia de luz: un paralelogramo por cara (sur y este) y ancho
+    for (const ww of [2, 3])
+      for (const face of ['s', 'e'] as const) {
+        const S = 4;
+        const c = document.createElement('canvas');
+        c.width = ww * S;
+        c.height = Math.ceil((2.6 + ww * 0.5) * S);
+        const g = c.getContext('2d')!;
+        g.fillStyle = '#ffffff';
+        for (let x = 0; x < ww * S; x++) g.fillRect(x, Math.round((face === 's' ? x + 0.5 : ww * S - x - 0.5) * 0.5), 1, Math.round(2.6 * S));
+        this.textures.addCanvas(`win-${face}-${ww}`, c);
+      }
     tex('sig', 2, 2, (ctx) => {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, 2, 2);
@@ -546,9 +632,15 @@ export class CityScene extends Phaser.Scene {
     this.bases = [];
     this.lightImgs = [];
     this.chunks = [];
-    setArtScale(RES >= 2 ? 3 : 2);
+    const maxTex = this.game.renderer.type === Phaser.WEBGL ? (this.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer).getMaxTextureSize() : 4096;
+    setArtScale(this.gfx.art, this.gfx.ground, this.gfx.hd, Math.min(8192, maxTex || 4096));
     const art = generateCityMap(1985, m.city);
     this.heights = art.heights;
+    for (const f of this.winFx) f.img.destroy();
+    this.winFx = [];
+    this.winSpots = art.windows;
+    this.smokeSrc = art.smokes;
+    this.setupSmoke();
     const addSet = (set: MapLayer) => {
       const key = `map-${set.key}`;
       for (const k of this.textures.getTextureKeys()) if (k.startsWith(`${key}-`)) this.textures.remove(k);
@@ -693,7 +785,7 @@ export class CityScene extends Phaser.Scene {
     this.world.add(this.umbrella);
     // palomas
     const park = placeRect(PLACE_BY_ID.parque);
-    for (let i = 0; i < (this.low ? 4 : 10); i++) {
+    for (let i = 0; i < this.gfx.pigeons; i++) {
       const p = { x: park.x + 20 + rand() * (park.w - 40), y: park.y + 20 + rand() * (park.h - 40) };
       const pg = this.add.image(0, 0, 'pigeon').setOrigin(0.5, 1);
       this.put(pg, p);
@@ -709,7 +801,7 @@ export class CityScene extends Phaser.Scene {
       this.time.delayedCall(rand() * 2000, hop);
     }
     // vapor de alcantarilla
-    for (let i = 0; i < (this.low ? 4 : 9); i++) {
+    for (let i = 0; i < this.gfx.steam; i++) {
       const wx = aveX(Math.floor(rand() * AVES)) - 4 + rand() * 8;
       const wy = stY(Math.floor(rand() * (ROWS + 1)));
       const s = iso(wx, wy);
@@ -817,9 +909,8 @@ export class CityScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- tráfico y peatones
 
-  private spawnTraffic() {
-    const rand = mulberry32(42);
-    const n = this.low ? 30 : 60;
+  private spawnTraffic(n: number, seed: number) {
+    const rand = mulberry32(seed);
     const aveCross = Array.from({ length: AVES }, (_, i) => aveX(i));
     const stCross = Array.from({ length: ROWS + 1 }, (_, j) => stY(j));
     for (let k = 0; k < n; k++) {
@@ -863,7 +954,9 @@ export class CityScene extends Phaser.Scene {
       const img = this.anchored(0, 0, `car-${axis === 'v' ? 'y' : 'x'}-${police ? 'p' : ci}`);
       const light = this.add.image(0, 0, 'headlight').setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setScale(0.55, 0.4);
       this.world.add([img, light]);
-      this.cars.push({ img, light, axis, dir, lane, speed, len: 10, pos, off, min, max, cross });
+      img.setTint(this.ambient);
+      light.setAlpha(Math.max(0, (this.light.night - 0.1) / 0.9) * 0.7);
+      this.cars.push({ img, light, axis, dir, lane, speed, len: 10, pos, off, min, max, cross, v: speed });
     }
     // separar coches que hayan nacido encima de otros
     for (const c of this.cars)
@@ -888,15 +981,18 @@ export class CityScene extends Phaser.Scene {
     for (const c of this.cars) {
       const pos = c.pos;
       const front = pos + (c.dir * c.len) / 2;
-      let next = pos + c.dir * c.speed * dt;
+      // Lo máximo que puede avanzar en este paso: frena suave al acercarse a
+      // un semáforo en rojo o al coche de delante, sin pasarse nunca.
+      const ease = Math.min(1, dt * 2.6);
+      let cap = c.speed * dt;
       const red = (c.axis === 'v' ? phase !== 0 : phase !== 1) || amber;
       if (red) {
         const half = (c.axis === 'v' ? ST_H : AVE_W) / 2 + 3;
         for (const x of c.cross) {
           const stopLine = x - c.dir * half;
           const dist = (stopLine - front) * c.dir;
-          if (dist >= -0.5 && dist < 10) {
-            next = c.dir > 0 ? Math.min(next, pos + dist) : Math.max(next, pos - dist);
+          if (dist >= -0.5 && dist < 18) {
+            cap = Math.min(cap, Math.max(0, dist) * ease);
             break;
           }
         }
@@ -905,15 +1001,19 @@ export class CityScene extends Phaser.Scene {
       for (const o of lanes.get(c.lane)!) {
         if (o === c) continue;
         const gap = (o.pos - pos) * c.dir;
-        if (gap > 0 && gap < c.len + 5) next = pos + c.dir * Math.max(0, gap - c.len - 5) * 0.5;
+        if (gap > 0 && gap < c.len + 16) cap = Math.min(cap, Math.max(0, gap - c.len - 5) * ease);
       }
       // accidente: los coches implicados no se mueven (los de detrás esperan en la cola)
-      if (c.crashUntil && time < c.crashUntil) next = pos;
+      if (c.crashUntil && time < c.crashUntil) cap = 0;
       // la policía avanza hasta el accidente, se queda allí y luego se va
       if (c.stopAt !== undefined && time < (c.leaveAt ?? 0)) {
         const rem = (c.stopAt - pos) * c.dir;
-        next = rem <= 0.3 ? pos : pos + c.dir * Math.min(rem, Math.abs(next - pos));
+        cap = rem <= 0.3 ? 0 : Math.min(cap, Math.max(rem * ease, Math.min(rem, 0.05)));
       }
+      // arranca poco a poco (14 unidades/s²) y frena lo que haga falta
+      const want = dt > 0 ? cap / dt : 0;
+      c.v = want < (c.v ?? c.speed) ? want : Math.min(want, (c.v ?? 0) + 14 * dt);
+      const next = pos + c.dir * c.v * dt;
       c.pos = next;
       if (c.temp && (next > c.max || next < c.min)) {
         gone.push(c);
@@ -1286,8 +1386,9 @@ export class CityScene extends Phaser.Scene {
     }
   }
 
-  private spawnPedestrians() {
-    const rand = mulberry32(1985);
+  /** Gente por las aceras (more: solo añadir esta cantidad, al subir la calidad). */
+  private spawnPedestrians(more = 0) {
+    const rand = mulberry32(more ? 1985 + this.walkers.length : 1985);
     const add = (c: number, r: number, extra: Partial<Walker> = {}) => {
       const look = randomLook(rand() < 0.5 ? 'inmigrante' : 'alcalde', rand);
       const key = this.ensureMini(look);
@@ -1298,7 +1399,11 @@ export class CityScene extends Phaser.Scene {
       this.walkers.push(w);
       this.time.delayedCall(rand() * 3000, () => this.wander(w));
     };
-    for (let i = 0; i < (this.low ? 16 : 40); i++) add(Math.floor(rand() * COLS), Math.floor(rand() * ROWS));
+    for (let i = 0; i < (more || this.gfx.walkers); i++) add(Math.floor(rand() * COLS), Math.floor(rand() * ROWS));
+    if (more) {
+      this.lastLightAt = 0;
+      return;
+    }
     // Times Square se llena de noche
     if (!this.low) for (let i = 0; i < 8; i++) add(1 + Math.floor(rand() * 3), 2 + Math.floor(rand() * 3), { zone: [1, 3, 2, 4], night: true });
     // Cuanto más nivel tiene un barrio, más gente por sus calles
@@ -1643,11 +1748,14 @@ export class CityScene extends Phaser.Scene {
         return;
       }
       this.drag = { x: p.x, y: p.y, sx: cam.scrollX, sy: cam.scrollY, moved: false };
+      this.fling = null;
+      this.dragTrail = [{ x: p.x, y: p.y, t: this.time.now }];
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       const pts = this.input.manager.pointers.filter((q) => q.isDown);
       if (this.pinch && pts.length >= 2) {
         const d = Phaser.Math.Distance.Between(pts[0].x, pts[0].y, pts[1].x, pts[1].y);
+        this.targetZoom = null;
         this.setZoom((this.pinch.zoom * d) / Math.max(1, this.pinch.d));
         return;
       }
@@ -1659,6 +1767,8 @@ export class CityScene extends Phaser.Scene {
         cam.setScroll(this.drag.sx - dx / cam.zoom, this.drag.sy - dy / cam.zoom);
         this.userPannedAt = this.time.now;
       }
+      this.dragTrail.push({ x: p.x, y: p.y, t: this.time.now });
+      if (this.dragTrail.length > 6) this.dragTrail.shift();
     });
     this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
       if (this.pinch) {
@@ -1666,9 +1776,40 @@ export class CityScene extends Phaser.Scene {
         return;
       }
       if (this.drag && !this.drag.moved) this.tapAt(p.worldX, p.worldY);
+      else if (this.drag) {
+        // inercia: el mapa sigue deslizándose un poco al soltarlo
+        const a = this.dragTrail[0];
+        const dt = this.time.now - a.t;
+        if (dt > 0 && dt < 160) this.fling = { vx: -(p.x - a.x) / dt / cam.zoom, vy: -(p.y - a.y) / dt / cam.zoom };
+      }
       this.drag = null;
     });
-    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => this.setZoom(cam.zoom * (dy > 0 ? 0.85 : 1.18)));
+    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
+      const from = this.targetZoom ?? cam.zoom;
+      this.targetZoom = Phaser.Math.Clamp(from * (dy > 0 ? 0.85 : 1.18), minZoom(), maxZoom());
+      this.userPannedAt = this.time.now;
+    });
+  }
+
+  /** Inercia del arrastre y zoom suave de la rueda. */
+  private smoothCamera(delta: number) {
+    const cam = this.cameras.main;
+    if (this.fling && !this.drag) {
+      cam.setScroll(cam.scrollX + this.fling.vx * delta, cam.scrollY + this.fling.vy * delta);
+      const k = Math.pow(0.9, delta / 16.7);
+      this.fling.vx *= k;
+      this.fling.vy *= k;
+      this.userPannedAt = this.time.now;
+      if (Math.abs(this.fling.vx) + Math.abs(this.fling.vy) < 0.002) this.fling = null;
+    }
+    if (this.targetZoom !== null) {
+      const z = cam.zoom + (this.targetZoom - cam.zoom) * Math.min(1, delta * 0.014);
+      if (Math.abs(z - this.targetZoom) < 0.002) {
+        cam.setZoom(this.targetZoom);
+        this.targetZoom = null;
+      } else cam.setZoom(z);
+      this.applyBounds();
+    }
   }
 
   private setZoom(z: number) {
@@ -1728,7 +1869,16 @@ export class CityScene extends Phaser.Scene {
       const k = w === 'nublado' ? [0.86, 0.87, 0.92] : w === 'tormenta' ? [0.68, 0.73, 0.86] : [0.74, 0.79, 0.92];
       ambient = Phaser.Display.Color.GetColor(((ambient >> 16) & 255) * k[0], ((ambient >> 8) & 255) * k[1], (ambient & 255) * k[2]);
     }
+    this.ambient = ambient;
     for (const b of this.bases) b.setTint(ambient);
+    for (const em of this.smokeFx) em.particleTint = mulTint(0xb4b0bc, ambient);
+    if (this.glints) for (const g of this.glintBobs) g.bob.setTint(l.night > 0.5 ? 0xffd9a0 : 0xe6f4ff);
+    if (this.fxVignette) this.fxVignette.strength = 0.18 + l.night * 0.14;
+    if (this.fxBloom) {
+      // resplandor de neones y ventanas solo de noche
+      this.fxBloom.active = l.night > 0.3;
+      this.fxBloom.strength = 0.3 + l.night * 0.35;
+    }
     this.bakeWeather(w === 'nieve', w === 'lluvia' || w === 'tormenta');
     // cielo de fondo: azul de día, malva al atardecer y noche cerrada
     const d = new Date(now);
@@ -1798,7 +1948,7 @@ export class CityScene extends Phaser.Scene {
         this.cameras.main.ignore(this.precip);
       } else this.precip.clear();
       const base = w === 'tormenta' ? 150 : snow ? 100 : w === 'lluvia' ? 100 : 0;
-      const n = Math.round(base * Phaser.Math.Clamp(1.25 / k, 0.9, 1.7) * (this.low ? 0.6 : 1));
+      const n = Math.round(base * Phaser.Math.Clamp(1.25 / k, 0.9, 1.7) * this.gfx.precip);
       for (let i = 0; i < n; i++) {
         const sp = 0.6 + Math.random() * 0.8;
         const frame = snow ? (sp > 1.1 ? 'snow' : 'snow-s') : sp > 1 ? 'rain' : 'rain-far';
@@ -1852,7 +2002,7 @@ export class CityScene extends Phaser.Scene {
       this.tweens.add({ targets: this.flash, fillAlpha: 0, duration: 450, ease: 'Expo.Out', onComplete: () => this.flash.setVisible(false) });
     }
     // sombras de nubes que cruzan la ciudad de día
-    const day = this.light.night < 0.5 && !this.low;
+    const day = this.light.night < 0.5 && this.gfx.clouds;
     const t = this.time.now / 1000;
     this.clouds.forEach((c, i) => {
       c.setVisible(day);
@@ -1888,7 +2038,10 @@ export class CityScene extends Phaser.Scene {
     else pet.setFrame('0');
   }
 
-  /** Si el móvil no llega a ~40 fps, quita adornos: nubes, la mitad de peatones y coches, y efectos de la interfaz. */
+  /**
+   * Si el móvil no llega a ~40 fps, baja un nivel de calidad gráfica (y
+   * otro más si sigue sin llegar, hasta el modo ahorro).
+   */
   private checkPerf(delta: number) {
     if (this.low) return;
     const p = this.perf;
@@ -1901,36 +2054,226 @@ export class CityScene extends Phaser.Scene {
     p.slow = fps < 40 ? p.slow + 1 : 0;
     p.t = 0;
     p.frames = 0;
-    if (p.slow >= 2) this.lowQuality();
+    if (p.slow >= 2) setGfxLevel((this.gfx.level - 1) as GfxLevel, true);
   }
 
-  private lowQuality() {
-    this.low = true;
-    setLowFx(true);
-    // Baja a resolución normal (cuatro veces menos píxeles que pintar).
-    if (RES > 1) {
-      const z = this.cameras.main.zoom / RES;
-      RES = 1;
+  /** Aplica en directo otra calidad gráfica (desde Ajustes o al bajarla sola). */
+  private applyGfx(p: GfxProfile) {
+    const prev = this.gfx;
+    this.gfx = p;
+    this.perf = { t: 0, frames: 0, slow: 0, warm: 0 };
+    document.documentElement.classList.toggle('lowfx', p.level === 0);
+    const cam = this.cameras.main;
+    if (p.res !== RES) {
+      const z = cam.zoom / RES;
+      RES = p.res;
       this.scale.setGameSize(viewW(), viewHeight(this.game.canvas.parentElement ?? document.body));
-      this.cameras.main.setZoom(Math.max(minZoom(), z));
-      this.weatherShown = '';
-      this.applyBounds();
+      cam.setZoom(Phaser.Math.Clamp(z * RES, minZoom(), maxZoom()));
+      this.targetZoom = null;
     }
-    for (const c of this.clouds) c.setVisible(false);
-    for (const w of this.walkers.splice(this.walkers.length / 2)) {
+    if (p.art !== prev.art || p.ground !== prev.ground || p.hd !== prev.hd) {
+      this.mapSig = '\u0000';
+      this.buildMap(bridge.get());
+    } else this.setupSmoke();
+    this.weatherShown = '';
+    this.applyBounds();
+    this.setupGlints();
+    this.setupPostFx();
+    if (!p.clouds) for (const c of this.clouds) c.setVisible(false);
+    // menos (o más) gente y coches
+    for (const w of this.walkers.splice(p.walkers + 8)) {
       this.tweens.killTweensOf(w.p);
       w.sprite.destroy();
     }
-    for (const c of this.cars.splice(this.cars.length * 0.6)) {
+    const busy = (c: Car) => c.temp || c.crashUntil || c.stopAt !== undefined;
+    let extra = this.cars.filter((c) => !busy(c)).length - p.cars;
+    for (let i = this.cars.length - 1; i >= 0 && extra > 0; i--) {
+      const c = this.cars[i];
+      if (busy(c)) continue;
       c.img.destroy();
       c.light.destroy();
+      this.cars.splice(i, 1);
+      extra--;
     }
+    if (extra < 0) this.spawnTraffic(-extra, 4242 + this.cars.length);
+    if (this.walkers.length < p.walkers) this.spawnPedestrians(p.walkers - this.walkers.length);
+    this.lastLightAt = 0;
+  }
+
+  // ---------------------------------------------------------------- vida extra (según la calidad)
+
+  /** Destellos que titilan sobre el río y la bahía (y bajan con la corriente). */
+  private setupGlints() {
+    this.glints?.destroy();
+    this.glints = null;
+    this.glintBobs = [];
+    const n = this.gfx.glints;
+    if (!n) return;
+    const g = (this.glints = this.add.blitter(0, 0, 'glint').setDepth(-999).setBlendMode(Phaser.BlendModes.ADD));
+    this.world.add(g);
+    const rand = mulberry32(5);
+    for (let i = 0; i < n; i++) {
+      const river = i % 3 !== 0;
+      let x: number;
+      let y: number;
+      if (river) {
+        x = RIVER_X + 5 + rand() * (RIVER_W - 34);
+        y = rand() * MAP_H;
+      } else {
+        // la bahía: una franja de mar alrededor de las islas
+        const side = Math.floor(rand() * 4);
+        const t = rand();
+        const off = 8 + rand() * 55;
+        x = side === 0 ? -off : side === 1 ? MAP_W + off : -60 + t * (MAP_W + 120);
+        y = side === 2 ? -off : side === 3 ? MAP_H + off : -60 + t * (MAP_H + 120);
+      }
+      const s = iso(x, y);
+      const bob = g.create(s.x, s.y, rand() < 0.5 ? 'g1' : 'g2');
+      bob.setAlpha(0);
+      this.glintBobs.push({ bob, ph: rand() * Math.PI * 2, sp: 0.7 + rand() * 1.6, x, y, river });
+    }
+  }
+
+  private moveGlints(time: number, dt: number) {
+    if (!this.glints) return;
+    const t = time / 1000;
+    const k = this.light.night > 0.5 ? 0.55 : 0.95;
+    const deck = stY(BRIDGE_STREET);
+    for (const g of this.glintBobs) {
+      if (g.river) {
+        // la corriente baja hacia el sur; bajo el puente no se ve
+        g.y += dt * 3;
+        if (g.y > MAP_H) g.y = 0;
+        const s = iso(g.x, g.y);
+        g.bob.x = s.x;
+        g.bob.y = s.y;
+        if (Math.abs(g.y - deck) < ST_H / 2 + 5) {
+          g.bob.alpha = 0;
+          continue;
+        }
+      }
+      const v = Math.sin(t * g.sp + g.ph);
+      g.bob.alpha = v > 0.5 ? (v - 0.5) * 2 * k : 0;
+    }
+  }
+
+  /** Humo que sale de las chimeneas y se lo lleva el viento. */
+  private setupSmoke() {
+    for (const e of this.smokeFx) e.destroy();
+    this.smokeFx = [];
+    const wind = bridge.get().weather === 'tormenta' ? 2.2 : 1;
+    for (const src of this.smokeSrc.slice(0, this.gfx.smoke)) {
+      const p = iso(src.x, src.y, src.z);
+      const em = this.add.particles(p.x, p.y - 1, 'steam', {
+        lifespan: { min: 3200, max: 5200 },
+        frequency: 420,
+        speedY: { min: -9, max: -5 },
+        speedX: { min: 1.5 * wind, max: 4 * wind },
+        scale: { start: 0.45, end: 2.2 },
+        alpha: { start: 0.45, end: 0 },
+        tint: mulTint(0xb4b0bc, this.ambient),
+      });
+      depthOf(em, depthAt(src.x, src.y) + 9.8);
+      this.world.add(em);
+      this.smokeFx.push(em);
+    }
+  }
+
+  /** De noche, alguien enciende o apaga la luz, o ve la tele (luz azul que parpadea). */
+  private updateWindows(time: number) {
+    const night = this.light.night;
+    const nightA = Math.max(0, (night - 0.1) / 0.9);
+    for (let i = this.winFx.length - 1; i >= 0; i--) {
+      const f = this.winFx[i];
+      if (time > f.until || night < 0.25) {
+        f.img.destroy();
+        this.winFx.splice(i, 1);
+      } else if (f.tv && time > f.next) {
+        f.next = time + 90 + Math.random() * 260;
+        f.img.setAlpha(nightA * (0.3 + Math.random() * 0.6));
+      }
+    }
+    if (!this.gfx.windows || !this.winSpots.length || night < 0.3 || time < this.nextWin || this.winFx.length >= this.gfx.windows) return;
+    this.nextWin = time + 200 + Math.random() * 450;
+    const v = this.cameras.main.worldView;
+    for (let k = 0; k < 10; k++) {
+      const w = this.winSpots[Math.floor(Math.random() * this.winSpots.length)];
+      if (w.x < v.x || w.x > v.right || w.y < v.y || w.y > v.bottom || this.winFx.some((f) => f.spot === w)) continue;
+      const tv = !w.lit && Math.random() < 0.3;
+      const tex = `win-${w.face}-${w.w}`;
+      const oy = w.face === 's' ? 0 : (w.w * 0.5) / (2.6 + w.w * 0.5);
+      const img = this.add.image(w.x, w.y, tex).setOrigin(0, oy).setScale(1 / 4).setDepth(w.depth + 0.03);
+      if (w.lit) img.setTint(mulTint(0x24304c, this.ambient));
+      else img.setBlendMode(Phaser.BlendModes.ADD).setTint(tv ? 0x7fb0ff : [0xffd27a, 0xffc85e, 0xffe2a0][Math.floor(Math.random() * 3)]).setAlpha(nightA * 0.9);
+      this.world.add(img);
+      this.winFx.push({ img, until: time + 4000 + Math.random() * 16000, tv, spot: w, next: 0 });
+      break;
+    }
+  }
+
+  /** Bandadas de pájaros en V que cruzan la vista de día. */
+  private updateBirds(time: number, dt: number) {
+    const v = this.cameras.main.worldView;
+    for (let i = this.birds.length - 1; i >= 0; i--) {
+      const b = this.birds[i];
+      b.img.x += b.vx * dt;
+      b.img.y += b.vy * dt;
+      b.img.setFrame(Math.floor(time / 160 + b.ph) % 3 === 0 ? 'up' : 'down');
+      if (b.img.x < v.x - 80 || b.img.x > v.right + 80) {
+        b.img.destroy();
+        this.birds.splice(i, 1);
+      }
+    }
+    const w = bridge.get().weather;
+    if (!this.gfx.birds || time < this.nextBirds || this.light.night > 0.4 || w === 'lluvia' || w === 'tormenta' || w === 'nieve') return;
+    this.nextBirds = time + 35_000 + Math.random() * 50_000;
+    const left = Math.random() < 0.5;
+    const dir = left ? 1 : -1;
+    const x0 = left ? v.x - 30 : v.right + 30;
+    const y0 = v.y + v.height * (0.15 + Math.random() * 0.4);
+    const n = 5 + Math.floor(Math.random() * 5);
+    const speed = 26 + Math.random() * 10;
+    for (let i = 0; i < n; i++) {
+      // formación en V: el primero delante y los demás a los lados, un poco detrás
+      const side = i % 2 ? 1 : -1;
+      const rank = Math.ceil(i / 2);
+      const img = this.add.image(x0 - dir * rank * 7, y0 + side * rank * 4, 'bird', 'up').setDepth(200002).setFlipX(!left).setTint(this.light.night > 0.2 ? 0x4a4458 : 0xffffff);
+      this.world.add(img);
+      this.birds.push({ img, vx: dir * speed, vy: -speed * 0.12, ph: Math.random() * 3 });
+    }
+  }
+
+  /** Viñeta suave y resplandor nocturno (solo con WebGL). */
+  private setupPostFx() {
+    const cam = this.cameras.main;
+    this.fxBloom = null;
+    this.fxVignette = null;
+    if (this.game.renderer.type !== Phaser.WEBGL || !cam.postFX) return;
+    cam.postFX.clear();
+    if (this.gfx.bloom) this.fxBloom = cam.postFX.addBloom(0xffffff, 1, 1, 0.6, 0.5, 2);
+    if (this.gfx.vignette) this.fxVignette = cam.postFX.addVignette(0.5, 0.5, 0.95, 0.22);
+    this.lastLightAt = 0;
+  }
+
+  /** Medidor de fps (se enciende en Ajustes). */
+  private updateFps(time: number) {
+    if (!this.fpsEl || time - this.fpsAt < 500) return;
+    this.fpsAt = time;
+    const on = showFps();
+    this.fpsEl.style.display = on ? 'block' : 'none';
+    if (on) this.fpsEl.textContent = `${Math.round(this.game.loop.actualFps)} FPS · ${['AHORRO', 'MEDIA', 'ALTA', 'ULTRA'][this.gfx.level]}`;
   }
 
   update(time: number, delta: number) {
     this.checkPerf(delta);
     this.updateLight();
+    this.smoothCamera(delta);
     this.cull();
+    const dts = Math.min(0.1, delta / 1000);
+    this.moveGlints(time, dts);
+    this.updateWindows(time);
+    this.updateBirds(time, dts);
+    this.updateFps(time);
     // remolcadores
     for (const b of this.boats) {
       b.p.y += b.dir * b.speed * (delta / 1000);
@@ -2012,23 +2355,13 @@ export class CityScene extends Phaser.Scene {
   }
 }
 
-const LOWFX_KEY = 'laciudad.lowfx';
-export function lowFx(): boolean {
-  try {
-    return localStorage.getItem(LOWFX_KEY) === '1';
-  } catch {
-    return false;
-  }
+/** Multiplica dos colores (un color base teñido por la luz del momento). */
+function mulTint(a: number, b: number) {
+  const ch = (sh: number) => Math.round((((a >> sh) & 255) * ((b >> sh) & 255)) / 255);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
-export function setLowFx(on: boolean) {
-  document.documentElement.classList.toggle('lowfx', on);
-  try {
-    if (on) localStorage.setItem(LOWFX_KEY, '1');
-    else localStorage.removeItem(LOWFX_KEY);
-  } catch {
-    /* sin almacenamiento */
-  }
-}
+
+export { lowFx };
 
 /** Alto lógico según la proporción del contenedor (pantalla del móvil). */
 export function viewHeight(parent: HTMLElement): number {
@@ -2038,7 +2371,7 @@ export function viewHeight(parent: HTMLElement): number {
 
 export function createGame(parent: HTMLElement): Phaser.Game {
   if (lowFx()) document.documentElement.classList.add('lowfx');
-  RES = lowFx() ? 1 : 2;
+  RES = gfxProfile(gfxLevel()).res;
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,

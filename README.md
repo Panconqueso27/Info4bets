@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: 0.12.1**
+**Versión actual: 0.13.0**
 
 ## Probar la beta
 
@@ -21,6 +21,14 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.13.0
+
+- **Calidad gráfica en Ajustes:** una barra con cuatro niveles (Ahorro, Media, Alta, Ultra) que se aplica al momento. Si el móvil no llega a 40 fps, el juego baja un nivel solo. Opción de mostrar los FPS.
+- **Pack de texturas HD** (Alta y Ultra): ladrillo con matices y llagas, churretes, cortinas, aparatos de aire en las ventanas, luz cenital y sombra al pie de los muros, azoteas con alquitrán, asfalto con rodadas, manchas de aceite, grietas y baches, losas de acera, árboles más frondosos y el río con corriente y espuma. La ciudad es la misma en cualquier calidad.
+- **Ultra:** resolución ×1,5, edificios a 4× y suelo a 3×, resplandor nocturno de neones y ventanas (bloom) y viñeta. Los lienzos nunca pasan del tamaño máximo de textura del móvil.
+- **Más vida:** destellos en el agua que bajan con la corriente, humo en las chimeneas, ventanas que se encienden y apagan de noche (y teles azules), bandadas de pájaros de día.
+- **Más fluidez:** los coches aceleran y frenan suave en semáforos y colas, el mapa sigue deslizándose al soltarlo (inercia) y el zoom de la rueda es suave.
 
 ## Novedades 0.12.1
 
