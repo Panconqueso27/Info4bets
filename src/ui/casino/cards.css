@@ -283,7 +283,7 @@
 }
 
 /* ---------- fichas */
-.chip {
+.chip:is(button, span) {
   --cs: 40px;
   --c1: #eceaf2;
   --c2: #2f5fd8;

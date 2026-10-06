@@ -18,7 +18,7 @@
   overflow: hidden;
   touch-action: none;
 }
-.casino > :not(.backdrop) {
+.casino:not(.casino-table-wrap) > :not(.backdrop) {
   position: relative;
   z-index: 1;
 }
