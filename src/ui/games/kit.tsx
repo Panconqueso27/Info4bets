@@ -32,7 +32,7 @@ export function saveRecord(id: string, score: number): boolean {
   return true;
 }
 
-export type Phase = 'intro' | 'play' | 'end';
+export type Phase = 'intro' | 'count' | 'play' | 'end';
 
 export interface MiniProps {
   onFinish: (points: number) => void;
@@ -47,6 +47,8 @@ export function useMini(id: string, seconds = GAME_SECONDS) {
   const [misses, setMisses] = useState(0);
   const [combo, setCombo] = useState(0);
   const [record, setRecord] = useState(false);
+  /** Cuenta atrás antes de empezar (3, 2, 1, ¡YA!). */
+  const [count, setCount] = useState(3);
   const scoreRef = useRef(0);
   const startedAt = useRef(0);
 
@@ -83,7 +85,23 @@ export function useMini(id: string, seconds = GAME_SECONDS) {
     playing: phase === 'play',
     /** Segundos jugados (para subir la dificultad). */
     elapsed: () => (phase === 'play' ? (Date.now() - startedAt.current) / 1000 : 0),
-    start: () => setPhase('play'),
+    count,
+    start: () => {
+      setPhase('count');
+      setCount(3);
+      play.tone(523);
+      [1, 2].forEach((k) =>
+        setTimeout(() => {
+          setCount(3 - k);
+          play.tone(523);
+        }, k * 650),
+      );
+      setTimeout(() => {
+        setCount(0);
+        play.tone(1047);
+      }, 1950);
+      setTimeout(() => setPhase('play'), 2400);
+    },
     /** Termina antes de tiempo (juegos sin cronómetro, como Simon). */
     end: () => finish(),
     hit: (n = 1) => {
@@ -177,6 +195,11 @@ export function MiniFrame({
           <button class="btn secondary" onClick={onClose}>
             Ahora no
           </button>
+        </div>
+      )}
+      {mini.phase === 'count' && (
+        <div class="mg-count" key={mini.count}>
+          {mini.count || '¡YA!'}
         </div>
       )}
       {mini.phase === 'end' && (

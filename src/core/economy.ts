@@ -503,3 +503,64 @@ export function lotTitle(state: GameState, id: string) {
 export function rastroBought(state: GameState, now: number, idx: number) {
   return state.flags.rastroDia === dayNumber(state, now) && !!(Number(state.flags.rastroVisto ?? 0) & (1 << idx));
 }
+
+// ---------------------------------------------------------------------------
+// Casino Pixelopolis: póker, blackjack, ruleta y carreras de caballos.
+// Reglas de la casa: mayores de 21, fichas con límite de mesa y un tope de
+// pérdidas al día (juego responsable). Todo el dinero es ficticio.
+// ---------------------------------------------------------------------------
+
+export type CasinoGame = 'poker' | 'blackjack' | 'ruleta' | 'caballos';
+export const CASINO_MIN_AGE = 21;
+export const CASINO_GAME_NAMES: Record<CasinoGame, string> = { poker: 'Póker', blackjack: 'Blackjack', ruleta: 'Ruleta', caballos: 'Carreras' };
+
+/** Valor de las fichas (en la moneda del personaje). */
+export const casinoChips = (s: GameState) => [1, 5, 25, 100].map((x) => x * K(s));
+/** Apuesta máxima por jugada en una mesa. */
+export const casinoMaxBet = (s: GameState) => 500 * K(s);
+/** Lo máximo que se puede perder en un día: luego la casa no deja jugar más. */
+export const casinoLossLimit = (s: GameState) => 1500 * K(s);
+
+/** Lo que va ganado (+) o perdido (−) hoy en el casino. */
+export function casinoToday(state: GameState, now: number): number {
+  return state.flags.casinoDia === dayNumber(state, now) ? Number(state.flags.casinoNeto ?? 0) : 0;
+}
+
+export function canCasino(state: GameState, now: number): string | null {
+  if (state.character.age < CASINO_MIN_AGE) return `Solo mayores de ${CASINO_MIN_AGE} años`;
+  if (casinoToday(state, now) <= -casinoLossLimit(state)) return 'Límite de pérdidas de hoy alcanzado';
+  if ((state.bars.dinero ?? 0) < casinoChips(state)[0]) return 'Sin dinero para fichas';
+  return busy(state, now);
+}
+
+/**
+ * Cierra una jugada del casino: `staked` es todo lo apostado y `returned` lo
+ * que devuelve la mesa (apuesta incluida). Devuelve el neto.
+ */
+export function casinoSettle(state: GameState, now: number, game: CasinoGame, staked: number, returned: number, detail: string): number {
+  advance(state, now);
+  if (state.character.age < CASINO_MIN_AGE) throw new Error(`Solo mayores de ${CASINO_MIN_AGE} años`);
+  staked = Math.max(0, Math.round(staked));
+  returned = Math.max(0, Math.round(returned));
+  if (staked > (state.bars.dinero ?? 0)) throw new Error('No tienes dinero para esa apuesta.');
+  if (staked) pay(state, staked);
+  if (returned) withCat('apuestas', () => applyBars(state, { dinero: returned }));
+  withCat('apuestas', () => {
+    // lo apostado se apunta como apuesta, no como inversión
+    if (state.ledger && staked) {
+      state.ledger.cats.inversiones = (state.ledger.cats.inversiones ?? 0) + staked;
+      state.ledger.cats.apuestas = (state.ledger.cats.apuestas ?? 0) - staked;
+    }
+  });
+  const net = returned - staked;
+  if (state.flags.casinoDia !== dayNumber(state, now)) {
+    state.flags.casinoDia = dayNumber(state, now);
+    state.flags.casinoNeto = 0;
+  }
+  state.flags.casinoNeto = Number(state.flags.casinoNeto) + net;
+  if (staked) countMission(state, 'apuesta', 1);
+  // solo las jugadas grandes van al diario, para no llenarlo
+  if (Math.abs(net) >= 50 * K(state) || returned >= staked * 5)
+    log(state, now, net >= 0 ? 'bueno' : 'malo', `Casino · ${CASINO_GAME_NAMES[game]}`, `${detail} ${net >= 0 ? `Ganas ${fmtOf(state)(net)}.` : `Pierdes ${fmtOf(state)(-net)}.`}`, { dinero: net });
+  return net;
+}

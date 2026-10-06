@@ -1,5 +1,8 @@
-import { useState } from 'preact/hooks';
-import { play } from '../../platform/audio';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { fx, play } from '../../platform/audio';
+import { CounterView, useCounter } from './counter';
+import { PopLayer, usePops, useShake } from './stage';
+import './street.css';
 import { HOTDOG_PER_POINT } from '../../core/economy';
 import { ROLES } from '../../core/roles';
 import { MiniFrame, pick, useLoop, useMini, type MiniProps } from './kit';
@@ -27,24 +30,51 @@ function newOrder(level: number) {
   return { who: pick(CLIENTS), items, patience: Math.max(4, 8 - level * 0.25) };
 }
 
+/** Cómo pide cada cliente su perrito. */
+function askLine(items: string[]) {
+  const names = items.map((i) => TOP[i].label.toLowerCase());
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}` : names[0];
+  return `${pick(['¡Uno con', 'Ponme uno con', 'Un perrito con', 'Hey, amigo, uno con', 'Para mí, con'])} ${list}! ${pick(['', 'Rápido, que pierdo el bus.', 'Como el de ayer.', 'El mejor de la Quinta.', '¿Cuánto es?'])}`.replace(' !', '!').trim();
+}
+const HD_THANKS = ['¡Buenísimo! Quédate el cambio.', '¡El mejor perrito de Nueva York!', 'Toma, amigo, una propina.', '¡Así da gusto! Hasta mañana.', 'Mmm… ¡Vuelvo seguro!'];
+const HD_OK = ['Gracias.', 'Está bien.', 'Vale, vale.', 'Bien.'];
+const HD_ANGRY = ['¡Eso no es lo que pedí!', 'Pues me voy al de enfrente.', '¡Qué lento eres, chico!', 'Olvídalo, ya no tengo hambre.'];
+
 export function Hotdogs(p: MiniProps) {
   const mini = useMini('hotdogs');
+  const c = useCounter();
+  const { pops, pop } = usePops();
+  const shaker = useShake();
+  const hurried = useRef(false);
   const [order, setOrder] = useState(() => newOrder(0));
   const [on, setOn] = useState<string[]>([]);
   const [left, setLeft] = useState(order.patience);
   const [flash, setFlash] = useState<null | 'ok' | 'bad'>(null);
+
+  useEffect(() => {
+    if (mini.playing) c.arrive(askLine(order.items));
+  }, [mini.playing]);
 
   const next = (lvl: number) => {
     const o = newOrder(lvl);
     setOrder(o);
     setLeft(o.patience);
     setOn([]);
+    hurried.current = false;
+    setTimeout(() => c.arrive(askLine(o.items)), 650);
   };
 
-  useLoop(mini.playing && !flash, (dt) =>
+  useLoop(mini.playing && !flash && c.at === 'in', (dt) =>
     setLeft((l) => {
+      if (!hurried.current && l < order.patience * 0.35) {
+        hurried.current = true;
+        c.talk.say(pick(['¿Falta mucho?', 'Vamos, vamos…', '¡Que llego tarde!']), 'enfado');
+      }
       if (l - dt <= 0) {
         mini.miss();
+        shaker.shake();
+        pop('¡SE VA!', 30, 30, 'bad');
+        c.leave(pick(HD_ANGRY), 'enfado');
         setFlash('bad');
         setTimeout(() => {
           setFlash(null);
@@ -57,15 +87,29 @@ export function Hotdogs(p: MiniProps) {
   );
 
   const toggle = (id: string) => {
-    if (!mini.playing || flash) return;
+    if (!mini.playing || flash || c.at !== 'in') return;
     play.click();
+    fx.pop();
     setOn((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
   };
   const serve = () => {
-    if (!mini.playing || flash) return;
+    if (!mini.playing || flash || c.at !== 'in') return;
     const ok = on.length === order.items.length && order.items.every((i) => on.includes(i));
-    if (ok) mini.hit();
-    else mini.miss();
+    if (ok) {
+      mini.hit();
+      // propina si le atiendes rápido: otro perrito de dinero
+      const tip = left / order.patience > 0.5;
+      if (tip) {
+        mini.hit();
+        pop(`+${ROLES.inmigrante.formatMoney(HOTDOG_PER_POINT)} PROPINA`, 50, 18, 'gold');
+      } else pop('+1', 50, 40);
+      c.leave(tip ? pick(HD_THANKS) : pick(HD_OK), 'feliz', tip);
+    } else {
+      mini.miss();
+      shaker.shake();
+      pop('¡MAL!', 50, 40, 'bad');
+      c.leave(pick(HD_ANGRY), 'enfado');
+    }
     setFlash(ok ? 'ok' : 'bad');
     setTimeout(() => {
       setFlash(null);
@@ -84,10 +128,11 @@ export function Hotdogs(p: MiniProps) {
       {...p}
       intro={<>Cada cliente pide sus salsas. Ponle <b>exactamente</b> lo que pide y pulsa SERVIR antes de que se canse de esperar.</>}
     >
-      <div class={`hotdog-stand ${flash ?? ''}`}>
+      <CounterView c={c} scene="calle" patience={left / order.patience} />
+      <div class={`hotdog-stand ${flash ?? ''} ${shaker.cls}`}>
         <div class="umbrella-top" />
         <div class="ticket">
-          <small>{order.who} quiere:</small>
+          <small>{c.person.name.split(' ')[0]} quiere:</small>
           <ol>
             {order.items.map((it) => (
               <li key={it} class={on.includes(it) ? 'done' : ''}>
@@ -95,9 +140,6 @@ export function Hotdogs(p: MiniProps) {
               </li>
             ))}
           </ol>
-          <div class="patience">
-            <span style={{ width: `${(left / order.patience) * 100}%`, background: left / order.patience < 0.3 ? '#ff4a5a' : '#35d07f' }} />
-          </div>
         </div>
         <div class="hotdog">
           <span class="bun-dog" />
@@ -118,6 +160,7 @@ export function Hotdogs(p: MiniProps) {
           SERVIR
         </button>
       </div>
+      <PopLayer pops={pops} />
     </MiniFrame>
   );
 }

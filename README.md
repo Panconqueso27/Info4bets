@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: 0.13.0**
+**Versión actual: 0.14.0**
 
 ## Probar la beta
 
@@ -21,6 +21,14 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.14.0
+
+- **Minijuegos inmersivos:** cada minijuego tiene su escenario animado en pixel art y personajes con cara que hablan (voz de balbuceo, boca que se mueve y bocadillo con el texto letra a letra). Cuenta atrás 3-2-1, textos que saltan con cada acierto y sacudida al fallar.
+- **Papeleo en la ventanilla:** la sombra del solicitante tras el cristal esmerilado habla mientras revisas: charla, excusas, mentiras y presiones (más cuando el expediente tiene trampa) y reacciona al sello.
+- **Clientes con propina:** en la plancha, los pedidos, el café, la fregona y el puesto de perritos los clientes entran, piden con su voz, se impacientan y, si los atiendes bien y rápido, dejan **propina** (un punto o dinero extra) que vuela al bote.
+- **Vecinos que hablan:** toca a cualquier persona por la calle y te dirá lo que piensa de la ciudad (50 frases buenas y 50 malas, según cómo vaya la ciudad). Las personas del mapa son más pequeñas, a escala de los edificios.
+- **Casino Pixelopolis** (en Extras): póker Texas Hold'em contra tres jugadores, blackjack de seis barajas, ruleta europea y carreras de caballos en directo, con crupieres que hablan. Normas de la casa: mayores de 21, apuesta máxima y límite de pérdidas al día. Dinero siempre ficticio.
 
 ## Novedades 0.13.0
 

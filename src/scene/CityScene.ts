@@ -56,7 +56,8 @@ import type { Look } from '../core/types';
 import { randomLook } from '../art/character';
 import { bridge, type SceneModel, type Spot } from './bridge';
 import { drawPet, drawVending, upscaleOutline } from '../art/sprites';
-import { aircraftSound, crashSound, sirenSound, thunder } from '../platform/audio';
+import { aircraftSound, babble, crashSound, sirenSound, thunder } from '../platform/audio';
+import { citizenLine } from '../core/citizens';
 import { drawIcon } from '../art/icons';
 import { MEGA } from '../core/lots';
 import { gfxLevel, gfxProfile, lowFx, onGfxChange, setGfxLevel, showFps, type GfxLevel, type GfxProfile } from '../platform/graphics';
@@ -90,8 +91,10 @@ const viewW = () => 300 * RES;
 const WALK_SPEED = 20;
 const minZoom = () => 0.42 * RES;
 const maxZoom = () => 3 * RES;
-/** Escala de las personas (sprites ×2 con contorno). */
-const PEOPLE = 0.5;
+/** Escala de las personas (sprites ×2 con contorno): algo más bajas que una planta y media. */
+const PEOPLE = 0.32;
+/** El protagonista, un poco más grande para encontrarlo. */
+const HERO = 0.38;
 
 function lookKey(look: Look): string {
   return `mini-${look.outfit}-${look.hair}-${look.skin}-${look.hairColor}-${look.outfitColor}`;
@@ -168,6 +171,10 @@ interface Walker {
   zone?: [number, number, number, number];
   /** Solo sale de noche. */
   night?: boolean;
+  /** Tono de su voz al hablar. */
+  pitch: number;
+  /** Bocadillo con lo que dice al tocarlo. */
+  talk?: { box: Phaser.GameObjects.Container; until: number };
 }
 
 /** Cara del sprite según hacia dónde se mueve en pantalla. */
@@ -1394,7 +1401,7 @@ export class CityScene extends Phaser.Scene {
       const key = this.ensureMini(look);
       const sprite = this.add.sprite(0, 0, key, '0').setOrigin(0.5, 1).setScale(PEOPLE);
       this.world.add(sprite);
-      const w: Walker = { sprite, p: { x: walkX(c), y: walkY(r) }, c, r, ...extra };
+      const w: Walker = { sprite, p: { x: walkX(c), y: walkY(r) }, c, r, pitch: 140 + rand() * 300, ...extra };
       this.put(sprite, w.p);
       this.walkers.push(w);
       this.time.delayedCall(rand() * 3000, () => this.wander(w));
@@ -1507,7 +1514,7 @@ export class CityScene extends Phaser.Scene {
     if (!this.player) {
       const home = placeEntrance(PLACE_BY_ID[ROLE_PLACES[m.role].home]);
       this.pw = { x: home.x, y: home.y, z: 0 };
-      this.player = this.add.sprite(0, 0, key, '0').setOrigin(0.5, 1).setScale(PEOPLE);
+      this.player = this.add.sprite(0, 0, key, '0').setOrigin(0.5, 1).setScale(HERO);
       this.world.add(this.player);
       initial = true;
     } else if (this.player.texture.key !== key && m.spot !== 'errand') {
@@ -1819,10 +1826,77 @@ export class CityScene extends Phaser.Scene {
   }
 
   /**
+   * Vecinos que hablan: al tocar a alguien por la calle se para y dice lo
+   * que piensa de la ciudad (con su voz de balbuceo y un bocadillo encima).
+   */
+  private tapWalker(sx: number, sy: number): boolean {
+    const cam = this.cameras.main;
+    const k = Math.max(0.5, this.scale.displaySize.width / Math.max(1, this.scale.gameSize.width));
+    const reach = 18 / k / cam.zoom;
+    let best: Walker | null = null;
+    let bestD = Infinity;
+    for (const w of this.walkers) {
+      if (!w.sprite.visible) continue;
+      const cx = w.sprite.x;
+      const cy = w.sprite.y - w.sprite.displayHeight / 2;
+      const d = Math.hypot(sx - cx, (sy - cy) * 0.8);
+      if (d < reach + w.sprite.displayHeight / 2 && (d < bestD || (best && w.sprite.depth > best.sprite.depth && d < bestD + 2))) {
+        best = w;
+        bestD = d;
+      }
+    }
+    if (!best) return false;
+    this.walkerSay(best);
+    return true;
+  }
+
+  private walkerSay(w: Walker) {
+    const { text, good } = citizenLine(bridge.get().mood);
+    w.talk?.box.destroy();
+    const pad = 3;
+    // texto a doble tamaño y reducido: la fuente pixel no aprieta los espacios
+    const t = this.add.text(0, 0, text.replace(/ /g, '  '), { fontFamily: 'LC Body, sans-serif', fontSize: '14px', color: '#14101f', resolution: 3, wordWrap: { width: 160 }, align: 'center', lineSpacing: -2 }).setOrigin(0.5, 1).setScale(0.5);
+    const bw = t.displayWidth + pad * 2;
+    const bh = t.displayHeight + pad * 2;
+    const g = this.add.graphics();
+    g.fillStyle(0x14101f, 1).fillRoundedRect(-bw / 2 - 1, -bh - 1, bw + 2, bh + 2, 4);
+    g.fillStyle(0xfffaf0, 1).fillRoundedRect(-bw / 2, -bh, bw, bh, 3);
+    g.fillStyle(good ? 0x35d07f : 0xff4a5a, 1).fillRect(-bw / 2 + 2, -bh + 1, bw - 4, 1.2);
+    g.fillStyle(0x14101f, 1).fillTriangle(-3, 0, 3, 0, 0, 4);
+    g.fillStyle(0xfffaf0, 1).fillTriangle(-2, -0.5, 2, -0.5, 0, 2.8);
+    t.setPosition(0, -pad + 0.5);
+    const icon = this.add.text(bw / 2 - 1, -bh - 1, good ? '☺' : '☹', { fontFamily: 'sans-serif', fontSize: '8px', color: good ? '#35d07f' : '#ff4a5a', stroke: '#14101f', strokeThickness: 2, resolution: 6 }).setOrigin(0.5);
+    const box = this.add.container(0, 0, [g, t, icon]).setDepth(100004).setScale(0.2);
+    this.world.add(box);
+    this.tweens.add({ targets: box, scale: 1, duration: 220, ease: 'Back.easeOut' });
+    const secs = 2.6 + text.length * 0.045;
+    w.talk = { box, until: this.time.now + secs * 1000 };
+    // se para mientras habla y mira a la cámara
+    for (const tw of this.tweens.getTweensOf(w.p)) tw.pause();
+    w.sprite.setFrame('0');
+    babble(text, { pitch: w.pitch, type: w.pitch > 280 ? 'triangle' : 'square' });
+  }
+
+  /** Bocadillos de los vecinos: siguen a quien habla y se van solos. */
+  private updateTalks(time: number) {
+    for (const w of this.walkers) {
+      const tk = w.talk;
+      if (!tk) continue;
+      tk.box.setPosition(w.sprite.x, w.sprite.y - w.sprite.displayHeight - 1.5);
+      if (time > tk.until) {
+        w.talk = undefined;
+        this.tweens.add({ targets: tk.box, alpha: 0, y: tk.box.y - 4, duration: 260, onComplete: () => tk.box.destroy() });
+        for (const tw of this.tweens.getTweensOf(w.p)) tw.resume();
+      }
+    }
+  }
+
+  /**
    * Toque: se busca qué volumen (huella × altura) hay bajo el dedo; si hay
    * varios, gana el que está más cerca de la cámara (más al sur y al este).
    */
   private tapAt(sx: number, sy: number) {
+    if (this.tapWalker(sx, sy)) return;
     type Hit = { id: Parameters<typeof bridge.tap>[0]; front: number; prio: number };
     const hits: Hit[] = [];
     const test = (r: { x: number; y: number; w: number; h: number }, H: number, id: Hit['id'], prio = 0) => {
@@ -2083,6 +2157,7 @@ export class CityScene extends Phaser.Scene {
     // menos (o más) gente y coches
     for (const w of this.walkers.splice(p.walkers + 8)) {
       this.tweens.killTweensOf(w.p);
+      w.talk?.box.destroy();
       w.sprite.destroy();
     }
     const busy = (c: Car) => c.temp || c.crashUntil || c.stopAt !== undefined;
@@ -2273,6 +2348,7 @@ export class CityScene extends Phaser.Scene {
     this.moveGlints(time, dts);
     this.updateWindows(time);
     this.updateBirds(time, dts);
+    this.updateTalks(time);
     this.updateFps(time);
     // remolcadores
     for (const b of this.boats) {

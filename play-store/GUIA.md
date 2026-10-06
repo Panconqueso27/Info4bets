@@ -46,11 +46,11 @@ Para generarla y compilar el `.aab` hay dos caminos:
    - **Acceso a la app**: toda la funcionalidad está disponible sin restricciones (no hay inicio de sesión).
    - **Clasificación de contenido** (cuestionario IARC), categoría *Juego*. Respuestas con la verdad sobre el contenido:
      - Violencia: no hay violencia gráfica. Hay detenciones y alusiones a robos en las historias.
-     - **Juego simulado: Sí.** Hay lotería, apuestas en el hipódromo y bolsa con dinero ficticio.
+     - **Juego simulado: Sí.** Hay un casino (póker, blackjack, ruleta y carreras), lotería, apuestas en el hipódromo y bolsa, siempre con dinero ficticio: no se puede comprar fichas ni cobrar premios reales.
      - Alcohol: sí, referencias (el bar, la cerveza). Drogas y sexo: no.
      - Interacción entre usuarios, compras y ubicación: no.
-     - Lo normal es que salga **PEGI 12 / Adolescentes** por el juego simulado.
-   - **Público objetivo**: 13 años o más. Así no aplican las normas especiales de apps para niños.
+     - Con el casino, la clasificación por juego de azar simulado puede salir más alta (PEGI 16 o 18, «Adolescentes» o «Adultos»). Acepta la que dé el cuestionario.
+   - **Público objetivo**: 18 años o más (por el casino simulado). Así no aplican las normas especiales de apps para niños ni de familias.
    - **Seguridad de los datos**: «No se recogen datos» y «No se comparten datos». Todo se queda en el dispositivo y no hay cifrado en tránsito porque no se envía nada.
    - Gobierno, finanzas, salud, apps de noticias: **No**.
 4. **Pruebas › Prueba cerrada**: crea una lista de testers con los 12 correos, sube el `.aab` y envía a revisión. Comparte con ellos el enlace de participación. Tienen que instalarla y mantenerse 14 días.

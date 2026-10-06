@@ -79,7 +79,7 @@ import { Customizer, IdentityForm, RoleSelect, TitleScreen } from './Setup';
 import { BlockModal, LotCard, MegaCard, PropertiesModal, type CityActions } from './City';
 import { Modal } from './Panels';
 import { cityLook, citySignature, LOT_BY_ID, MEGA_BY_ID } from '../core/lots';
-import { applyHotdogs, auctionLot, betBaseball, betRace, buyBond, buyRastro, buyTicket, racesOpen, rastroOpen, startClasses, startTaxi } from '../core/economy';
+import { applyHotdogs, auctionLot, canCasino, casinoChips, casinoLossLimit, casinoMaxBet, casinoSettle, casinoToday, CASINO_MIN_AGE, betBaseball, betRace, buyBond, buyRastro, buyTicket, racesOpen, rastroOpen, startClasses, startTaxi } from '../core/economy';
 import { BackupModal, BaseballModal, BondsModal, ContestResultModal, ContestsModal, ExtrasModal, LotteryModal, RaceModal, RastroModal, type ExtraPanel, type ExtrasActions } from './Extras7';
 import { Hotdogs } from './games/Street';
 import { RADIO_PLACE } from '../core/radio';
@@ -88,6 +88,7 @@ import { CONTEST_BY_ID, contestPrizes, contestRivals, enterContest, finishContes
 
 const CONTEST_GAMES: Record<string, (p: MiniProps & { contest: ContestInfo }) => any> = { breakdance: Breakdance, perritos: Eating, simon: SimonGame, maraton: Marathon };
 import { Minimap } from './Minimap';
+import { Casino } from './casino/Casino';
 import type { Marker } from '../scene/bridge';
 
 type Screen =
@@ -104,6 +105,17 @@ function spotFor(s: GameState, now: number): Spot {
   if (s.errand) return 'errand';
   if (s.shift && !s.shift.cancelled) return 'work';
   return 'home';
+}
+
+/**
+ * Ánimo de los vecinos: con el alcalde, su popularidad; con el inmigrante,
+ * cómo de cuidada está la ciudad (barrios renovados, grandes obras, nivel
+ * de los barrios).
+ */
+function cityMood(s: GameState, look: ReturnType<typeof cityLook>): number {
+  const care = Object.keys(look.renovated).length * 0.03 + Object.values(look.mega ?? {}).filter((m) => m === 'listo').length * 0.08 + Object.values(look.districts).reduce((a, b) => a + (b ?? 0), 0) * 0.03;
+  const base = s.character.role === 'alcalde' ? (s.bars.popularidad ?? 50) / 100 : 0.4;
+  return Math.max(0, Math.min(1, base + care));
 }
 
 /** Recordatorio para el día siguiente a las 10:00 si aún no se ha trabajado. */
@@ -329,6 +341,7 @@ export function App() {
         vehicle: state.flags.auto ? 'auto' : 'pie',
         other: state.other ?? null,
         weather: ((devEnabled && devWeather()) || todayWeather(state)) as Weather,
+        mood: cityMood(state, cityRef.current.look),
       });
     else bridge.set({ role: null, look: null, spot: 'home', weather: 'despejado', other: null, pet: null, vending: 0, markers: [] });
   });
@@ -680,6 +693,29 @@ export function App() {
             setExtra(null);
             setMinigame(`contest:${id}`);
           }
+        }}
+        onClose={() => setExtra(null)}
+      />
+    );
+  else if (extra === 'casino')
+    overlay = (
+      <Casino
+        money={state.bars.dinero ?? 0}
+        fmt={ROLES[state.character.role].formatMoney}
+        chips={casinoChips(state)}
+        maxBet={casinoMaxBet(state)}
+        lossLeft={casinoLossLimit(state) + casinoToday(state, now)}
+        minAge={CASINO_MIN_AGE}
+        onSettle={(game, staked, returned, detail) => {
+          // el límite de pérdidas solo frena nuevas apuestas, no cobrar lo ganado
+          if (staked > 0 && returned < staked) {
+            const why = canCasino(state, clock.now());
+            if (why && why !== 'Sin dinero para fichas') {
+              setToast({ title: 'CASINO', text: why });
+              return false;
+            }
+          }
+          return ask((s, t) => casinoSettle(s, t, game, staked, returned, detail)) !== undefined;
         }}
         onClose={() => setExtra(null)}
       />

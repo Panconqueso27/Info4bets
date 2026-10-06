@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Letters } from './AnimText';
 import { MINUTES_PER_POINT } from '../core/game';
-import { play } from '../platform/audio';
+import { fx, play } from '../platform/audio';
+import { randomPerson, type Mood } from '../art/portrait';
+import { Backdrop, Bubble, Portrait, PopLayer, R, usePops, useShake, useTalk } from './games/stage';
+import './paperwork.css';
 
 /**
  * Minijuego "Papeleo" (alcalde), al estilo de un puesto de control:
@@ -33,6 +36,96 @@ const FLAW_TEXT: Record<Flaw, string> = {
   caducada: 'La licencia de la empresa estaba caducada.',
   firmas: 'Más de $500.000 con una sola firma.',
 };
+
+// ---------------------------------------------------------------------------
+// El solicitante, al otro lado del cristal: habla mientras revisas
+// ---------------------------------------------------------------------------
+
+const GREET = [
+  'Buenos días, alcalde. Vengo por lo del {kind}.',
+  'Traigo todos los papeles en regla, se lo juro.',
+  'Uf, qué cola. Llevo dos horas esperando.',
+  'Hola, hola. Esto será un momento, ¿verdad?',
+  'Me manda {company}. Es por el {kind}.',
+  'Buenas. Mi jefe dice que esto es puro trámite.',
+];
+/** Charla para distraer (dé igual si el expediente está bien o no). */
+const CHAT = [
+  '¿Hace calor aquí o soy yo?',
+  'Mi empresa lleva veinte años en Nueva York.',
+  'Tengo una reunión en diez minutos, ¿sabe?',
+  '¿Ese cuadro de la pared es un Warhol?',
+  'Mi madre le votó. Dos veces, creo.',
+  'Bonita corbata, alcalde. Muy elegante.',
+  '¿Ha visto el partido de los Yankees?',
+  'La ciudad está preciosa este año, de verdad.',
+  'Si quiere le traigo un café, invito yo.',
+  '¿Le queda mucho? Tengo el coche en doble fila.',
+  'Mi hijo quiere ser alcalde como usted.',
+  'Esto antes se hacía con un apretón de manos.',
+];
+/** Mentiras y presiones: salen más cuando el expediente tiene trampa. */
+const LIES: Record<Flaw | 'any', string[]> = {
+  empresa: ['La empresa cambió de nombre, es la misma.', 'Esa licencia es la nueva, la del registro está vieja.', 'Una letra arriba o abajo, ¿qué más da?'],
+  huella: ['La huella es mía. Ayer me corté el dedo.', 'Esa máquina siempre falla, todo el mundo lo dice.', 'Firmó mi hermano, pero somos gemelos.'],
+  fecha: ['La fecha está bien, mi calendario es diferente.', '¿Febrero no tiene treinta y uno este año?', 'Es una errata de la mecanógrafa, nada más.'],
+  agua: ['La marca de agua se borró con la lluvia.', 'Es una copia, el original lo tiene mi abogado.', 'Esos papeles son los modernos, no llevan marca.'],
+  caducada: ['La licencia la renovamos la semana pasada.', 'Caducada, caducada… solo un poquito.', 'El papel nuevo está en el correo, palabra.'],
+  firmas: ['El tesorero firma mañana sin falta.', 'Con una firma basta, siempre se ha hecho así.', 'El tesorero está de vacaciones, pero está de acuerdo.'],
+  any: ['Mi primo es concejal, ¿sabe usted?', 'Si lo aprueba hay un jamón para usted. Del bueno.', 'Le conviene firmarlo, se lo digo por su bien.', 'Mi abogado está esperando fuera…', 'Yo no he venido nunca aquí, ¿eh?'],
+};
+const THANKS = ['¡Gracias, alcalde! Le debo una.', '¡Perfecto! Se lo diré a todo el barrio.', 'Sabía que era usted un hombre de ley.', '¡Estupendo! Que tenga buen día.'];
+const ANGRY = ['¡Esto es un escándalo! ¡Llamaré a la prensa!', '¡Volveré con mi abogado!', 'Usted no sabe con quién está hablando.', '¡Pues no le voto más!'];
+const CAUGHT = ['Vaya… me ha pillado.', 'Ejem… ya me iba.', 'Era una broma, alcalde. Una broma.', '¡Maldita sea!'];
+const GLOAT = ['Je, je… gracias, alcalde.', 'Ha sido un placer hacer negocios.', 'Nadie tiene por qué enterarse.'];
+
+const fill = (t: string, c: { kind: string; company: string }) => t.replace('{kind}', c.kind.toLowerCase()).replace('{company}', c.company);
+const one = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+
+/** El pasillo de la ventanilla, al otro lado del cristal: luces, cola y reloj. */
+function corridor(ctx: CanvasRenderingContext2D, t: number, w: number, h: number) {
+  // pared del pasillo con zócalo de madera y una lámpara que parpadea un poco
+  const flick = 0.93 + Math.sin(t * 7) * 0.02 + (Math.sin(t * 31) > 0.97 ? -0.15 : 0);
+  R(ctx, 0, 0, w, h, '#4a5a52');
+  for (let x = 0; x < w; x += 6) R(ctx, x, 0, 1, h * 0.62, 'rgba(0,0,0,0.06)');
+  R(ctx, 0, h * 0.62, w, h * 0.38, '#5a3a24');
+  for (let x = 0; x < w; x += 14) R(ctx, x, h * 0.62, 1, h * 0.38, '#3a2414');
+  R(ctx, 0, h * 0.62, w, 2, '#7a5232');
+  // cola de gente esperando (siluetas lejanas)
+  for (let i = 0; i < 5; i++) {
+    const x = 12 + i * 34 + Math.sin(t * 0.7 + i) * 1.5;
+    R(ctx, x, h * 0.36, 10, h * 0.5, 'rgba(25,30,30,0.55)');
+    R(ctx, x + 2, h * 0.27, 6, 7, 'rgba(25,30,30,0.55)');
+  }
+  // reloj de pared
+  const cx = w - 26;
+  const cy = 16;
+  ctx.fillStyle = '#e8e4d8';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#2a2a33';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  const a = t * 0.8;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.sin(a) * 7, cy - Math.cos(a) * 7);
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.sin(a / 12) * 5, cy - Math.cos(a / 12) * 5);
+  ctx.stroke();
+  // cartel "TURNO" con número
+  R(ctx, 8, 6, 40, 14, '#14101f');
+  ctx.fillStyle = '#ff5a4a';
+  ctx.font = '9px monospace';
+  ctx.fillText(`TURNO ${String(40 + Math.floor(t / 9)).padStart(3, '0')}`, 11, 16);
+  // luz cálida del techo
+  const g = ctx.createRadialGradient(w / 2, 0, 4, w / 2, 0, h * 1.1);
+  g.addColorStop(0, `rgba(255,236,190,${0.35 * flick})`);
+  g.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+}
 
 /** Normas del reglamento: entran en vigor según los expedientes despachados. */
 const RULES: { from: number; flaw: Flaw; text: string }[] = [
@@ -184,6 +277,15 @@ export function Paperwork({ onFinish, onClose }: { onFinish: (points: number) =>
   const [rejecting, setRejecting] = useState(false);
   const [stamp, setStamp] = useState<null | { approve: boolean; ok: boolean; bonus: boolean; why?: string }>(null);
   const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // el solicitante: entra, habla, reacciona al sello y se va
+  const [person, setPerson] = useState(() => randomPerson());
+  const csRef = useRef(cs);
+  const stampRef = useRef(false);
+  const [at, setAt] = useState<'in' | 'out' | 'gone'>('gone');
+  const talk = useTalk(person);
+  const nextLine = useRef(0);
+  const { pops, pop } = usePops();
+  const shaker = useShake();
 
   useEffect(() => {
     if (phase !== 'play') return;
@@ -200,6 +302,42 @@ export function Paperwork({ onFinish, onClose }: { onFinish: (points: number) =>
     return () => clearInterval(id);
   }, [phase]);
   useEffect(() => () => void (scanTimer.current && clearTimeout(scanTimer.current)), []);
+
+  // Cada expediente trae a alguien nuevo a la ventanilla.
+  useEffect(() => {
+    if (phase !== 'play') return;
+    setAt('gone');
+    const p = randomPerson();
+    setPerson(p);
+    const t1 = setTimeout(() => {
+      setAt('in');
+      fx.bell();
+    }, 120);
+    const t2 = setTimeout(() => {
+      const mood: Mood = cs.flaw && Math.random() < 0.5 ? 'nervios' : 'normal';
+      talk.say(fill(one(GREET), cs), mood);
+      nextLine.current = Date.now() + 3500 + Math.random() * 2500;
+    }, 650);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [cs.id, phase]);
+
+  // Mientras revisas, habla: charla, excusas y alguna presión.
+  useEffect(() => {
+    if (phase !== 'play') return;
+    const id = setInterval(() => {
+      if (stampRef.current || Date.now() < nextLine.current) return;
+      nextLine.current = Date.now() + 4500 + Math.random() * 3500;
+      const c = csRef.current;
+      const lie = c.flaw && Math.random() < 0.55;
+      if (lie) talk.say(one(Math.random() < 0.7 ? LIES[c.flaw!] : LIES.any), 'nervios');
+      else if (Math.random() < 0.18) talk.say(one(LIES.any), 'normal');
+      else talk.say(one(CHAT), Math.random() < 0.3 ? 'feliz' : 'normal');
+    }, 400);
+    return () => clearInterval(id);
+  }, [phase]);
 
   const runScan = () => {
     if (scan === 'running' || stamp) return;
@@ -243,14 +381,27 @@ export function Paperwork({ onFinish, onClose }: { onFinish: (points: number) =>
       setTimeout(() => play.error(), 120);
     }
     setRejecting(false);
+    // la reacción del solicitante
+    if (approve && !cs.flaw) talk.say(one(THANKS), 'feliz');
+    else if (approve && cs.flaw) talk.say(one(GLOAT), 'feliz');
+    else if (!approve && cs.flaw) talk.say(one(CAUGHT), 'triste');
+    else talk.say(one(ANGRY), 'enfado');
+    if (ok) pop(bonus ? '+2' : '+1', 50, 40, bonus ? 'gold' : 'good');
+    else {
+      pop('CITACIÓN', 50, 40, 'bad');
+      shaker.shake();
+    }
+    setTimeout(() => setAt('out'), ok ? 300 : 1100);
     setStamp({ approve, ok, bonus, why: !ok ? (cs.flaw ? FLAW_TEXT[cs.flaw] : 'El expediente estaba en regla.') : undefined });
     setTimeout(next, ok ? (bonus ? 700 : 450) : 1600);
   };
 
   const active = RULES.filter((r) => r.from <= done);
+  csRef.current = cs;
+  stampRef.current = !!stamp;
 
   return (
-    <div class="minigame desk papers">
+    <div class={`minigame desk papers ${shaker.cls}`}>
       <div class="mg-head">
         <span class="mg-title">PAPELEO</span>
         <span class={`mg-timer ${left <= 10 ? 'hot' : ''}`}>⏱ {left}s</span>
@@ -261,6 +412,19 @@ export function Paperwork({ onFinish, onClose }: { onFinish: (points: number) =>
       <div class="papers-bar">
         <span>📅 Hoy: {fmtDate(today.d, today.m)}</span>
         <span class={`cites ${citations > FREE_CITATIONS ? 'hot' : ''}`}>📄 Citaciones {citations}/{FREE_CITATIONS}</span>
+      </div>
+      <div class="booth">
+        <Backdrop draw={corridor} w={180} h={90} fps={10} class="booth-bg" />
+        <div class={`booth-person ${at}`}>
+          <Portrait person={person} talking={talk.talking} mood={talk.mood} silhouette="#16121f" scale={4.2} />
+        </div>
+        <div class="booth-glass" />
+        <div class="booth-frame">
+          <span class="booth-sign">VENTANILLA 3 · ALCALDÍA</span>
+          <span class="booth-grille" />
+        </div>
+        {at !== 'gone' && <Bubble text={talk.line} k={talk.key} side="left" class="booth-bubble" />}
+        <div class="booth-slot" />
       </div>
       <div class="papers-desk">
         <div class={`paper doc ${uv ? 'uv' : ''}`} key={cs.id}>
@@ -363,6 +527,7 @@ export function Paperwork({ onFinish, onClose }: { onFinish: (points: number) =>
           {citations > FREE_CITATIONS && <small>−1 punto</small>}
         </div>
       )}
+      <PopLayer pops={pops} />
       {rules && (
         <div class="mg-overlay rulebook" onClick={() => setRules(false)}>
           <h3>Reglamento</h3>

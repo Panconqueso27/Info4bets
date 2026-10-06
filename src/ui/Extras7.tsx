@@ -24,6 +24,8 @@ import {
   TAXI_HOURS,
   taxiPay,
   ticketPrice,
+  canCasino,
+  CASINO_MIN_AGE,
 } from '../core/economy';
 import { actionsFor, actionStatus, canStartErrand, canTakeRadioJob, dayNumber, ERRAND_PAY, errandHours, todayJobs, weekOf } from '../core/game';
 import { ROLES } from '../core/roles';
@@ -33,7 +35,7 @@ import { play } from '../platform/audio';
 import { exportCode, importCode } from '../platform/save';
 import { canEnterContest, CONTEST_BY_ID, CONTESTS, contestDays, contestFee, contestOpen, contestPrizes, contestRivals, type ContestResult } from '../core/contests';
 
-export type ExtraPanel = 'rastro' | 'carreras' | 'beisbol' | 'loteria' | 'bonos' | 'concursos';
+export type ExtraPanel = 'rastro' | 'carreras' | 'beisbol' | 'loteria' | 'bonos' | 'concursos' | 'casino';
 
 export interface ExtrasActions {
   onRadio: (id: string) => void;
@@ -132,6 +134,7 @@ export function ExtrasModal({ state, now, onClose, ...a }: { state: GameState; n
           </>
         )}
         <Activity icon="trofeo" title="Concursos" text={`Breakdance, perritos, Simon y maratón: ${CONTESTS.filter((c) => contestOpen(state, c)).length ? 'hay concurso hoy' : 'mira el calendario'}`} status={null} cta="Ver concursos" onClick={() => a.onOpen('concursos')} />
+        <Activity icon="moneda" title="Casino Pixelopolis" text={`Póker, blackjack, ruleta y carreras · mayores de ${CASINO_MIN_AGE}`} status={canCasino(state, now)} cta="Entrar" onClick={() => a.onOpen('casino')} />
         <Activity icon="caballo" title="Hipódromo" text="Apuesta por un caballo (fines de semana)" status={weekend ? canRace(state, now) : 'Sábados y domingos'} cta="Ir a las carreras" onClick={() => a.onOpen('carreras')} />
         <Activity icon="estrella" title="Béisbol: Yankees vs Mets" text="Apuesta por el ganador (fines de semana)" status={weekend ? canBaseball(state, now) : 'Sábados y domingos'} cta="Apostar" onClick={() => a.onOpen('beisbol')} />
         <Activity icon="boleto" title="Lotería semanal" text={`Boleto de ${fmt(ticketPrice(state))} · sorteo el domingo por la noche`} status={null} cta="Comprar boleto" onClick={() => a.onOpen('loteria')} />

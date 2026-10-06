@@ -1,0 +1,155 @@
+/* Mostrador con clientes (diner y puesto de perritos) */
+.counter {
+  position: relative;
+  flex: none;
+  height: 172px;
+  overflow: hidden;
+  border-bottom: 3px solid #14101f;
+  box-shadow: inset 0 -10px 20px rgba(0, 0, 0, 0.35);
+}
+.counter-person {
+  position: absolute;
+  left: 8%;
+  bottom: 22px;
+  z-index: 1;
+  transition:
+    transform 0.5s cubic-bezier(0.3, 0.8, 0.3, 1),
+    opacity 0.4s;
+}
+.counter-person.gone {
+  transform: translateX(-140%);
+  opacity: 0;
+  transition: none;
+}
+.counter-person.out {
+  transform: translateX(260%);
+  opacity: 0;
+}
+/* barra cromada del diner (tapa las piernas del cliente) */
+.counter-top {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+  z-index: 2;
+  background:
+    linear-gradient(180deg, #f4f6f8 0 3px, #9aa0a8 3px 6px, #c0392b 6px 9px, transparent 9px),
+    repeating-linear-gradient(90deg, #d8dce2 0 6px, #c4c9d0 6px 12px);
+  box-shadow: 0 -2px 0 #14101f;
+}
+.counter-calle .counter-top {
+  background:
+    linear-gradient(180deg, #e8e4d8 0 3px, #8a8e94 3px 6px, transparent 6px),
+    repeating-linear-gradient(90deg, #c0392b 0 14px, #f4efe2 14px 28px);
+}
+.counter-calle .counter-top::before {
+  content: 'HOT DOGS · 50¢';
+  position: absolute;
+  left: 50%;
+  top: 13px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  background: #14101f;
+  color: #ffcc33;
+  font-family: var(--pixel);
+  font-size: 10px;
+  white-space: nowrap;
+  border-radius: 3px;
+}
+.tip-jar {
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  width: 30px;
+  height: 38px;
+  border: 2px solid rgba(220, 240, 255, 0.85);
+  border-top-width: 4px;
+  border-radius: 4px 4px 8px 8px;
+  background: rgba(200, 230, 255, 0.18);
+  overflow: hidden;
+  box-shadow: inset 4px 0 0 rgba(255, 255, 255, 0.35);
+}
+.tip-jar-coins {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 30% 30%, #ffe680 2px, transparent 3px) 0 0 / 7px 6px, linear-gradient(180deg, #ffcc33, #c89a20);
+  transition: height 0.4s;
+}
+.tip-jar small {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  text-align: center;
+  font-family: var(--pixel);
+  font-size: 7px;
+  color: #14101f;
+  background: #f4efe2;
+}
+.tip-coin {
+  position: absolute;
+  z-index: 4;
+  left: 22%;
+  bottom: 70px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff2a0, #ffcc33 45%, #b8861a);
+  box-shadow: 0 0 0 2px #7a5a10;
+  animation: tip-fly 0.75s cubic-bezier(0.3, 0, 0.7, 1) forwards;
+  pointer-events: none;
+}
+@keyframes tip-fly {
+  0% {
+    transform: translate(0, 0) scale(0.6);
+  }
+  45% {
+    transform: translate(calc(min(100vw, 480px) * 0.35), -60px) scale(1.2) rotateY(360deg);
+  }
+  100% {
+    transform: translate(calc(min(100vw, 480px) * 0.67), 50px) scale(0.8) rotateY(720deg);
+    opacity: 0.2;
+  }
+}
+.counter-bubble {
+  position: absolute !important;
+  left: calc(8% + 124px);
+  top: 18px;
+  z-index: 3;
+  max-width: calc(92% - 130px);
+  font-size: 13px;
+}
+.counter-patience {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 96px;
+  height: 10px;
+  padding: 2px;
+  border: 2px solid #14101f;
+  border-radius: 6px;
+  background: rgba(20, 16, 31, 0.6);
+}
+.counter-patience span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.15s linear;
+}
+.counter-patience i {
+  position: absolute;
+  right: -20px;
+  top: -6px;
+  font-style: normal;
+  font-size: 15px;
+}
+.lowfx .tip-coin {
+  animation-duration: 0.3s;
+}

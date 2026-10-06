@@ -192,6 +192,101 @@ export const play = {
 };
 
 // ---------------------------------------------------------------------------
+// Voces y efectos de los minijuegos y el casino
+// ---------------------------------------------------------------------------
+
+/** Voz de un personaje: tono base y timbre. */
+export interface Voice {
+  pitch: number;
+  type?: OscillatorType;
+}
+
+let babbleUntil = 0;
+/**
+ * Habla "a lo Animal Crossing": un pitido corto por sílaba, con el tono de
+ * cada personaje. Devuelve cuánto dura (s), para animar la boca.
+ */
+export function babble(text: string, voice: Voice, speed = 1): number {
+  const letters = text.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]/g, '');
+  const n = Math.min(26, Math.ceil(letters.length / 2));
+  const step = 0.065 / speed;
+  const dur = n * step;
+  sfx((t) => {
+    // si ya está hablando alguien, se espera a que acabe
+    const t0 = Math.max(t, babbleUntil);
+    babbleUntil = t0 + dur;
+    for (let i = 0; i < n; i++) {
+      const ch = letters.charCodeAt(i * 2) || 97;
+      const vowel = /[aeiouáéíóú]/i.test(letters[i * 2] ?? '');
+      const f = voice.pitch * (0.85 + ((ch * 37) % 30) / 100) * (vowel ? 1.12 : 1);
+      tone(f, t0 + i * step, step * 0.8, voice.type ?? 'square', 0.055, f * (i === n - 1 ? 0.8 : 1.04));
+    }
+  });
+  return dur;
+}
+
+export const fx = {
+  /** Timbre de la ventanilla. */
+  bell: () =>
+    sfx((t) => {
+      tone(1568, t, 0.6, 'sine', 0.14);
+      tone(2093, t, 0.5, 'sine', 0.07);
+    }),
+  /** Caja registradora con propina. */
+  register: () =>
+    sfx((t) => {
+      noise(t, 0.05, 0.25, 4000, 2);
+      tone(2637, t + 0.06, 0.25, 'triangle', 0.12);
+      tone(3520, t + 0.12, 0.35, 'sine', 0.08);
+    }),
+  /** Pasos al entrar un cliente. */
+  steps: () =>
+    sfx((t) => {
+      for (let i = 0; i < 3; i++) noise(t + i * 0.18, 0.05, 0.12, 500, 1.5);
+    }),
+  /** Puerta con campanilla. */
+  door: () =>
+    sfx((t) => {
+      [2637, 3136].forEach((f, i) => tone(f, t + i * 0.08, 0.35, 'triangle', 0.06));
+    }),
+  sizzle: () => sfx((t) => noise(t, 0.4, 0.08, 6000, 0.6)),
+  /** Ficha sobre el tapete. */
+  chip: () =>
+    sfx((t) => {
+      tone(3200 + Math.random() * 400, t, 0.05, 'triangle', 0.1);
+      noise(t, 0.04, 0.15, 5000, 3);
+    }),
+  /** Carta que se reparte. */
+  card: () => sfx((t) => noise(t, 0.07, 0.22, 2500 + Math.random() * 800, 1.2)),
+  shuffle: () =>
+    sfx((t) => {
+      for (let i = 0; i < 10; i++) noise(t + i * 0.035, 0.04, 0.16, 2200 + Math.random() * 1500, 1.4);
+    }),
+  /** Bola de la ruleta: clic por casilla que pasa. */
+  tick: (vol = 0.08) => sfx((t) => tone(2200 + Math.random() * 300, t, 0.03, 'square', vol)),
+  /** Fanfarria de gran premio. */
+  jackpot: () =>
+    sfx((t) => {
+      [523, 659, 784, 1047, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, t + i * 0.09, 0.2, 'square', 0.12));
+      for (let i = 0; i < 14; i++) tone(1800 + Math.random() * 2500, t + 0.3 + i * 0.05, 0.07, 'triangle', 0.06);
+    }),
+  /** Trompeta de salida en las carreras. */
+  bugle: () =>
+    sfx((t) => {
+      [392, 523, 659, 784, 659, 784].forEach((f, i) => tone(f, t + i * 0.13, 0.16, 'sawtooth', 0.07));
+    }),
+  /** Galope (una tanda). */
+  gallop: () =>
+    sfx((t) => {
+      for (let i = 0; i < 4; i++) noise(t + i * 0.09, 0.05, 0.2, 260, 1.2);
+    }),
+  /** Murmullo del público que se emociona. */
+  crowd: (secs = 1.5) => sfx((t) => noise(t, secs, 0.18, 700, 0.4)),
+  whoosh: () => sfx((t) => noise(t, 0.25, 0.18, 1200, 0.5)),
+  pop: () => sfx((t) => tone(660, t, 0.08, 'triangle', 0.1, 1320)),
+};
+
+// ---------------------------------------------------------------------------
 // Música: synthwave ochentera (la original), más animada y pegadiza
 // ---------------------------------------------------------------------------
 // Canción de 16 compases en bucle con secciones: intro (arpegio y bajo),
