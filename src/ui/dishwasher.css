@@ -1,0 +1,44 @@
+/* Lavaplatos: el lienzo ocupa todo el hueco manteniendo su proporción,
+   y el bocadillo del cocinero se coloca sobre él en porcentajes. */
+.dw-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+  background: #8f969c;
+  touch-action: none;
+}
+.dw-box {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  width: min(100cqw, calc(100cqh * 180 / 350));
+  height: min(100cqh, calc(100cqw * 350 / 180));
+}
+.dw-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  touch-action: none;
+}
+.dw-say {
+  position: absolute;
+  left: 44%;
+  right: 3%;
+  top: 1.5%;
+  z-index: 5;
+  display: flex;
+  pointer-events: none;
+}
+.dw-say .bubble {
+  max-width: 100%;
+  font-size: 15px;
+}
+.dw-say .bubble-left::after {
+  bottom: auto;
+  top: 14px;
+}

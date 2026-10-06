@@ -298,10 +298,9 @@ export function Eating(p: Props) {
               ))}
             </div>
             <div class="eat-dog ny-dog" key={chew}>
-              <span class="bun-dog" />
+              <span class="bun-dog" style={{ clipPath: `inset(0 ${part * 100}% 0 0 round 0 30px 30px 0)` }} />
               <span class="sausage" style={{ right: `${part * 100}%` }} />
               <span class="ny-mustard" style={{ right: `${part * 100 + 6}%` }} />
-              <span class="ny-bite" style={{ left: `${100 - part * 100 - 8}%`, opacity: part > 0 ? 1 : 0 }} />
             </div>
             <div class="ny-count">
               TÚ <b>{dogs}</b>

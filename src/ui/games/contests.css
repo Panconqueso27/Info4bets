@@ -1,0 +1,374 @@
+/* =====================================================================
+   Escenarios de los concursos (breakdance, perritos, Simon, maratón)
+   ===================================================================== */
+
+/* El combo, debajo del presentador para no tapar su bocadillo */
+.mg-traffic .mg-combo,
+.mg-press .mg-combo,
+.mg-budget .mg-combo,
+.mg-handshake .mg-combo,
+.mg-breakdance .mg-combo,
+.mg-perritos .mg-combo,
+.mg-simon .mg-combo,
+.mg-maraton .mg-combo {
+  top: calc(158px + var(--safe-top, 0px));
+  z-index: 12;
+}
+
+/* --- breakdance ---------------------------------------------------------- */
+.mg-breakdance .dance-floor.bk-stage {
+  isolation: isolate;
+  background: #0b0618;
+}
+.bk-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 112px;
+  bottom: 0;
+  z-index: 3;
+}
+.mg-breakdance .bk-lane {
+  background: linear-gradient(180deg, transparent, rgba(10, 6, 24, 0.28) 25%, rgba(10, 6, 24, 0.42));
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+}
+.bk-receptor {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 34px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.06);
+  -webkit-text-stroke: 2px var(--lc);
+  opacity: 0.8;
+  pointer-events: none;
+}
+.bk-receptor.perfect,
+.bk-receptor.good {
+  color: var(--lc);
+  animation: bk-rec 0.3s ease-out;
+}
+.bk-receptor.bad {
+  -webkit-text-stroke-color: #ff4a5a;
+  animation: bk-rec-bad 0.3s ease-out;
+}
+@keyframes bk-rec {
+  from {
+    transform: translate(-50%, -50%) scale(1.7);
+    filter: brightness(2) drop-shadow(0 0 10px var(--lc));
+  }
+}
+@keyframes bk-rec-bad {
+  30% {
+    transform: translate(-50%, -50%) scale(0.8) rotate(10deg);
+  }
+}
+.mg-breakdance .bk-note {
+  font-size: 34px;
+  line-height: 1;
+  text-shadow: 0 0 12px currentColor, 0 0 3px #fff, 2px 2px 0 #000;
+}
+.mg-breakdance .bk-line {
+  height: 3px;
+  background: linear-gradient(90deg, #ff4f9a, #4ff0ff, #7dff6a, #ffcc33);
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.8);
+  opacity: 0.85;
+}
+.mg-breakdance .bk-judge {
+  top: 34%;
+  z-index: 4;
+}
+.mg-breakdance .bk-judge.good {
+  color: #7dff6a;
+  font-size: 18px;
+}
+.mg-breakdance .bk-judge.bad {
+  color: #ff4a5a;
+  font-size: 16px;
+}
+.mg-breakdance .bk-pads {
+  background: linear-gradient(180deg, #1a1030, #0d0a1a);
+  border-top: 2px solid #ff4f9a;
+  box-shadow: 0 -6px 18px rgba(255, 79, 154, 0.35);
+}
+.mg-breakdance .bk-pad {
+  border-radius: 8px;
+  box-shadow: 0 4px 0 #000, inset 0 0 14px var(--lc);
+  text-shadow: 0 0 8px var(--lc);
+}
+.mg-breakdance .bk-pad:active {
+  background: var(--lc);
+  color: #14101f !important;
+}
+
+/* --- perritos de Nathan's ------------------------------------------------ */
+.mg-perritos .eat-stage.ny-stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-bottom: 10px;
+  background: #4a9ae0;
+}
+.ny-table {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1.7fr 1fr;
+  align-items: end;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+.ny-table::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 46%;
+  z-index: -1;
+  background: repeating-linear-gradient(90deg, #ffcc33 0 18px, #f2bd22 18px 36px);
+  border-top: 4px solid #1f7a3e;
+  box-shadow: 0 -2px 0 #000, inset 0 -8px 0 rgba(0, 0, 0, 0.12);
+}
+.ny-rival {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  border: 2px solid #000;
+  border-radius: 8px;
+  background: rgba(20, 16, 31, 0.7);
+  color: #fff;
+}
+.ny-rival.r0 {
+  grid-column: 1;
+  grid-row: 1;
+}
+.ny-rival.r1 {
+  grid-column: 3;
+  grid-row: 1;
+}
+.ny-rival .portrait {
+  border-radius: 6px;
+  background: linear-gradient(180deg, #8ecaf0, #4a9ae0);
+}
+.ny-rival b {
+  font-size: 13px;
+}
+.ny-rival span {
+  font-family: var(--pixel);
+  font-size: 14px;
+  color: #ffe066;
+}
+.ny-rival em {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #c0392b;
+  font-family: var(--pixel);
+  font-size: 7px;
+  font-style: normal;
+}
+.ny-you {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.mg-perritos .ny-plate {
+  min-width: 120px;
+  min-height: 22px;
+  padding: 5px 12px;
+  border: 2px solid #000;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #ffffff 55%, #c8ced2);
+}
+.mg-perritos .ny-dog {
+  width: 150px;
+  height: 58px;
+  animation: ny-chomp 0.14s ease-out;
+}
+.mg-perritos .ny-dog .bun-dog {
+  background: linear-gradient(180deg, #f2c070, #d8902a);
+}
+@keyframes ny-chomp {
+  50% {
+    transform: scale(1.07, 0.92);
+  }
+}
+.ny-mustard {
+  position: absolute;
+  left: -2px;
+  top: 25px;
+  height: 5px;
+  background: repeating-linear-gradient(60deg, #ffe11a 0 4px, transparent 4px 8px);
+  transition: right 0.1s;
+  pointer-events: none;
+}
+.ny-count {
+  padding: 2px 8px;
+  border: 2px solid #000;
+  border-radius: 6px;
+  background: #fffaf0;
+  font-family: var(--pixel);
+  font-size: 11px;
+  color: #14101f;
+}
+.ny-count b {
+  font-size: 20px;
+  color: #c0392b;
+}
+.mg-perritos .ny-choke {
+  position: relative;
+  z-index: 2;
+  width: calc(100% - 20px);
+  padding: 6px 8px;
+  border: 2px solid #000;
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.92);
+}
+.ny-stage.stunned .ny-you {
+  animation: ny-cough 0.25s infinite;
+}
+@keyframes ny-cough {
+  25% {
+    transform: translate(-3px, 1px) rotate(-2deg);
+  }
+  75% {
+    transform: translate(3px, -1px) rotate(2deg);
+  }
+}
+
+/* --- Simon --------------------------------------------------------------- */
+.mg-simon .simon-stage.sm-stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-top: 112px;
+  background: #0c0a1c;
+}
+.mg-simon .sm-simon {
+  z-index: 2;
+  background: radial-gradient(circle, #2a2440, #14101f);
+  box-shadow: 0 0 0 4px #000, 0 0 0 10px #3a3450, 0 0 0 13px #000, 0 12px 0 12px #000, 0 0 70px var(--lit);
+  transition: box-shadow 0.1s;
+}
+.mg-simon .simon-pad {
+  border: 3px solid rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.14), inset 0 -8px 0 rgba(0, 0, 0, 0.2);
+}
+.mg-simon .simon-pad.lit {
+  filter: brightness(1.55) saturate(1.2);
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.85), inset 0 0 18px rgba(255, 255, 255, 0.7);
+}
+.mg-simon .sm-center {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.sm-center small {
+  font-size: 8px;
+  color: #ff4f9a;
+  letter-spacing: 2px;
+  text-shadow: 0 0 6px #ff4f9a;
+}
+.sm-center.watch {
+  color: #4ff0ff;
+  animation: pulse 0.6s steps(2) infinite;
+}
+.mg-simon .sm-info {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 2px solid #000;
+  border-radius: 8px;
+  background: rgba(12, 10, 28, 0.82);
+  color: #fff;
+}
+.sm-dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  max-width: 260px;
+}
+.sm-dots i {
+  width: 8px;
+  height: 8px;
+  border: 1px solid #000;
+  border-radius: 50%;
+  background: #2a2440;
+}
+.sm-dots i.done {
+  background: #7dff6a;
+  box-shadow: 0 0 6px #7dff6a;
+}
+
+/* --- maratón ------------------------------------------------------------- */
+.mg-maraton .run-stage.rn-stage {
+  display: block;
+  isolation: isolate;
+  background: #8ab4e4;
+}
+.rn-hud {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 4;
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  border: 2px solid #000;
+  border-radius: 10px;
+  background: rgba(12, 10, 28, 0.86);
+  box-shadow: 0 4px 0 #000;
+  pointer-events: none;
+}
+.mg-maraton .rn-km {
+  text-align: center;
+  font-size: 26px;
+}
+.rn-km small {
+  font-size: 12px;
+  color: #c8d8ff;
+}
+.mg-maraton .rn-speedo {
+  width: 100%;
+  height: 16px;
+  margin-top: 4px;
+}
+.rn-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -2px;
+  font-size: 12px;
+  color: #c8d8ff;
+}
+.mg-maraton .rn-stamina {
+  width: 100%;
+  color: #fff;
+}
+.mg-maraton .rn-hint {
+  text-align: center;
+  animation: pulse 1s steps(2) infinite;
+}
+
+/* --- efectos reducidos --------------------------------------------------- */
+.lowfx .sm-center.watch,
+.lowfx .mg-maraton .rn-hint,
+.lowfx .ny-stage.stunned .ny-you {
+  animation: none;
+}
+.lowfx .mg-simon .sm-simon {
+  box-shadow: 0 0 0 4px #000, 0 0 0 10px #3a3450, 0 0 0 13px #000, 0 12px 0 12px #000;
+}

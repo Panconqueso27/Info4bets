@@ -547,12 +547,12 @@ export function Handshake(p: MiniProps) {
       setFlashKey((k) => k + 1);
       shake.shake();
       speak(MANAGER_MISS, 'enfado', true);
-      pop('📸 −', w.x, row, 'bad');
+      pop('📸 −', Math.min(90, Math.max(10, w.x)), row, 'bad');
     } else {
       mini.hit();
       line = pick(VOTER_LINES);
       shout(line, id);
-      pop('+1', w.x, row, 'good');
+      pop('+1', Math.min(90, Math.max(10, w.x)), row, 'good');
     }
     setPeople((list) => list.map((x) => (x.id === id ? { ...x, done: w.press ? 'bad' : 'ok', speed: x.speed * 1.6, line } : x)));
   };

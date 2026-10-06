@@ -670,11 +670,12 @@ export function drawMarathon(ctx: CanvasRenderingContext2D, t: number, view: Run
   }
   // corredores rivales (detrás) y el jugador
   const draw = (n: Npc) => {
-    const y = n.lane ? 214 : 222;
+    const y = n.lane ? 208 : 215;
+    const sc = n.lane ? 0.95 : 1.1;
     ctx.globalAlpha = 0.3;
-    R(ctx, n.x - 5, y + 11, 12, 2, '#000');
+    R(ctx, n.x - 5, y + 11 * sc, 12, 2, '#000');
     ctx.globalAlpha = 1;
-    drawBody(ctx, n.x, y, runPose(n.ph), n.c, 1);
+    drawBody(ctx, n.x, y, runPose(n.ph), n.c, sc);
     R(ctx, n.x - 2, y - 7, 4, 3, '#ffffff');
   };
   for (const n of view.npcs) {
@@ -690,18 +691,23 @@ export function drawMarathon(ctx: CanvasRenderingContext2D, t: number, view: Run
     }
   }
   for (const n of view.npcs) if (n.lane === 1) draw(n);
+  for (const n of view.npcs) if (n.lane === 0) draw(n);
   view.ph += (view.tired ? 3.5 : Math.max(0.6, view.v)) * dt * 1.25;
   const amp = view.tired ? 0.45 : Math.min(1.2, 0.35 + view.v / 9);
-  const py = 226 + (view.tired ? 1 : -Math.abs(Math.sin(view.ph)) * 1.5);
+  const py = 230 + (view.tired ? 1 : -Math.abs(Math.sin(view.ph)) * 1.5);
   ctx.globalAlpha = 0.35;
-  R(ctx, RUN_X - 7, 245, 16, 3, '#000');
+  R(ctx, RUN_X - 8, 250, 18, 3, '#000');
   ctx.globalAlpha = 1;
-  drawBody(ctx, RUN_X, py, runPose(view.ph, amp, view.tired ? 0.45 : 0.15 + view.v / 60), me, 1.4);
-  R(ctx, RUN_X - 3, py - 9, 6, 4, '#ffffff');
-  R(ctx, RUN_X - 2, py - 8, 4, 1, '#c0392b');
-  if (view.tired && Math.floor(t * 3) % 2) txt(ctx, '*', RUN_X + 8, py - 22, '#7fd0ff');
-  if (!view.tired && view.v > 9.5) for (let i = 0; i < 3; i++) R(ctx, RUN_X - 14 - i * 6, py - 8 + i * 5, 4, 1, '#ffffff');
-  for (const n of view.npcs) if (n.lane === 0) draw(n);
+  if (!view.tired && view.v > 9.5) for (let i = 0; i < 3; i++) R(ctx, RUN_X - 16 - i * 6, py - 8 + i * 5, 5, 1, '#ffffff');
+  drawBody(ctx, RUN_X, py, runPose(view.ph, amp, view.tired ? 0.45 : 0.15 + view.v / 60), me, 1.55);
+  R(ctx, RUN_X - 3, py - 10, 7, 5, '#ffffff');
+  R(ctx, RUN_X - 2, py - 9, 5, 1, '#c0392b');
+  R(ctx, RUN_X - 1, py - 7, 3, 1, '#14101f');
+  const tagY = py - 34 + Math.round(Math.sin(t * 4));
+  R(ctx, RUN_X - 6, tagY, 13, 8, '#ffcc33');
+  R(ctx, RUN_X - 1, tagY + 8, 3, 2, '#ffcc33');
+  txtC(ctx, 'TU', RUN_X + 1, tagY + 2, '#14101f');
+  if (view.tired && Math.floor(t * 3) % 2) txt(ctx, '*', RUN_X + 9, py - 24, '#7fd0ff');
   // bordillo y público de primer plano (bajo el marcador)
   R(ctx, 0, 261, W, 4, '#9a9792');
   R(ctx, 0, 265, W, 95, '#7a7773');
