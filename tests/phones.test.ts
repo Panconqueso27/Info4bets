@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { advance, newGame } from '../src/core/game';
 import { buyPart, launchPhone } from '../src/core/phones';
-import { emptyDesign, fairPrice, marketLevel, modelIncome, PART_KINDS, partsOf, rateDesign, type PhoneDesign } from '../src/core/phonecore';
+import { emptyDesign, fairPrice, launchCost, marketLevel, marketResult, modelIncome, PART_KINDS, partsOf, rateDesign, type PhoneDesign } from '../src/core/phonecore';
 import type { Character } from '../src/core/types';
 
 const char: Character = { role: 'inmigrante', name: 'Test', age: 30, look: { outfit: 'a', hair: 'b', skin: 'c', hairColor: 'd', outfitColor: 'e' } };
@@ -14,7 +14,10 @@ const goodFree = (): PhoneDesign => ({
   pantalla: { id: 'p-gris', x: 0, y: 2, rot: false },
   camara: { id: 'c-1mp', x: 3, y: 0, rot: false },
   procesador: { id: 'u-32bit', x: 0, y: 6, rot: false },
+  memoria: { id: 'm-64k', x: 2, y: 6, rot: false },
   bateria: { id: 'b-nimh-s', x: 2, y: 3, rot: false },
+  color: 'rojo',
+  extras: ['serpiente'],
 });
 
 describe('taller de móviles', () => {
@@ -63,6 +66,35 @@ describe('taller de móviles', () => {
     const m = out.model;
     expect(modelIncome(m, m.launchedDay + 1)).toBeGreaterThanOrEqual(modelIncome(m, m.launchedDay + 20));
     expect(() => launchPhone(s, goodFree(), 100, at)).toThrow(/Hoy ya/);
+  });
+
+  it('marketing y tirada cambian el coste y las ventas', () => {
+    const r = rateDesign(goodFree());
+    expect(launchCost(r, 'grande', 'times')).toBeGreaterThan(launchCost(r, 'pequena', 'boca'));
+    const big = marketResult(r, fairPrice(r), 1, 0.5, 'times', 'grande');
+    const small = marketResult(r, fairPrice(r), 1, 0.5, 'times', 'pequena');
+    expect(small.units).toBeLessThanOrEqual(2);
+    expect(big.units).toBeGreaterThanOrEqual(small.units);
+  });
+
+  it('la memoria pegada al procesador rinde más', () => {
+    const near = rateDesign(goodFree());
+    const far = goodFree();
+    far.memoria = { id: 'm-64k', x: 3, y: 8, rot: false };
+    far.procesador = { id: 'u-32bit', x: 0, y: 0, rot: false };
+    expect(rateDesign(far).rendimiento).toBeLessThan(near.rendimiento);
+  });
+
+  it('colores y extras de pago también se compran', () => {
+    const s = newGame(char, at, 3);
+    advance(s, at);
+    s.bars.dinero = 5000;
+    const d = goodFree();
+    d.color = 'oro';
+    expect(() => launchPhone(s, d, 200, at)).toThrow(/aún no la tienes/);
+    buyPart(s, 'color:oro', at);
+    buyPart(s, 'extra:agua', at);
+    expect(s.phoneLab!.owned).toEqual(['color:oro', 'extra:agua']);
   });
 
   it('las piezas de pago hay que comprarlas', () => {

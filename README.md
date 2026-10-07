@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: 0.15.0**
+**Versión actual: 0.15.1**
 
 ## Probar la beta
 
@@ -21,6 +21,12 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.15.1
+
+- **Taller de móviles en pixel art:** la carcasa, la placa base y cada componente se dibujan como piezas reales: chips con sus patas y núcleo, memorias, baterías con etiqueta y carga, lentes con flash, pistas doradas, tornillos y condensadores. El frontal tiene auricular, botones de llamar y colgar, cruceta y teclado numérico (o QWERTY).
+- **La pantalla funciona:** según su gama muestra un reloj de dígitos LED, un menú de LCD verde o ámbar, la serpiente en grises, un fondo con la ciudad e iconos en color, o un escritorio de apps táctil que reacciona al dedo.
+- **Opciones de tycoon:** color de la carcasa (con colores especiales de pago), memoria (otra pieza que rinde más pegada al procesador), hasta tres funciones extra (antena, linterna, radio FM, la serpiente, QWERTY, resistente al agua, altavoz estéreo, TV, carga solar, lector de huella), campaña de publicidad (radio, TV o Times Square) y tamaño de la primera tirada (si es corta y triunfa, se agota).
 
 ## Novedades 0.15.0
 

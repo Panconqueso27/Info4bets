@@ -1,6 +1,6 @@
 import { advance, applyBars, dayNumber, log, pay, withCat } from './game';
 import { countMission } from './economy';
-import { emptyDesign, emptyLab, hasPart, launchCost, marketResult, OUTCOME_LABEL, PART_BY_ID, rateDesign, type PhoneDesign, type PhoneLab, type PhoneModel } from './phonecore';
+import { emptyDesign, emptyLab, hasPart, itemName, itemPrice, launchCost, MARKETING, marketResult, OUTCOME_LABEL, rateDesign, type MarketingId, type PhoneDesign, type PhoneLab, type PhoneModel, type RunId } from './phonecore';
 import { mixSeed, mulberry32 } from './rng';
 import { ROLES } from './roles';
 import type { GameState } from './types';
@@ -22,16 +22,16 @@ export function canWorkshop(state: GameState, now: number): string | null {
   return null;
 }
 
-/** Desbloquea una pieza de pago (para siempre). */
-export function buyPart(state: GameState, id: string, now: number) {
+/** Desbloquea para siempre una pieza ("id"), un color ("color:id") o un extra ("extra:id"). */
+export function buyPart(state: GameState, key: string, now: number) {
   advance(state, now);
-  const p = PART_BY_ID[id];
-  if (!p) throw new Error('Esa pieza no existe.');
+  const price = itemPrice(key);
+  if (!itemName(key)) throw new Error('Eso no existe.');
   const L = lab(state);
-  if (hasPart(L, id)) return;
-  withCat('inversiones', () => pay(state, p.price));
-  L.owned.push(id);
-  log(state, now, 'info', 'Taller de móviles', `Compras ${p.name} (${p.kind}) por ${ROLES[state.character.role].formatMoney(p.price)}.`, { dinero: -p.price });
+  if (hasPart(L, key)) return;
+  withCat('inversiones', () => pay(state, price));
+  L.owned.push(key);
+  log(state, now, 'info', 'Taller de móviles', `Compras ${itemName(key)} por ${ROLES[state.character.role].formatMoney(price)}.`, { dinero: -price });
 }
 
 /** Guarda el diseño en la mesa (sin coste). */
@@ -40,21 +40,22 @@ export function saveDraft(state: GameState, d: PhoneDesign) {
 }
 
 /** Lanza el modelo de la mesa con ese nombre y precio. */
-export function launchPhone(state: GameState, d: PhoneDesign, price: number, now: number) {
+export function launchPhone(state: GameState, d: PhoneDesign, price: number, now: number, marketing: MarketingId = 'boca', run: RunId = 'media') {
   advance(state, now);
   const why = canWorkshop(state, now);
   if (why) throw new Error(why);
   const L = lab(state);
-  for (const id of [d.shape, d.pantalla?.id, d.camara?.id, d.procesador?.id, d.bateria?.id]) if (id && !hasPart(L, id)) throw new Error('Esa pieza aún no la tienes.');
+  const keys = [d.shape, d.pantalla?.id, d.camara?.id, d.procesador?.id, d.memoria?.id, d.bateria?.id, d.color ? `color:${d.color}` : null, ...(d.extras ?? []).map((e) => `extra:${e}`)];
+  for (const id of keys) if (id && !hasPart(L, id)) throw new Error('Esa pieza aún no la tienes.');
   const r = rateDesign(d);
   if (!r.ok) throw new Error(r.issues.find((i) => i.level === 'grave')?.text ?? 'El móvil no está terminado.');
   const name = d.name.trim().slice(0, 18) || 'Mi móvil';
   const day = dayNumber(state, now);
   if (L.models.some((m) => m.launchedDay === day)) throw new Error('Hoy ya lanzaste un móvil. Las fábricas necesitan un día.');
-  const cost = launchCost(r);
+  const cost = launchCost(r, run, marketing);
   withCat('inversiones', () => pay(state, cost));
   const rand = mulberry32(mixSeed(state.seed, now));
-  const res = marketResult(r, price, day, rand() * 2 - 1);
+  const res = marketResult(r, price, day, rand() * 2 - 1, marketing, run);
   // versión: mismo nombre que uno anterior = nueva versión que lo sustituye
   const prev = L.models.filter((m) => m.name.replace(/ \d+$/, '') === name.replace(/ \d+$/, ''));
   const version = prev.length ? Math.max(...prev.map((m) => m.version)) + 1 : 1;
@@ -97,7 +98,7 @@ export function launchPhone(state: GameState, d: PhoneDesign, price: number, now
     now,
     res.outcome === 'fracaso' ? 'malo' : 'bueno',
     `Lanzamiento: ${fullName}`,
-    `${OUTCOME_LABEL[res.outcome]} Nota ${r.total} frente a ${res.level} que exige el mercado. Precio ${fmt(price)} (justo: ${fmt(res.fair)}). Lanzarlo costó ${fmt(cost)}.`,
+    `${OUTCOME_LABEL[res.outcome]} Nota ${r.total} frente a ${res.level} que exige el mercado. Precio ${fmt(price)} (justo: ${fmt(res.fair)}). Campaña: ${MARKETING.find((m) => m.id === marketing)!.name.toLowerCase()}. Lanzarlo costó ${fmt(cost)}.${res.soldOut ? ' ¡Se agotó la tirada! Pedían más de los que fabricaste.' : ''}`,
     { dinero: -cost },
   );
   return { model, result: res, cost, headline };

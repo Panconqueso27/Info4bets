@@ -9,10 +9,10 @@
  * La carcasa (forma) fija el tamaño de la cuadrícula.
  */
 
-export type PartKind = 'forma' | 'pantalla' | 'camara' | 'procesador' | 'bateria';
-export const PART_KINDS: PartKind[] = ['forma', 'pantalla', 'camara', 'procesador', 'bateria'];
-export const KIND_LABEL: Record<PartKind, string> = { forma: 'Forma', pantalla: 'Pantalla', camara: 'Cámara', procesador: 'Procesador', bateria: 'Batería' };
-export const KIND_ICON: Record<PartKind, string> = { forma: '📱', pantalla: '🖥', camara: '📷', procesador: '🧠', bateria: '🔋' };
+export type PartKind = 'forma' | 'pantalla' | 'camara' | 'procesador' | 'memoria' | 'bateria';
+export const PART_KINDS: PartKind[] = ['forma', 'pantalla', 'camara', 'procesador', 'memoria', 'bateria'];
+export const KIND_LABEL: Record<PartKind, string> = { forma: 'Forma', pantalla: 'Pantalla', camara: 'Cámara', procesador: 'Procesador', memoria: 'Memoria', bateria: 'Batería' };
+export const KIND_ICON: Record<PartKind, string> = { forma: '📱', pantalla: '🖥', camara: '📷', procesador: '🧠', memoria: '💾', bateria: '🔋' };
 
 export interface Part {
   id: string;
@@ -86,6 +86,17 @@ export const PARTS: Part[] = [
   P({ id: 'u-cuadruple', kind: 'procesador', name: 'Cuatro núcleos', q: 8, price: 700, w: 3, h: 2, drain: 4, heat: 5, unit: 30, look: 'u4', note: 'Vuela. Necesita aire.' }),
   P({ id: 'u-chip', kind: 'procesador', name: 'Chip neural', q: 9, price: 1000, w: 2, h: 2, drain: 3, heat: 3, unit: 38, look: 'u5', note: 'Aprende lo que te gusta.' }),
   P({ id: 'u-quantum', kind: 'procesador', name: 'Cuántico', q: 10, price: 1600, w: 2, h: 2, drain: 5, heat: 6, unit: 52, look: 'u5', note: 'Nadie sabe cómo funciona.' }),
+  // --- memoria (interior): mejor cuanto más cerca del procesador
+  P({ id: 'm-16k', kind: 'memoria', name: '16 KB', q: 1, price: 0, w: 1, h: 1, unit: 2, look: 'm1', note: 'Caben diez números de teléfono.' }),
+  P({ id: 'm-64k', kind: 'memoria', name: '64 KB', q: 2, price: 0, w: 2, h: 1, unit: 3, look: 'm1', note: 'Agenda y alguna nota.' }),
+  P({ id: 'm-256k', kind: 'memoria', name: '256 KB', q: 3, price: 0, w: 2, h: 1, unit: 5, look: 'm2', note: 'Para mensajes cortos.' }),
+  P({ id: 'm-1m', kind: 'memoria', name: '1 MB', q: 4, price: 0, w: 1, h: 2, unit: 7, look: 'm2', note: 'Cabe un juego.' }),
+  P({ id: 'm-4m', kind: 'memoria', name: '4 MB', q: 5, price: 0, w: 2, h: 2, unit: 9, look: 'm3', note: 'Fotos y melodías.' }),
+  P({ id: 'm-16m', kind: 'memoria', name: '16 MB', q: 6, price: 150, w: 2, h: 1, unit: 12, look: 'm3', note: 'Cientos de fotos.' }),
+  P({ id: 'm-64m', kind: 'memoria', name: '64 MB', q: 7, price: 320, w: 2, h: 1, unit: 16, look: 'm4', note: 'Música en el bolsillo.' }),
+  P({ id: 'm-256m', kind: 'memoria', name: '256 MB', q: 8, price: 540, w: 2, h: 1, unit: 22, look: 'm4', note: 'Hasta vídeos.' }),
+  P({ id: 'm-1g', kind: 'memoria', name: '1 GB', q: 9, price: 820, w: 1, h: 2, unit: 30, look: 'm5', note: 'Un giga. ¡Un giga!' }),
+  P({ id: 'm-flash', kind: 'memoria', name: '8 GB flash', q: 10, price: 1200, w: 2, h: 1, unit: 40, look: 'm5', note: 'Toda una biblioteca.' }),
   // --- baterías (interior)
   P({ id: 'b-pilas', kind: 'bateria', name: 'Pilas AA', q: 1, price: 0, w: 2, h: 3, cap: 3, unit: 2, look: 'b1', note: 'Cuatro pilas del quiosco.' }),
   P({ id: 'b-nicd', kind: 'bateria', name: 'Ni-Cd', q: 2, price: 0, w: 3, h: 3, cap: 5, unit: 4, look: 'b2', note: 'Pesada y con efecto memoria.' }),
@@ -114,18 +125,88 @@ export interface PhoneDesign {
   name: string;
   /** Carcasa elegida. */
   shape: string;
+  /** Color de la carcasa (id de COLORS). */
+  color?: string;
   pantalla: Placed | null;
   camara: Placed | null;
   procesador: Placed | null;
+  memoria?: Placed | null;
   bateria: Placed | null;
+  /** Funciones extra (ids de EXTRAS), hasta MAX_EXTRAS. */
+  extras?: string[];
 }
 
 export const FRONT: PartKind[] = ['pantalla', 'camara'];
-export const INSIDE: PartKind[] = ['procesador', 'bateria'];
+export const INSIDE: PartKind[] = ['procesador', 'memoria', 'bateria'];
 
 export function emptyDesign(name = 'Mi móvil'): PhoneDesign {
-  return { name, shape: 'f-clasico', pantalla: null, camara: null, procesador: null, bateria: null };
+  return { name, shape: 'f-clasico', color: 'negro', pantalla: null, camara: null, procesador: null, memoria: null, bateria: null, extras: [] };
 }
+
+/** Colores de carcasa: algunos de moda suben el diseño; los especiales son de pago. */
+export interface PhoneColor {
+  id: string;
+  name: string;
+  hex: string;
+  /** Lo que gusta al público (0–8). */
+  style: number;
+  price: number;
+}
+export const COLORS: PhoneColor[] = [
+  { id: 'negro', name: 'Negro', hex: '#2a2a33', style: 3, price: 0 },
+  { id: 'gris', name: 'Gris oficina', hex: '#8a8e94', style: 1, price: 0 },
+  { id: 'blanco', name: 'Blanco', hex: '#e8e4d8', style: 3, price: 0 },
+  { id: 'rojo', name: 'Rojo', hex: '#c0392b', style: 4, price: 0 },
+  { id: 'azul', name: 'Azul', hex: '#2f5fa8', style: 3, price: 0 },
+  { id: 'rosa', name: 'Rosa chicle', hex: '#e8619e', style: 5, price: 0 },
+  { id: 'verde', name: 'Verde menta', hex: '#5fbf8a', style: 4, price: 0 },
+  { id: 'oro', name: 'Oro', hex: '#d8a830', style: 7, price: 300 },
+  { id: 'neon', name: 'Neón', hex: '#ff4f9a', style: 7, price: 450 },
+  { id: 'pixel', name: 'Edición Pixelopolis', hex: '#7b4fa0', style: 8, price: 700 },
+];
+export const COLOR_BY_ID: Record<string, PhoneColor> = Object.fromEntries(COLORS.map((c) => [c.id, c]));
+
+/** Funciones extra: suben la nota de "extras" pero encarecen cada unidad. */
+export interface PhoneExtra {
+  id: string;
+  name: string;
+  icon: string;
+  /** Puntos de extras (0–100 en total). */
+  pts: number;
+  unit: number;
+  price: number;
+  note: string;
+}
+export const MAX_EXTRAS = 3;
+export const EXTRAS: PhoneExtra[] = [
+  { id: 'antena', name: 'Antena extensible', icon: '📡', pts: 14, unit: 2, price: 0, note: 'Más cobertura en el metro.' },
+  { id: 'linterna', name: 'Linterna', icon: '🔦', pts: 16, unit: 3, price: 0, note: 'Para los apagones de Nueva York.' },
+  { id: 'radio', name: 'Radio FM', icon: '📻', pts: 18, unit: 4, price: 0, note: 'Los Yankees en directo.' },
+  { id: 'serpiente', name: 'Juego de la serpiente', icon: '🐍', pts: 22, unit: 2, price: 0, note: 'Adictivo. Nadie podrá soltarlo.' },
+  { id: 'qwerty', name: 'Teclado QWERTY', icon: '⌨', pts: 22, unit: 6, price: 0, note: 'Escribir mensajes sin sufrir.' },
+  { id: 'agua', name: 'Resistente al agua', icon: '💧', pts: 28, unit: 8, price: 260, note: 'Sobrevive a un charco de la Quinta.' },
+  { id: 'altavoz', name: 'Altavoz estéreo', icon: '🔊', pts: 26, unit: 6, price: 320, note: 'Música para todo el vagón.' },
+  { id: 'tv', name: 'Sintonizador de TV', icon: '📺', pts: 34, unit: 10, price: 600, note: 'El telediario en la mano.' },
+  { id: 'solar', name: 'Carga solar', icon: '☀', pts: 34, unit: 12, price: 800, note: 'Se carga en Central Park.' },
+  { id: 'huella', name: 'Lector de huella', icon: '☝', pts: 42, unit: 14, price: 1100, note: 'Seguridad de película de espías.' },
+];
+export const EXTRA_BY_ID: Record<string, PhoneExtra> = Object.fromEntries(EXTRAS.map((e) => [e.id, e]));
+
+/** Campaña de publicidad al lanzar. */
+export const MARKETING = [
+  { id: 'boca', name: 'Boca a boca', cost: 0, mul: 1, bonus: 0, note: 'Gratis. Que corra la voz.' },
+  { id: 'radio', name: 'Cuñas de radio', cost: 150, mul: 1.3, bonus: 2, note: 'Suena en las emisoras de la ciudad.' },
+  { id: 'tv', name: 'Anuncio en TV', cost: 450, mul: 1.7, bonus: 5, note: 'En el descanso de los Knicks.' },
+  { id: 'times', name: 'Pantalla en Times Square', cost: 1000, mul: 2.2, bonus: 8, note: 'Todo Nueva York lo verá.' },
+] as const;
+/** Tamaño de la primera tirada: más barata y corta o más cara y sin límite de ventas. */
+export const RUNS = [
+  { id: 'pequena', name: 'Pequeña (500 uds.)', mul: 0.6, cap: 2 },
+  { id: 'media', name: 'Media (2.000 uds.)', mul: 1, cap: 5 },
+  { id: 'grande', name: 'Grande (10.000 uds.)', mul: 1.8, cap: 99 },
+] as const;
+export type MarketingId = (typeof MARKETING)[number]['id'];
+export type RunId = (typeof RUNS)[number]['id'];
 
 /** Tamaño de una pieza colocada (con el giro). */
 export function sizeOf(pl: Placed) {
@@ -161,6 +242,7 @@ export interface Rating {
   pantalla: number;
   autonomia: number;
   diseno: number;
+  extras: number;
   /** Nota global (0–100) y si se puede fabricar. */
   total: number;
   ok: boolean;
@@ -177,20 +259,34 @@ export function rateDesign(d: PhoneDesign): Rating {
     const s = sizeOf(pl);
     return pl.x < 0 || pl.y < 0 || pl.x + s.w > shape.w || pl.y + s.h > shape.h;
   };
-  for (const k of ['pantalla', 'camara', 'procesador', 'bateria'] as const) {
+  for (const k of ['pantalla', 'camara', 'procesador', 'memoria', 'bateria'] as const) {
     const pl = d[k];
     if (!pl) issues.push({ level: 'grave', text: `Falta ${KIND_LABEL[k].toLowerCase()}.` });
     else if (out(pl)) issues.push({ level: 'grave', text: `${KIND_LABEL[k]} se sale de la carcasa.` });
   }
   const { pantalla: scr, camara: cam, procesador: cpu, bateria: bat } = d;
+  const mem = d.memoria ?? null;
   if (cpu && bat && overlap(cpu, bat)) issues.push({ level: 'grave', text: 'El procesador y la batería están uno encima del otro.' });
+  if (mem && cpu && overlap(mem, cpu)) issues.push({ level: 'grave', text: 'La memoria está encima del procesador.' });
+  if (mem && bat && overlap(mem, bat)) issues.push({ level: 'grave', text: 'La memoria está encima de la batería.' });
   if (scr && cam && overlap(scr, cam)) issues.push({ level: 'grave', text: 'La cámara queda tapada por la pantalla.' });
 
   const q = (pl: Placed | null) => (pl ? PART_BY_ID[pl.id].q : 0);
-  let rendimiento = q(cpu) * 10;
+  let rendimiento = q(cpu) * 7.5 + q(mem) * 2.5;
+  if (mem && cpu && !overlap(mem, cpu)) {
+    const g = gap(mem, cpu);
+    if (g === 0) {
+      rendimiento += 6;
+      issues.push({ level: 'bien', text: 'Memoria junto al procesador: va rapidísimo.' });
+    } else if (g >= 3) {
+      rendimiento -= 6;
+      issues.push({ level: 'aviso', text: 'La memoria está lejos del procesador: va lento.' });
+    }
+  }
   let camara = q(cam) * 10;
   let pantalla = q(scr) * 10;
-  let diseno = shape.style! * 10;
+  const color = COLOR_BY_ID[d.color ?? 'negro'] ?? COLORS[0];
+  let diseno = shape.style! * 9 + color.style * 1.5;
   // --- colocación
   if (cam && !out(cam)) {
     if (cam.y === 0) issues.push({ level: 'bien', text: 'Cámara arriba, donde debe estar.' });
@@ -240,8 +336,8 @@ export function rateDesign(d: PhoneDesign): Rating {
     }
   }
   // equilibrio: el peso de batería y procesador cerca del centro
-  const inside = [cpu, bat].filter(Boolean) as Placed[];
-  if (inside.length === 2 && !inside.some(out)) {
+  const inside = [cpu, bat, mem].filter(Boolean) as Placed[];
+  if (inside.length >= 2 && !inside.some(out)) {
     let mx = 0;
     let my = 0;
     let m = 0;
@@ -271,19 +367,30 @@ export function rateDesign(d: PhoneDesign): Rating {
   const drain = (scr ? PART_BY_ID[scr.id].drain ?? 0 : 0) + (cpu ? PART_BY_ID[cpu.id].drain ?? 0 : 0);
   const cap = bat ? PART_BY_ID[bat.id].cap ?? 0 : 0;
   const ratio = drain ? cap / drain : 0;
+  let autonomiaBonus = 0;
   let autonomia = Math.round(Math.min(100, ratio * 40));
   if (bat && ratio < 0.9) issues.push({ level: 'aviso', text: '🔋 La batería no aguanta ni una tarde.' });
   else if (ratio >= 2.2) issues.push({ level: 'bien', text: 'Batería para varios días.' });
+
+  // extras: suman, pero más de dos hacen el móvil más gordo
+  const ex = (d.extras ?? []).map((id) => EXTRA_BY_ID[id]).filter(Boolean);
+  let extras = ex.reduce((a, e) => a + e.pts, 0);
+  if (ex.length > 2) {
+    diseno -= 6;
+    issues.push({ level: 'aviso', text: 'Con tantas funciones queda gordito.' });
+  }
+  if (ex.some((e) => e.id === 'solar' || e.id === 'linterna') && cap) autonomiaBonus += ex.some((e) => e.id === 'solar') ? 15 : 0;
 
   const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
   rendimiento = clamp(rendimiento);
   camara = clamp(camara);
   pantalla = clamp(pantalla);
-  autonomia = clamp(autonomia);
+  autonomia = clamp(autonomia + autonomiaBonus);
   diseno = clamp(diseno);
-  const total = clamp(rendimiento * 0.24 + pantalla * 0.24 + camara * 0.18 + autonomia * 0.16 + diseno * 0.18);
-  const unitCost = [d.shape, scr?.id, cam?.id, cpu?.id, bat?.id].reduce((a, id) => a + (id ? PART_BY_ID[id].unit : 0), 0);
-  return { rendimiento, camara, pantalla, autonomia, diseno, total, ok: !issues.some((i) => i.level === 'grave'), issues, unitCost };
+  extras = clamp(extras);
+  const total = clamp(rendimiento * 0.22 + pantalla * 0.22 + camara * 0.16 + autonomia * 0.14 + diseno * 0.14 + extras * 0.12);
+  const unitCost = [d.shape, scr?.id, cam?.id, cpu?.id, mem?.id, bat?.id].reduce((a, id) => a + (id ? PART_BY_ID[id].unit : 0), 0) + ex.reduce((a, e) => a + e.unit, 0);
+  return { rendimiento, camara, pantalla, autonomia, diseno, extras, total, ok: !issues.some((i) => i.level === 'grave'), issues, unitCost };
 }
 
 // ---------------------------------------------------------------------------
@@ -296,8 +403,10 @@ export function marketLevel(day: number): number {
 }
 
 /** Coste de lanzar un modelo: moldes, publicidad y la primera tirada. */
-export function launchCost(r: Rating): number {
-  return 150 + r.unitCost * 6;
+export function launchCost(r: Rating, run: RunId = 'media', marketing: MarketingId = 'boca'): number {
+  const R = RUNS.find((x) => x.id === run)!;
+  const M = MARKETING.find((x) => x.id === marketing)!;
+  return Math.round(150 + r.unitCost * 6 * R.mul + M.cost);
 }
 
 /** Precio que el público ve razonable para esa nota. */
@@ -312,17 +421,22 @@ export const OUTCOME_LABEL: Record<Outcome, string> = { fracaso: 'Fracaso', disc
  * Cómo le va al móvil: la nota contra lo que exige el mercado, el precio
  * contra el justo y un poco de suerte (`luck` de -1 a 1).
  */
-export function marketResult(r: Rating, price: number, day: number, luck: number) {
+export function marketResult(r: Rating, price: number, day: number, luck: number, marketing: MarketingId = 'boca', run: RunId = 'media') {
+  const M = MARKETING.find((x) => x.id === marketing)!;
+  const R = RUNS.find((x) => x.id === run)!;
   const level = marketLevel(day);
   const fair = fairPrice(r);
   // caro resta mucho; barato suma algo pero se gana menos por unidad
   const priceFx = ((fair - price) / Math.max(1, fair)) * 22;
-  const score = r.total - level + Math.max(-30, Math.min(10, priceFx)) + luck * 7;
+  const score = r.total - level + Math.max(-30, Math.min(10, priceFx)) + luck * 7 + M.bonus;
   const outcome: Outcome = score < -6 ? 'fracaso' : score < 4 ? 'discreto' : score < 16 ? 'exito' : 'bombazo';
   const margin = Math.max(0, price - r.unitCost);
   // unidades al día al principio, según el resultado
-  const units = { fracaso: 0.4, discreto: 1.4, exito: 3.2, bombazo: 6 }[outcome] * (1 + Math.max(0, score) / 30);
-  return { level, fair, score: Math.round(score), outcome, margin, units: Math.round(units * 10) / 10 };
+  const demand = { fracaso: 0.4, discreto: 1.4, exito: 3.2, bombazo: 6 }[outcome] * (1 + Math.max(0, score) / 30) * M.mul;
+  // con una tirada corta se agota: se venden menos de los que se pedían
+  const units = Math.min(demand, R.cap);
+  const soldOut = demand > R.cap;
+  return { level, fair, score: Math.round(score), outcome, margin, units: Math.round(units * 10) / 10, soldOut };
 }
 
 /** Un modelo a la venta. */
@@ -370,4 +484,15 @@ export function emptyLab(): PhoneLab {
   return { owned: [], draft: emptyDesign(), models: [], press: [] };
 }
 
-export const hasPart = (lab: PhoneLab | undefined, id: string) => PART_BY_ID[id].price === 0 || !!lab?.owned.includes(id);
+/** Precio de algo que se desbloquea: pieza ("id"), color ("color:id") o extra ("extra:id"). */
+export function itemPrice(key: string): number {
+  if (key.startsWith('color:')) return COLOR_BY_ID[key.slice(6)]?.price ?? 0;
+  if (key.startsWith('extra:')) return EXTRA_BY_ID[key.slice(6)]?.price ?? 0;
+  return PART_BY_ID[key]?.price ?? 0;
+}
+export function itemName(key: string): string {
+  if (key.startsWith('color:')) return `color ${COLOR_BY_ID[key.slice(6)]?.name ?? ''}`;
+  if (key.startsWith('extra:')) return EXTRA_BY_ID[key.slice(6)]?.name ?? '';
+  return PART_BY_ID[key]?.name ?? '';
+}
+export const hasPart = (lab: PhoneLab | undefined, key: string) => itemPrice(key) === 0 || !!lab?.owned.includes(key);

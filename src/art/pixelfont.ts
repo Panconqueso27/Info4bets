@@ -9,7 +9,7 @@ const GLYPHS: Record<string, string> = {
   Y: '101101010010010', Z: '111001010100111', '0': '111101101101111', '1': '010110010010111',
   '2': '110001010100111', '3': '110001010001110', '4': '101101111001001', '5': '111100110001110',
   '6': '011100111101111', '7': '111001010010010', '8': '111101111101111', '9': '111101111001110',
-  '-': '000000111000000', '.': '000000000000010', "'": '010010000000000', ' ': '000000000000000',
+  '-': '000000111000000', ':': '000010000010000', '+': '000010111010000', '%': '101001010100101', '/': '001001010100100', '.': '000000000000010', "'": '010010000000000', ' ': '000000000000000',
 };
 
 export function textWidth(text: string): number {
@@ -18,6 +18,8 @@ export function textWidth(text: string): number {
 
 export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string) {
   ctx.fillStyle = color;
+  x = Math.round(x);
+  y = Math.round(y);
   const t = text.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   for (let i = 0; i < t.length; i++) {
     const g = GLYPHS[t[i]] ?? GLYPHS[' '];

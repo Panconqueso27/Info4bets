@@ -2,16 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { randomPerson } from '../../art/portrait';
 import { fx, play } from '../../platform/audio';
 import {
+  COLORS,
+  EXTRAS,
   fairPrice,
   hasPart,
-  KIND_ICON,
-  KIND_LABEL,
+  MARKETING,
+  MAX_EXTRAS,
+  RUNS,
+  type MarketingId,
+  type RunId,
   launchCost,
   marketLevel,
   modelIncome,
   OUTCOME_LABEL,
   PART_BY_ID,
-  PART_KINDS,
   partsOf,
   rateDesign,
   sizeOf,
@@ -25,6 +29,7 @@ import {
 } from '../../core/phonecore';
 import { Backdrop, Bubble, Portrait, PopLayer, usePops, useTalk } from '../games/stage';
 import { benchScene } from './bench';
+import { canvasSize, drawPart, drawPhone, M, PX } from './phoneArt';
 import './workshop.css';
 
 export interface WorkshopProps {
@@ -34,13 +39,65 @@ export interface WorkshopProps {
   fmt: (n: number) => string;
   onBuy: (id: string) => boolean;
   onSave: (d: PhoneDesign) => void;
-  onLaunch: (d: PhoneDesign, price: number) => { model: PhoneModel; headline: { title: string; text: string }; cost: number; result: { outcome: Outcome; level: number } } | void;
+  onLaunch: (d: PhoneDesign, price: number, marketing: MarketingId, run: RunId) => { model: PhoneModel; headline: { title: string; text: string }; cost: number; result: { outcome: Outcome; level: number } } | void;
   onClose: () => void;
 }
 
 type Layer = 'front' | 'inside';
 type Slot = Exclude<PartKind, 'forma'>;
-const LAYER_OF: Record<Slot, Layer> = { pantalla: 'front', camara: 'front', procesador: 'inside', bateria: 'inside' };
+const LAYER_OF: Record<Slot, Layer> = { pantalla: 'front', camara: 'front', procesador: 'inside', memoria: 'inside', bateria: 'inside' };
+type Tab = PartKind | 'color' | 'extras';
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'forma', label: 'Forma', icon: '📱' },
+  { id: 'color', label: 'Color', icon: '🎨' },
+  { id: 'pantalla', label: 'Pantalla', icon: '🖥' },
+  { id: 'camara', label: 'Cámara', icon: '📷' },
+  { id: 'procesador', label: 'Chip', icon: '🧠' },
+  { id: 'memoria', label: 'Memoria', icon: '💾' },
+  { id: 'bateria', label: 'Batería', icon: '🔋' },
+  { id: 'extras', label: 'Extras', icon: '✨' },
+];
+
+/** Dibujo en miniatura de una pieza para el cajón. */
+function PartArt({ part }: { part: Part }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const w = part.kind === 'forma' ? 22 : part.w * PX;
+  const h = part.kind === 'forma' ? 36 : part.h * PX;
+  useEffect(() => {
+    const c = ref.current?.getContext('2d');
+    if (!c) return;
+    c.clearRect(0, 0, w, h);
+    drawPart(c, part, 0, 0, w, h, 1.3);
+  }, [part.id]);
+  const k = Math.min(40 / w, 40 / h, 3);
+  return <canvas ref={ref} width={w} height={h} class="ws-art" style={{ width: w * k, height: h * k }} />;
+}
+
+/** El móvil dibujado en pixel art, con la pantalla encendida. */
+function PhoneCanvas({ d, layer, scale }: { d: PhoneDesign; layer: Layer; scale: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const st = useRef({ d, layer });
+  st.current = { d, layer };
+  const size = canvasSize(PART_BY_ID[d.shape]);
+  useEffect(() => {
+    const c = ref.current?.getContext('2d');
+    if (!c) return;
+    let raf = 0;
+    let last = -1;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const f = Math.floor((now - t0) / 125);
+      if (f !== last) {
+        last = f;
+        drawPhone(c, st.current.d, st.current.layer, (now - t0) / 1000);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [size.w, size.h]);
+  return <canvas ref={ref} width={size.w} height={size.h} class="ws-canvas" style={{ width: size.w * scale, height: size.h * scale }} />;
+}
 
 const TIPS = [
   'La cámara, arriba del todo. Si no, sale el dedo en las fotos.',
@@ -57,7 +114,7 @@ const TIPS = [
 export function Workshop(p: WorkshopProps) {
   const [d, setD] = useState<PhoneDesign>(() => JSON.parse(JSON.stringify(p.lab.draft)));
   const [layer, setLayer] = useState<Layer>('front');
-  const [tab, setTab] = useState<PartKind>('forma');
+  const [tab, setTab] = useState<Tab>('forma');
   const [sheet, setSheet] = useState<null | 'launch' | 'models'>(null);
   const [result, setResult] = useState<null | { title: string; text: string; outcome: Outcome; name: string; cost: number; perDay: number }>(null);
   const [mentor] = useState(() => randomPerson(77001985));
@@ -88,7 +145,9 @@ export function Workshop(p: WorkshopProps) {
     const fit = () => {
       const r = benchRef.current?.getBoundingClientRect();
       if (!r) return;
-      setCell(Math.max(18, Math.floor(Math.min((r.width - 70) / shape.w, (r.height - 36) / shape.h))));
+      const size = canvasSize(shape);
+      const k = Math.min((r.width - 60) / size.w, (r.height - 16) / size.h);
+      setCell(Math.max(16, Math.floor(k * PX)));
     };
     fit();
     window.addEventListener('resize', fit);
@@ -134,19 +193,39 @@ export function Workshop(p: WorkshopProps) {
   };
 
   // ---------------------------------------------------------------- cajón de piezas
-  const owned = (id: string) => hasPart(p.lab, id);
-  const pick = (part: Part) => {
-    if (!owned(part.id)) {
-      if (p.money < part.price) {
-        talk.say(`Esa pieza cuesta ${p.fmt(part.price)}. Aún no llega el dinero.`, 'triste');
-        play.error();
-        return;
-      }
-      if (!p.onBuy(part.id)) return;
-      fx.register();
-      pop(`−${p.fmt(part.price)}`, 50, 70, 'bad');
-      talk.say(`¡${part.name}! Buena compra.`, 'feliz');
+  const owned = (key: string) => hasPart(p.lab, key);
+  /** Compra lo que haga falta antes de usarlo; devuelve false si no se pudo. */
+  const ensure = (key: string, name: string, price: number) => {
+    if (owned(key)) return true;
+    if (p.money < price) {
+      talk.say(`${name} cuesta ${p.fmt(price)}. Aún no llega el dinero.`, 'triste');
+      play.error();
+      return false;
     }
+    if (!p.onBuy(key)) return false;
+    fx.register();
+    pop(`−${p.fmt(price)}`, 50, 70, 'bad');
+    talk.say(`¡${name}! Buena compra.`, 'feliz');
+    return true;
+  };
+  const pickColor = (id: string, name: string, price: number) => {
+    if (!ensure(`color:${id}`, name, price)) return;
+    fx.pop();
+    setD((x) => ({ ...x, color: id }));
+  };
+  const toggleExtra = (id: string, name: string, price: number) => {
+    const on = (d.extras ?? []).includes(id);
+    if (!on && (d.extras ?? []).length >= MAX_EXTRAS) {
+      talk.say(`Máximo ${MAX_EXTRAS} extras: si no, no cabe en el bolsillo.`, 'nervios');
+      play.error();
+      return;
+    }
+    if (!on && !ensure(`extra:${id}`, name, price)) return;
+    fx.pop();
+    setD((x) => ({ ...x, extras: on ? (x.extras ?? []).filter((e) => e !== id) : [...(x.extras ?? []), id] }));
+  };
+  const pick = (part: Part) => {
+    if (!ensure(part.id, part.name, part.price)) return;
     fx.pop();
     if (part.kind === 'forma') {
       setD((x) => ({ ...x, shape: part.id }));
@@ -162,8 +241,8 @@ export function Workshop(p: WorkshopProps) {
     });
   };
 
-  const launch = (price: number) => {
-    const res = p.onLaunch({ ...d }, price);
+  const launch = (price: number, mkt: MarketingId, run: RunId) => {
+    const res = p.onLaunch({ ...d }, price, mkt, run);
     if (!res) return;
     setSheet(null);
     const good = res.result.outcome === 'exito' || res.result.outcome === 'bombazo';
@@ -203,27 +282,26 @@ export function Workshop(p: WorkshopProps) {
             Interior
           </button>
         </div>
-        <div class={`ws-phone look-${shape.look} layer-${layer}`} style={{ width: shape.w * cell, height: shape.h * cell, '--cell': `${cell}px` }} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-          <div class="ws-grid" />
-          {(['procesador', 'bateria', 'pantalla', 'camara'] as Slot[]).map((slot) => {
+        <div class={`ws-phone layer-${layer}`} style={{ width: canvasSize(shape).w * (cell / PX), height: canvasSize(shape).h * (cell / PX) }} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+          <PhoneCanvas d={d} layer={layer} scale={cell / PX} />
+          {(['procesador', 'memoria', 'bateria', 'pantalla', 'camara'] as Slot[]).map((slot) => {
             const pl = d[slot];
-            if (!pl) return null;
+            if (!pl || LAYER_OF[slot] !== layer) return null;
             const s = sizeOf(pl);
             const part = PART_BY_ID[pl.id];
             const out = pl.x < 0 || pl.y < 0 || pl.x + s.w > shape.w || pl.y + s.h > shape.h;
-            const mine = LAYER_OF[slot] === layer;
+            const k = cell / PX;
             return (
               <div
                 key={slot}
-                class={`ws-part kind-${slot} plook-${part.look} ${mine ? 'mine' : 'other'} ${out ? 'out' : ''} ${pl.rot ? 'rot' : ''}`}
-                style={{ left: pl.x * cell, top: pl.y * cell, width: s.w * cell, height: s.h * cell }}
+                class={`ws-hit ${out ? 'out' : ''}`}
+                style={{ left: (M.x + pl.x * PX) * k, top: (M.top + pl.y * PX) * k, width: s.w * cell, height: s.h * cell }}
                 onPointerDown={(e) => onDown(slot, e)}
               >
                 <span class="ws-part-label">{part.name}</span>
               </div>
             );
           })}
-          {shape.look === 'concha' && <div class="ws-hinge" />}
         </div>
       </div>
 
@@ -245,6 +323,7 @@ export function Workshop(p: WorkshopProps) {
               ['📷', 'Cámara', rating.camara],
               ['🔋', 'Batería', rating.autonomia],
               ['✨', 'Diseño', rating.diseno],
+              ['★', 'Extras', rating.extras],
             ] as const
           ).map(([ic, label, v]) => (
             <div key={label} class="ws-bar" title={label}>
@@ -271,32 +350,61 @@ export function Workshop(p: WorkshopProps) {
 
       <div class="ws-drawer">
         <div class="ws-tabs">
-          {PART_KINDS.map((k) => (
-            <button key={k} class={tab === k ? 'on' : ''} onClick={() => (setTab(k), fx.pop())}>
-              <span>{KIND_ICON[k]}</span>
-              {KIND_LABEL[k]}
+          {TABS.map((tb) => (
+            <button key={tb.id} class={tab === tb.id ? 'on' : ''} onClick={() => (setTab(tb.id), fx.pop())}>
+              <span>{tb.icon}</span>
+              {tb.label}
             </button>
           ))}
         </div>
         <div class="ws-parts">
-          {partsOf(tab).map((part) => {
-            const has = owned(part.id);
-            const using = part.kind === 'forma' ? d.shape === part.id : d[part.kind as Slot]?.id === part.id;
-            return (
-              <button key={part.id} class={`ws-card ${has ? '' : 'locked'} ${using ? 'using' : ''}`} onClick={() => pick(part)}>
-                <span class={`ws-card-art kind-${part.kind} plook-${part.look} look-${part.look}`} />
-                <b>{part.name}</b>
-                <span class="ws-q">{'★'.repeat(Math.ceil(part.q / 2))}</span>
-                <small>
-                  {part.kind === 'forma' ? `${part.w}×${part.h}` : `${part.w}×${part.h}`}
-                  {part.drain ? ` · gasta ${part.drain}` : ''}
-                  {part.cap ? ` · carga ${part.cap}` : ''}
-                  {part.heat && part.heat >= 4 ? ' · 🔥' : ''}
-                </small>
-                {!has && <em>{p.fmt(part.price)}</em>}
-              </button>
-            );
-          })}
+          {tab === 'color' &&
+            COLORS.map((c) => {
+              const has = owned(`color:${c.id}`);
+              return (
+                <button key={c.id} class={`ws-card ${has ? '' : 'locked'} ${(d.color ?? 'negro') === c.id ? 'using' : ''}`} onClick={() => pickColor(c.id, c.name, c.price)}>
+                  <span class="ws-swatch" style={{ background: c.hex }} />
+                  <b>{c.name}</b>
+                  <span class="ws-q">{'★'.repeat(Math.max(1, Math.round(c.style / 2)))}</span>
+                  {!has && <em>{p.fmt(c.price)}</em>}
+                </button>
+              );
+            })}
+          {tab === 'extras' &&
+            EXTRAS.map((e) => {
+              const has = owned(`extra:${e.id}`);
+              const on = (d.extras ?? []).includes(e.id);
+              return (
+                <button key={e.id} class={`ws-card ${has ? '' : 'locked'} ${on ? 'using' : ''}`} onClick={() => toggleExtra(e.id, e.name, e.price)}>
+                  <span class="ws-extra-ic">{e.icon}</span>
+                  <b>{e.name}</b>
+                  <small>+{e.pts} pts · {p.fmt(e.unit)}/ud.</small>
+                  {!has && <em>{p.fmt(e.price)}</em>}
+                </button>
+              );
+            })}
+          {tab !== 'color' &&
+            tab !== 'extras' &&
+            partsOf(tab).map((part) => {
+              const has = owned(part.id);
+              const using = part.kind === 'forma' ? d.shape === part.id : d[part.kind as Slot]?.id === part.id;
+              return (
+                <button key={part.id} class={`ws-card ${has ? '' : 'locked'} ${using ? 'using' : ''}`} onClick={() => pick(part)}>
+                  <span class="ws-card-art">
+                    <PartArt part={part} />
+                  </span>
+                  <b>{part.name}</b>
+                  <span class="ws-q">{'★'.repeat(Math.ceil(part.q / 2))}</span>
+                  <small>
+                    {part.w}×{part.h}
+                    {part.drain ? ` · gasta ${part.drain}` : ''}
+                    {part.cap ? ` · carga ${part.cap}` : ''}
+                    {part.heat && part.heat >= 4 ? ' · 🔥' : ''}
+                  </small>
+                  {!has && <em>{p.fmt(part.price)}</em>}
+                </button>
+              );
+            })}
         </div>
         <div class="ws-actions">
           <button class="btn secondary" onClick={() => setSheet('models')}>
@@ -357,11 +465,13 @@ function freeSpot(d: PhoneDesign, slot: Slot, part: Part): { x: number; y: numbe
   return { x: 0, y: 0, rot: false };
 }
 
-function LaunchSheet({ d, setName, p, level, onLaunch, onClose }: { d: PhoneDesign; setName: (s: string) => void; p: WorkshopProps; level: number; onLaunch: (price: number) => void; onClose: () => void }) {
+function LaunchSheet({ d, setName, p, level, onLaunch, onClose }: { d: PhoneDesign; setName: (s: string) => void; p: WorkshopProps; level: number; onLaunch: (price: number, mkt: MarketingId, run: RunId) => void; onClose: () => void }) {
   const r = rateDesign(d);
   const fair = fairPrice(r);
   const [price, setPrice] = useState(fair);
-  const cost = launchCost(r);
+  const [mkt, setMkt] = useState<MarketingId>('boca');
+  const [run, setRun] = useState<RunId>('media');
+  const cost = launchCost(r, run, mkt);
   const diff = r.total - level;
   const vibe = diff >= 10 ? 'Los expertos lo ven ganador.' : diff >= 0 ? 'Puede funcionar si aciertas con el precio.' : diff >= -8 ? 'Va justo: la competencia es mejor.' : 'Se ha quedado viejo antes de salir.';
   return (
@@ -382,10 +492,33 @@ function LaunchSheet({ d, setName, p, level, onLaunch, onClose }: { d: PhoneDesi
           {price > fair * 1.2 && ' Muy caro: venderá poco.'}
           {price < fair * 0.8 && ' Barato: venderá, pero ganas poco por unidad.'}
         </p>
+        <div class="ws-field">
+          Publicidad
+          <div class="ws-opts">
+            {MARKETING.map((m) => (
+              <button key={m.id} class={mkt === m.id ? 'on' : ''} onClick={() => (setMkt(m.id), fx.pop())}>
+                <b>{m.name}</b>
+                <small>{m.cost ? p.fmt(m.cost) : 'Gratis'} · ventas ×{m.mul}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div class="ws-field">
+          Primera tirada
+          <div class="ws-opts three">
+            {RUNS.map((x) => (
+              <button key={x.id} class={run === x.id ? 'on' : ''} onClick={() => (setRun(x.id), fx.pop())}>
+                <b>{x.name.split(' (')[0]}</b>
+                <small>{x.name.match(/\((.*)\)/)?.[1]}</small>
+              </button>
+            ))}
+          </div>
+          <small>Corta: barata, pero si triunfa se agota. Grande: cara, y si fracasa te comes el almacén.</small>
+        </div>
         <p class="ws-forecast">
-          Lanzarlo cuesta <b>{p.fmt(cost)}</b> (moldes, publicidad y la primera tirada). Tienes {p.fmt(p.money)}.
+          Lanzarlo cuesta <b>{p.fmt(cost)}</b> (moldes, tirada y publicidad). Tienes {p.fmt(p.money)}.
         </p>
-        <button class="btn big-cta" disabled={p.money < cost} onClick={() => onLaunch(price)}>
+        <button class="btn big-cta" disabled={p.money < cost} onClick={() => onLaunch(price, mkt, run)}>
           {p.money < cost ? 'No te llega el dinero' : `Fabricar y lanzar · ${p.fmt(cost)}`}
         </button>
         <button class="btn secondary" onClick={onClose}>

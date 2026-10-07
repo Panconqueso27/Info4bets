@@ -709,7 +709,7 @@ export function App() {
         fmt={ROLES[state.character.role].formatMoney}
         onBuy={(id) => ask((s, t) => (buyPart(s, id, t), true)) === true}
         onSave={(d) => ask((s) => saveDraft(s, d))}
-        onLaunch={(d, price) => ask((s, t) => launchPhone(s, d, price, t))}
+        onLaunch={(d, price, mkt, run) => ask((s, t) => launchPhone(s, d, price, t, mkt, run))}
         onClose={() => setExtra(null)}
       />
     );
