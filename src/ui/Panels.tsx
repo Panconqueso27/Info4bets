@@ -5,7 +5,7 @@ import { COMPANIES } from '../core/market';
 import { ROLES } from '../core/roles';
 import type { GameState } from '../core/types';
 import { UPGRADES } from '../core/upgrades';
-import { startOfDay } from '../core/time';
+import { addDays, startOfDay } from '../core/time';
 import { StatsView } from './Extras';
 
 export function Modal({ title, onClose, children, kicker }: { title: string; onClose: () => void; children: any; kicker?: string }) {
@@ -141,6 +141,13 @@ export function NewsModal({ state, onClose }: { state: GameState; onClose: () =>
             <span>
               {name(n.ticker)} ({n.ticker}) · los analistas esperan que {n.hint === 'up' ? 'SUBA ▲' : 'BAJE ▼'}
             </span>
+          </div>
+        ))}
+        {(state.phoneLab?.press ?? []).filter((x) => x.date === state.today.date || x.date === addDays(state.today.date, -1)).map((x) => (
+          <div key={x.title} class="paper-item tech">
+            <small>TECNOLOGÍA</small>
+            <b>{x.title}</b>
+            <span>{x.text}</span>
           </div>
         ))}
         <div class="paper-foot">Las noticias no siempre aciertan. Puedes apostar en la bolsa durante tu jornada.</div>

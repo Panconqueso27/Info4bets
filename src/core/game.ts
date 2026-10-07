@@ -13,6 +13,7 @@ import { RADIO_BY_ID, radioJobs } from './radio';
 import type { BarId, Bars, Character, GameState, LogEntry, LogKind, OtherCharacter, PendingEvent, Role } from './types';
 import { ACHIEVEMENT_UNLOCKS, COSMETIC_BY_ID, STREAK_REWARDS } from './cosmetics';
 import { NPC_EFFECTS, NPCS, rememberNpc } from './npcs';
+import { modelIncome } from './phonecore';
 
 const LOG_LIMIT = 120;
 /** Si el jugador vuelve tras mucho tiempo, no simulamos más de un año de días perdidos. */
@@ -1297,6 +1298,19 @@ function passiveIncome(state: GameState, date: string, day: number, entry: (kind
       money += b.income;
       const lot = state.lots![b.id];
       parts.push(`${BIZ_BY_ID[lot.building].levels[lotLevel(lot) - 1].name.toLowerCase()} ${fmt(b.income)}`);
+    }
+    // móviles del taller a la venta: ingresos que bajan con el tiempo
+    for (const m of state.phoneLab?.models ?? []) {
+      if (m.retired) continue;
+      const inc = modelIncome(m, day);
+      if (inc > 0) {
+        money += inc;
+        m.earned += inc;
+        parts.push(`móvil ${m.name} ${fmt(inc)}`);
+      } else if (day - m.launchedDay > 2) {
+        m.retired = true;
+        parts.push(`el ${m.name} deja de venderse`);
+      }
     }
     if (state.pet && day > state.pet.since && (day - state.pet.since) % 30 === 0) {
       money -= PET_MONTHLY;

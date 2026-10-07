@@ -29,13 +29,14 @@ import {
 } from '../core/economy';
 import { actionsFor, actionStatus, canStartErrand, canTakeRadioJob, dayNumber, ERRAND_PAY, errandHours, todayJobs, weekOf } from '../core/game';
 import { ROLES } from '../core/roles';
+import { canWorkshop } from '../core/phones';
 import { formatDuration } from '../core/time';
 import type { GameState } from '../core/types';
 import { play } from '../platform/audio';
 import { exportCode, importCode } from '../platform/save';
 import { canEnterContest, CONTEST_BY_ID, CONTESTS, contestDays, contestFee, contestOpen, contestPrizes, contestRivals, type ContestResult } from '../core/contests';
 
-export type ExtraPanel = 'rastro' | 'carreras' | 'beisbol' | 'loteria' | 'bonos' | 'concursos' | 'casino';
+export type ExtraPanel = 'rastro' | 'carreras' | 'beisbol' | 'loteria' | 'bonos' | 'concursos' | 'casino' | 'taller';
 
 export interface ExtrasActions {
   onRadio: (id: string) => void;
@@ -120,6 +121,7 @@ export function ExtrasModal({ state, now, onClose, ...a }: { state: GameState; n
             <Activity icon="carta" title="Reparto de paquetes" text={`${errandHours(state)} h por la ciudad · ${fmt(ERRAND_PAY)}`} status={errand === 'done-today' ? 'Hecho hoy' : errand ? 'Ahora no' : null} cta="Salir" onClick={a.onErrand} />
             <Activity icon="taxi" title="Taxi" text={`${TAXI_HOURS} h de carreras · ${fmt(taxiPay(state, now).pay)} (más de noche y con lluvia)`} status={canTaxi(state, now)} cta="Ponerse al volante" onClick={a.onTaxi} />
             <Activity icon="libro" title="Clases de español" text={`1 h con los vecinos · ${fmt(CLASS_PAY)} y reputación`} status={canTeach(state, now)} cta="Dar clase" onClick={a.onClasses} />
+            <Activity icon="libro" title="Taller de móviles" text={`Diseña tu propio móvil y véndelo · ${(state.phoneLab?.models ?? []).filter((m) => !m.retired).length} a la venta`} status={canWorkshop(state, now)} cta="Ir al taller" onClick={() => a.onOpen('taller')} />
             <Activity icon="perrito" title="Puesto de perritos calientes" text={`Minijuego de 1 min · ${fmt(HOTDOG_PER_POINT)} por perrito bien servido`} status={canHotdogs(state, now)} cta="Abrir el puesto" onClick={a.onHotdogs} />
             <Activity icon="cartel" title="Rastro de Brooklyn" text="Compra barato, revende caro (domingos)" status={rastroOpen(state) ? canRastro(state, now) : 'Solo los domingos'} cta="Ir al rastro" onClick={() => a.onOpen('rastro')} />
           </>

@@ -157,6 +157,8 @@ export interface GameState {
   pet?: Pet | null;
   /** Máquinas expendedoras del inmigrante. */
   vending?: { count: number; broken: number };
+  /** Taller de móviles del inmigrante. */
+  phoneLab?: import('./phonecore').PhoneLab;
   /** Personajes recurrentes: afinidad y recuerdos. */
   npcs?: Record<string, { afinidad: number; recuerdos: string[] }>;
   /** El otro protagonista que vive en la misma ciudad (de una partida anterior o por defecto). */

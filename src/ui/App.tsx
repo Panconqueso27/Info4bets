@@ -89,6 +89,9 @@ import { CONTEST_BY_ID, contestPrizes, contestRivals, enterContest, finishContes
 const CONTEST_GAMES: Record<string, (p: MiniProps & { contest: ContestInfo }) => any> = { breakdance: Breakdance, perritos: Eating, simon: SimonGame, maraton: Marathon };
 import { Minimap } from './Minimap';
 import { Casino } from './casino/Casino';
+import { Workshop } from './workshop/Workshop';
+import { buyPart, launchPhone, saveDraft } from '../core/phones';
+import { emptyLab } from '../core/phonecore';
 import type { Marker } from '../scene/bridge';
 
 type Screen =
@@ -694,6 +697,19 @@ export function App() {
             setMinigame(`contest:${id}`);
           }
         }}
+        onClose={() => setExtra(null)}
+      />
+    );
+  else if (extra === 'taller')
+    overlay = (
+      <Workshop
+        lab={state.phoneLab ?? emptyLab()}
+        money={state.bars.dinero ?? 0}
+        day={dayNumber(state, now)}
+        fmt={ROLES[state.character.role].formatMoney}
+        onBuy={(id) => ask((s, t) => (buyPart(s, id, t), true)) === true}
+        onSave={(d) => ask((s) => saveDraft(s, d))}
+        onLaunch={(d, price) => ask((s, t) => launchPhone(s, d, price, t))}
         onClose={() => setExtra(null)}
       />
     );

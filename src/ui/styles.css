@@ -5243,3 +5243,10 @@ html.big-text .hud {
   font-size: 10px;
   pointer-events: none;
 }
+.paper-item.tech small {
+  display: block;
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: #c0392b;
+}

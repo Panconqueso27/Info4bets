@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: 0.14.0**
+**Versión actual: 0.15.0**
 
 ## Probar la beta
 
@@ -21,6 +21,15 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.15.0
+
+- **Taller de móviles** (inmigrante, en Extras): una mesa de técnico con flexo, soldador, multímetro y herramientas donde diseñas tu propio móvil.
+  - Cinco tipos de pieza: forma (carcasa), pantalla, cámara, procesador y batería. De cada una, 5 de serie gratis y 5 mejores de pago que se desbloquean para siempre.
+  - Las piezas se arrastran libremente por la carcasa abierta, en dos capas: frontal (pantalla y cámara) e interior (procesador y batería). Tocar una pieza la gira.
+  - La nota depende de las piezas y de cómo las colocas: cámara arriba, procesador lejos de la batería, peso equilibrado, pantalla grande pero sin dejarte sin batería, nada de huecos vacíos.
+  - Lanzar un modelo cuesta dinero. El mercado exige más cada día, así que con las piezas gratis solo se triunfa al principio.
+  - Un éxito sale en la sección de tecnología del periódico y deja ingresos pasivos cada día, que bajan con el tiempo. Con el mismo nombre sacas la versión 2, 3… con mejores piezas.
 
 ## Novedades 0.14.0
 
