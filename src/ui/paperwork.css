@@ -1,0 +1,118 @@
+/* Papeleo: la ventanilla del despacho, con el solicitante tras el cristal */
+.papers {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0.35) 100%),
+    repeating-linear-gradient(90deg, #5a3a24 0 18px, #4e321f 18px 19px, #63412a 19px 37px, #4e321f 37px 38px);
+}
+.booth {
+  position: relative;
+  flex: none;
+  height: 188px;
+  margin: 8px 10px 0;
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+  background: #2a3430;
+  box-shadow: 0 0 0 3px #2a1a10, 0 6px 0 #1a0f08, inset 0 0 30px rgba(0, 0, 0, 0.6);
+}
+.booth-bg {
+  filter: saturate(0.8);
+}
+.booth-person {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  transition:
+    transform 0.55s cubic-bezier(0.3, 0.8, 0.3, 1),
+    opacity 0.45s;
+  z-index: 1;
+}
+.booth-person.gone {
+  transform: translateX(-260%);
+  opacity: 0;
+  transition: none;
+}
+.booth-person.out {
+  transform: translateX(160%);
+  opacity: 0;
+}
+.booth-person .portrait {
+  filter: blur(0.7px) drop-shadow(0 0 6px rgba(10, 8, 20, 0.6));
+}
+/* cristal esmerilado con reflejos y la rejilla de voz */
+.booth-glass {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.16) 0 18%, rgba(255, 255, 255, 0) 18% 26%, rgba(255, 255, 255, 0.08) 26% 30%, rgba(255, 255, 255, 0) 30%),
+    linear-gradient(180deg, rgba(200, 230, 225, 0.28), rgba(150, 190, 185, 0.18));
+  backdrop-filter: blur(1.5px);
+  pointer-events: none;
+}
+.booth-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 7px solid #6b4a2c;
+  border-bottom-width: 12px;
+  box-shadow: inset 0 0 0 2px #2a1a10;
+  pointer-events: none;
+}
+.booth-sign {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  background: #14101f;
+  color: #ffcc33;
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  border-radius: 0 0 4px 4px;
+}
+.booth-grille {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 36px;
+  height: 14px;
+  transform: translateX(-50%);
+  border-radius: 7px;
+  background: radial-gradient(circle, #1a1a22 1.2px, transparent 1.6px) 0 0 / 5px 5px, #8a8e94;
+  box-shadow: 0 0 0 2px #4a4e54;
+}
+.booth-slot {
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 0;
+  height: 9px;
+  z-index: 4;
+  background: #1a0f08;
+  border-radius: 4px 4px 0 0;
+}
+.booth-bubble {
+  position: absolute !important;
+  left: 58%;
+  top: 22px;
+  z-index: 5;
+  max-width: 40%;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.papers .papers-desk {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0) 18px);
+}
+.papers .paper.doc {
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 0 30px rgba(255, 230, 170, 0.15);
+}
+.lowfx .booth-glass {
+  backdrop-filter: none;
+}
+.lowfx .booth-person .portrait {
+  filter: none;
+  opacity: 0.85;
+}

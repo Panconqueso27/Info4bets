@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+dist-web/
+
+# Claves de firma (nunca en git)
+android/keystore.properties
+*.jks
+*.keystore

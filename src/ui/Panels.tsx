@@ -1,0 +1,184 @@
+import { achievementsFor } from '../core/achievements';
+import { Letters } from './AnimText';
+import { actionsFor, actionStatus, CAR_COST, todayNews } from '../core/game';
+import { COMPANIES } from '../core/market';
+import { ROLES } from '../core/roles';
+import type { GameState } from '../core/types';
+import { UPGRADES } from '../core/upgrades';
+import { addDays, startOfDay } from '../core/time';
+import { StatsView } from './Extras';
+
+export function Modal({ title, onClose, children, kicker }: { title: string; onClose: () => void; children: any; kicker?: string }) {
+  return (
+    <div class="modal-wrap" onClick={onClose}>
+      <div class="modal" onClick={(e) => e.stopPropagation()}>
+        {kicker && <div class="kicker">{kicker}</div>}
+        <h3><Letters text={title} /></h3>
+        {children}
+        <button class="btn secondary" style={{ marginTop: 12 }} onClick={onClose}>
+          Cerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function AgendaModal({ state, now, onPick, onClose }: { state: GameState; now: number; onPick: (id: string) => void; onClose: () => void }) {
+  const actions = actionsFor(state);
+  return (
+    <Modal title="Agenda" kicker="DECISIONES PERSONALES" onClose={onClose}>
+      <div class="stack">
+        {actions.map((a) => {
+          const st = actionStatus(state, a, now);
+          return (
+            <div key={a.id} class="card">
+              <b>{a.title}</b>
+              <div class="card-text">{a.summary}</div>
+              <button class="btn small" disabled={!st.ok} onClick={() => onPick(a.id)}>
+                {st.ok ? 'Decidir' : st.reason}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+export function UpgradeModal({ state, onBuy, onBuyCar, onClose }: { state: GameState; onBuy: () => void; onBuyCar: () => void; onClose: () => void }) {
+  const role = ROLES[state.character.role];
+  const up = UPGRADES[state.character.role];
+  const money = state.bars.dinero ?? 0;
+  const next = up.levels[state.upgradeLevel];
+  return (
+    <Modal title={`${up.icon} ${up.title}`} kicker="MEJORA PERMANENTE" onClose={onClose}>
+      <div class="stack">
+        {up.levels.map((l) => {
+          const owned = state.upgradeLevel >= l.level;
+          const isNext = next && next.level === l.level;
+          const progress = Math.max(0, Math.min(1, money / l.cost));
+          return (
+            <div key={l.level} class={`card ${owned ? 'owned' : ''}`}>
+              <b>
+                Nivel {l.level} · {l.name} {owned && '✔'}
+              </b>
+              <div class="card-text">{l.description}</div>
+              <div class="card-text muted">Precio: {role.formatMoney(l.cost)}</div>
+              {isNext && (
+                <>
+                  <div class="progress small">
+                    <div style={{ width: `${progress * 100}%` }} />
+                  </div>
+                  <button class="btn small good" disabled={money < l.cost} onClick={onBuy}>
+                    {money >= l.cost ? 'Comprar' : `Faltan ${role.formatMoney(l.cost - money)}`}
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
+        {state.character.role === 'inmigrante' && (
+          <div class={`card ${state.flags.auto ? 'owned' : ''}`}>
+            <b>🚗 Auto usado {state.flags.auto && '✔'}</b>
+            <div class="card-text">Un sedán del 79. El reparto de paquetes pasa de 4 a 2 horas.</div>
+            <div class="card-text muted">Precio: {role.formatMoney(CAR_COST)}</div>
+            {!state.flags.auto && (
+              <>
+                <div class="progress small">
+                  <div style={{ width: `${Math.min(1, money / CAR_COST) * 100}%` }} />
+                </div>
+                <button class="btn small good" disabled={money < CAR_COST} onClick={onBuyCar}>
+                  {money >= CAR_COST ? 'Comprar' : `Faltan ${role.formatMoney(CAR_COST - money)}`}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        <div class="card-text muted">
+          {state.character.role === 'inmigrante'
+            ? 'Cada nivel de la casa sube tu salud al comprarlo y te hace recuperar más salud cada noche.'
+            : 'Cada nivel del ayudante sube el control de la ciudad cada día y reduce el estrés de tus jornadas.'}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+export function AchievementsModal({ state, onClose }: { state: GameState; onClose: () => void }) {
+  const list = achievementsFor(state.character.role);
+  const done = list.filter((a) => state.achievements[a.id]).length;
+  return (
+    <Modal title={`Objetivos ${done}/${list.length}`} kicker="LOGROS" onClose={onClose}>
+      <ul class="ach-list">
+        {list.map((a, i) => {
+          const ok = !!state.achievements[a.id];
+          return (
+            <li key={a.id} class={`${ok ? 'ok' : ''} ${a.final ? 'final' : ''}`}>
+              <span class="ach-n">{ok ? '🏆' : i + 1}</span>
+              <span>
+                <b>{a.title}</b>
+                {a.description}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Modal>
+  );
+}
+
+export function NewsModal({ state, onClose }: { state: GameState; onClose: () => void }) {
+  const news = todayNews(state);
+  const name = (t: string) => COMPANIES.find((c) => c.ticker === t)?.name ?? t;
+  return (
+    <div class="modal-wrap">
+      <div class="newspaper">
+        <div class="paper-head">THE DAILY LEDGER</div>
+        <div class="paper-sub">Edición financiera · {new Date(startOfDay(state.today.date)).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        {news.map((n) => (
+          <div key={n.ticker} class="paper-item">
+            <b>{n.headline}</b>
+            <span>
+              {name(n.ticker)} ({n.ticker}) · los analistas esperan que {n.hint === 'up' ? 'SUBA ▲' : 'BAJE ▼'}
+            </span>
+          </div>
+        ))}
+        {(state.carLab?.press ?? []).filter((x) => x.date === state.today.date || x.date === addDays(state.today.date, -1)).map((x) => (
+          <div key={x.title} class="paper-item tech">
+            <small>MOTOR</small>
+            <b>{x.title}</b>
+            <span>{x.text}</span>
+          </div>
+        ))}
+        {(state.phoneLab?.press ?? []).filter((x) => x.date === state.today.date || x.date === addDays(state.today.date, -1)).map((x) => (
+          <div key={x.title} class="paper-item tech">
+            <small>TECNOLOGÍA</small>
+            <b>{x.title}</b>
+            <span>{x.text}</span>
+          </div>
+        ))}
+        <div class="paper-foot">Las noticias no siempre aciertan. Puedes apostar en la bolsa durante tu jornada.</div>
+        <button class="btn" onClick={onClose}>
+          Doblar el periódico
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function EndingModal({ state, onClose }: { state: GameState; onClose: () => void }) {
+  const e = state.ending!;
+  return (
+    <div class="modal-wrap">
+      <div class="modal ending">
+        <div class="kicker">OBJETIVO FINAL CUMPLIDO · DÍA {e.day}</div>
+        <h3><Letters text={e.title} /></h3>
+        <p>{e.text}</p>
+        <StatsView state={state} now={e.at} />
+        <button class="btn good" onClick={onClose}>
+          Seguir viviendo en la ciudad
+        </button>
+      </div>
+    </div>
+  );
+}

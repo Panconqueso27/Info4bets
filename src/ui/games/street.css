@@ -1,0 +1,75 @@
+/* Puesto de perritos: el carrito de acero visto desde dentro */
+.mg-hotdogs .hotdog-stand {
+  padding: 22px 14px 70px;
+  background:
+    /* tapa de acero del carrito con reflejos */
+    linear-gradient(180deg, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0) 16px),
+    linear-gradient(100deg, rgba(255, 255, 255, 0) 0 30%, rgba(255, 255, 255, 0.22) 38%, rgba(255, 255, 255, 0) 46%),
+    repeating-linear-gradient(90deg, #b9bdc4 0 3px, #a9aeb6 3px 7px);
+}
+/* la plancha de las salchichas y el baño de agua caliente */
+.mg-hotdogs .hotdog-stand::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  height: 46px;
+  border: 3px solid #4a4e54;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 26px, rgba(0, 0, 0, 0) 26px),
+    radial-gradient(ellipse at 12% 50%, #c8452e 0 9%, transparent 10%),
+    radial-gradient(ellipse at 30% 50%, #b8402a 0 9%, transparent 10%),
+    radial-gradient(ellipse at 48% 50%, #c8452e 0 9%, transparent 10%),
+    radial-gradient(ellipse at 66% 50%, #b8402a 0 9%, transparent 10%),
+    radial-gradient(ellipse at 84% 50%, #c8452e 0 9%, transparent 10%),
+    linear-gradient(180deg, #5a6a7a, #3a4a5a);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.25);
+}
+.mg-hotdogs .hotdog-stand::after {
+  content: '';
+  position: absolute;
+  left: 20%;
+  right: 20%;
+  bottom: 54px;
+  height: 30px;
+  background:
+    radial-gradient(ellipse at 30% 80%, rgba(255, 255, 255, 0.45), transparent 60%),
+    radial-gradient(ellipse at 70% 60%, rgba(255, 255, 255, 0.3), transparent 60%);
+  filter: blur(3px);
+  animation: cart-steam 1.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes cart-steam {
+  from {
+    transform: translateY(8px);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateY(-18px) scaleX(1.3);
+    opacity: 0;
+  }
+}
+.mg-hotdogs .umbrella-top {
+  display: none;
+}
+.mg-hotdogs .hotdog {
+  padding: 8px;
+  border-radius: 6px;
+  background: repeating-linear-gradient(45deg, #f4efe2 0 6px, #e8e0cc 6px 12px);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+  animation: dog-bob 2s ease-in-out infinite;
+}
+@keyframes dog-bob {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+.mg-hotdogs .ticket {
+  transform: rotate(2deg);
+}
+.lowfx .mg-hotdogs .hotdog,
+.lowfx .mg-hotdogs .hotdog-stand::after {
+  animation: none;
+}

@@ -1,0 +1,180 @@
+/* Minijuegos del diner: plancha con fuego, barra de café, suelo con brillo */
+
+/* --- plancha */
+.mg-burgers .grill {
+  position: relative;
+  padding: 26px 16px 16px;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0) 30px),
+    repeating-linear-gradient(90deg, #3a3a42 0 9px, #2c2c33 9px 11px),
+    #2c2c33;
+  box-shadow: inset 0 0 0 6px #6b6e76, inset 0 0 0 9px #1a1a20;
+}
+.grill-hood {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 14px;
+  background: repeating-linear-gradient(90deg, #9aa0a8 0 3px, #7a8088 3px 6px);
+  box-shadow: 0 3px 0 #14101f;
+}
+.mg-burgers .grill-slot {
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.45) 0 3px, transparent 3px 11px),
+    radial-gradient(circle at 50% 70%, #5a4a48, #26262c 75%);
+  box-shadow:
+    inset 0 0 22px rgba(255, 110, 30, 0.45),
+    0 4px 0 #000;
+}
+.flames {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 0;
+  height: 13%;
+  background:
+    radial-gradient(ellipse at 15% 100%, #ffcc33 0 20%, transparent 55%),
+    radial-gradient(ellipse at 40% 100%, #ff7a2a 0 25%, transparent 60%),
+    radial-gradient(ellipse at 65% 100%, #ffcc33 0 18%, transparent 55%),
+    radial-gradient(ellipse at 88% 100%, #ff5a2a 0 22%, transparent 58%);
+  filter: blur(1px);
+  opacity: 0.5;
+  animation: flames 0.35s steps(2) infinite alternate;
+  pointer-events: none;
+}
+@keyframes flames {
+  to {
+    transform: scaleY(1.25) translateX(3px);
+    opacity: 0.9;
+  }
+}
+.patty.marked {
+  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.45) 0 3px, transparent 3px 10px) !important;
+}
+.mg-burgers .patty {
+  animation: patty-wobble 0.9s ease-in-out infinite;
+}
+@keyframes patty-wobble {
+  50% {
+    transform: scale(1.03, 0.97);
+  }
+}
+.mg-burgers .grill-slot.ok .grill-msg,
+.mg-burgers .grill-slot.bad .grill-msg {
+  animation: flip-msg 0.35s ease-out;
+}
+@keyframes flip-msg {
+  from {
+    transform: rotateX(180deg) scale(1.4);
+  }
+}
+.sizzle {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 240, 200, 0.6) 1px, transparent 2px) 0 0 / 9px 9px;
+  opacity: 0.35;
+  animation: sizzle 0.25s steps(2) infinite;
+}
+@keyframes sizzle {
+  to {
+    background-position: 4px 3px;
+    opacity: 0.6;
+  }
+}
+.smoke.dark {
+  background: radial-gradient(circle, rgba(40, 40, 46, 0.85), transparent 70%);
+  left: 10%;
+  animation-duration: 0.8s;
+}
+
+/* --- pedidos */
+.mg-orders .orders {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0) 16px),
+    repeating-linear-gradient(90deg, #8a5a32 0 22px, #7a4e2a 22px 24px);
+}
+.mg-orders .ticket {
+  transform: rotate(-2deg);
+  background:
+    repeating-linear-gradient(180deg, transparent 0 17px, rgba(80, 120, 200, 0.18) 17px 18px),
+    #f8f4e8;
+  border-top: 6px dashed #c0392b;
+  font-family: var(--body);
+}
+.mg-orders .plate-stack .bun.top {
+  background:
+    radial-gradient(circle, #fff6d8 1.2px, transparent 1.8px) 0 0 / 11px 7px,
+    linear-gradient(180deg, #f0b450, #d98a28);
+}
+.mg-orders .plate-stack {
+  filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.3));
+}
+
+/* --- café */
+.mg-coffee .coffee-area {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0) 14px),
+    linear-gradient(180deg, #2a1a10 0 62%, #c0392b 62% 64%, #d8dce2 64% 66%, #6a4628 66%);
+}
+.mg-coffee .pot-body {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35) 0 12%, transparent 12%), linear-gradient(180deg, #aeb2ba 0 22%, #2a1a10 22%);
+}
+.cup-steam {
+  position: absolute;
+  left: 30%;
+  top: -34px;
+  width: 40%;
+  height: 34px;
+  background:
+    radial-gradient(ellipse at 30% 80%, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(ellipse at 70% 40%, rgba(255, 255, 255, 0.35), transparent 60%);
+  filter: blur(2px);
+  animation: steam-up 1.4s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes steam-up {
+  from {
+    transform: translateY(10px) scaleX(0.8);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateY(-14px) scaleX(1.3);
+    opacity: 0;
+  }
+}
+
+/* --- fregona */
+.counter.short {
+  height: 132px;
+}
+.mg-mop .floor {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0) 22px),
+    repeating-conic-gradient(#ece6d6 0 25%, #2a2a33 0 50%) 0 0 / 44px 44px;
+}
+.floor-shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.16) 45%, transparent 60%);
+  animation: floor-shine 5s linear infinite;
+  pointer-events: none;
+}
+@keyframes floor-shine {
+  from {
+    transform: translateX(-60%);
+  }
+  to {
+    transform: translateX(60%);
+  }
+}
+
+.lowfx .flames,
+.lowfx .sizzle,
+.lowfx .floor-shine,
+.lowfx .cup-steam,
+.lowfx .mg-burgers .patty {
+  animation: none;
+}
