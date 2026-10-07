@@ -159,6 +159,8 @@ export interface GameState {
   vending?: { count: number; broken: number };
   /** Taller de móviles del inmigrante. */
   phoneLab?: import('./phonecore').PhoneLab;
+  /** Fábrica de coches del alcalde. */
+  carLab?: import('./carcore').CarLab;
   /** Personajes recurrentes: afinidad y recuerdos. */
   npcs?: Record<string, { afinidad: number; recuerdos: string[] }>;
   /** El otro protagonista que vive en la misma ciudad (de una partida anterior o por defecto). */

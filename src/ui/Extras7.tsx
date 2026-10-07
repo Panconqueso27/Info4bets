@@ -30,13 +30,14 @@ import {
 import { actionsFor, actionStatus, canStartErrand, canTakeRadioJob, dayNumber, ERRAND_PAY, errandHours, todayJobs, weekOf } from '../core/game';
 import { ROLES } from '../core/roles';
 import { canWorkshop } from '../core/phones';
+import { canFactory } from '../core/cars';
 import { formatDuration } from '../core/time';
 import type { GameState } from '../core/types';
 import { play } from '../platform/audio';
 import { exportCode, importCode } from '../platform/save';
 import { canEnterContest, CONTEST_BY_ID, CONTESTS, contestDays, contestFee, contestOpen, contestPrizes, contestRivals, type ContestResult } from '../core/contests';
 
-export type ExtraPanel = 'rastro' | 'carreras' | 'beisbol' | 'loteria' | 'bonos' | 'concursos' | 'casino' | 'taller';
+export type ExtraPanel = 'rastro' | 'carreras' | 'beisbol' | 'loteria' | 'bonos' | 'concursos' | 'casino' | 'taller' | 'fabrica';
 
 export interface ExtrasActions {
   onRadio: (id: string) => void;
@@ -131,6 +132,7 @@ export function ExtrasModal({ state, now, onClose, ...a }: { state: GameState; n
               const st = actionStatus(state, d, now);
               return <Activity key={d.id} icon={d.id === 'cena-recaudacion' ? 'estrella' : 'megafono'} title={d.title} text={d.summary ?? ''} status={st.ok ? null : st.reason ?? 'No disponible'} cta="Decidir" onClick={() => a.onAction(d.id)} />;
             })}
+            <Activity icon="estrella" title="Pixelopolis Motors" text={`Fábrica de coches: diseña, prueba y lanza · ${(state.carLab?.models ?? []).filter((m) => !m.retired).length} a la venta`} status={canFactory(state, now)} cta="Ir a la fábrica" onClick={() => a.onOpen('fabrica')} />
             <Activity icon="carta" title="Bonos municipales" text={`Invierte a 3 o 7 días con interés (máx. ${MAX_BONDS})`} status={(state.bonds ?? []).length >= MAX_BONDS ? 'Máximo de bonos' : null} cta="Invertir" onClick={() => a.onOpen('bonos')} />
             <Activity icon="cartel" title="Subasta de solares" text="Vende un solar libre a una empresa: dinero rápido" status={null} cta="Ver solares" onClick={a.onAuction} />
           </>

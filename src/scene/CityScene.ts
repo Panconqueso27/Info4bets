@@ -58,6 +58,7 @@ import { bridge, type SceneModel, type Spot } from './bridge';
 import { drawPet, drawVending, upscaleOutline } from '../art/sprites';
 import { aircraftSound, babble, crashSound, sirenSound, thunder } from '../platform/audio';
 import { citizenLine } from '../core/citizens';
+import { CAR_COLOR_BY_ID } from '../core/carcore';
 import { drawIcon } from '../art/icons';
 import { MEGA } from '../core/lots';
 import { gfxLevel, gfxProfile, lowFx, onGfxChange, setGfxLevel, showFps, type GfxLevel, type GfxProfile } from '../platform/graphics';
@@ -127,6 +128,8 @@ interface Car {
   temp?: boolean;
   /** Velocidad actual: acelera y frena poco a poco. */
   v?: number;
+  /** Coche de la marca del alcalde (color). */
+  brand?: string;
   /** Luces que van con el coche (sirenas). */
   extras?: Phaser.GameObjects.Image[];
 }
@@ -827,6 +830,26 @@ export class CityScene extends Phaser.Scene {
     }
   }
 
+  /** Los coches de Pixelopolis Motors que triunfan salen a la calle. */
+  private brandKey = '';
+  private syncBrandCars(m: SceneModel) {
+    const key = JSON.stringify(m.brandCars ?? []);
+    if (key === this.brandKey) return;
+    this.brandKey = key;
+    for (let i = this.cars.length - 1; i >= 0; i--) {
+      const c = this.cars[i];
+      if (!c.brand || c.crashUntil || c.stopAt !== undefined) continue;
+      c.img.destroy();
+      c.light.destroy();
+      this.cars.splice(i, 1);
+    }
+    for (const b of m.brandCars ?? []) {
+      const hex = CAR_COLOR_BY_ID[b.color]?.hex;
+      if (hex) this.spawnTraffic(b.n, 900 + this.cars.length, hex);
+    }
+    this.lastLightAt = 0;
+  }
+
   /** Iconos flotantes sobre tus negocios, las obras y las actividades. */
   private syncMarkers(m: SceneModel) {
     const key = JSON.stringify(m.markers) + this.mapSig.length;
@@ -916,12 +939,22 @@ export class CityScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- tráfico y peatones
 
-  private spawnTraffic(n: number, seed: number) {
+  private spawnTraffic(n: number, seed: number, brand?: string) {
     const rand = mulberry32(seed);
+    // coches de la marca del alcalde: su textura con el color del modelo
+    if (brand)
+      for (const axis of ['x', 'y'] as const) {
+        const key = `car-${axis}-b${brand}`;
+        if (this.textures.exists(key)) continue;
+        const t = isoCarTexture(brand, axis, false);
+        this.textures.addCanvas(key, t.canvas);
+        this.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
+        this.textures.get(key).customData = { anchor: { x: t.ox / t.canvas.width, y: t.oy / t.canvas.height } };
+      }
     const aveCross = Array.from({ length: AVES }, (_, i) => aveX(i));
     const stCross = Array.from({ length: ROWS + 1 }, (_, j) => stY(j));
     for (let k = 0; k < n; k++) {
-      const police = rand() < 0.07;
+      const police = !brand && rand() < 0.07;
       // Nueva York: la mitad de los coches son taxis amarillos
       const ci = rand() < 0.5 ? 0 : Math.floor(rand() * CAR_COLORS.length);
       const axis: 'v' | 'h' = k % 2 === 0 ? 'v' : 'h';
@@ -958,12 +991,12 @@ export class CityScene extends Phaser.Scene {
         pos = x0 + rand() * (x1 - x0);
         lane = `h${j}${sd === 0 ? dir : laneSide}${j === BRIDGE_STREET ? 'p' : side[0]}`;
       }
-      const img = this.anchored(0, 0, `car-${axis === 'v' ? 'y' : 'x'}-${police ? 'p' : ci}`);
+      const img = this.anchored(0, 0, `car-${axis === 'v' ? 'y' : 'x'}-${brand ? `b${brand}` : police ? 'p' : ci}`);
       const light = this.add.image(0, 0, 'headlight').setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setScale(0.55, 0.4);
       this.world.add([img, light]);
       img.setTint(this.ambient);
       light.setAlpha(Math.max(0, (this.light.night - 0.1) / 0.9) * 0.7);
-      this.cars.push({ img, light, axis, dir, lane, speed, len: 10, pos, off, min, max, cross, v: speed });
+      this.cars.push({ img, light, axis, dir, lane, speed, len: 10, pos, off, min, max, cross, v: speed, brand });
     }
     // separar coches que hayan nacido encima de otros
     for (const c of this.cars)
@@ -1495,6 +1528,7 @@ export class CityScene extends Phaser.Scene {
     this.buildMap(m);
     this.syncExtras(m);
     this.syncMarkers(m);
+    this.syncBrandCars(m);
     if (m.cheer !== this.cheerSeen) {
       if (this.cheerSeen && this.player?.visible && !this.walkTween) this.tweens.add({ targets: this.pw, z: 4, duration: 120, yoyo: true, repeat: 1, ease: 'Quad.easeOut' });
       this.cheerSeen = m.cheer;

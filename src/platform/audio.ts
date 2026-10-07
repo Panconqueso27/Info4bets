@@ -442,6 +442,20 @@ export interface Ambience {
 }
 
 let amb: Ambience = { weather: 'despejado', hour: 12, place: 'casa', works: false, pet: null, crowd: false, fiesta: null };
+
+/**
+ * Interior en el que está el jugador (minijuego, casino, fábrica…): cada
+ * uno tiene su propio sonido de fondo y apaga los ruidos de la calle.
+ */
+export type Interior = 'casino' | 'fabrica' | 'taller' | 'diner' | 'cocina' | 'despacho' | 'prensa' | 'calle' | 'arcade' | 'feria' | 'hipodromo' | 'mitin';
+let interior: Interior | null = null;
+let interiorStep = 0;
+export function setInterior(i: Interior | null) {
+  if (i === interior) return;
+  interior = i;
+  interiorStep = 0;
+  updateBeds();
+}
 let ambTimer: number | null = null;
 /** Capas continuas (lluvia, viento, ciudad, murmullo): ruido filtrado en bucle. */
 const beds: Record<string, { gain: GainNode; filter?: BiquadFilterNode }> = {};
@@ -485,6 +499,10 @@ function startAmbience() {
   bed('viento', 'bandpass', 420, 0.9, { rate: 0.13, depth: 260 });
   bed('ciudad', 'lowpass', 260, 0.5);
   bed('murmullo', 'bandpass', 650, 1.4, { rate: 0.4, depth: 120 });
+  // capas de los interiores: zumbido de máquinas, agua corriendo y sala llena
+  bed('zumbido', 'lowpass', 110, 0.8, { rate: 0.7, depth: 20 });
+  bed('agua', 'highpass', 2600, 0.5, { rate: 0.9, depth: 400 });
+  bed('sala', 'bandpass', 900, 0.9, { rate: 0.25, depth: 300 });
   updateBeds();
   ambTimer = window.setInterval(ambientTick, 250);
 }
@@ -501,6 +519,117 @@ function updateBeds() {
   set('viento', (w === 'nieve' ? 0.32 : w === 'tormenta' ? 0.18 : w === 'nublado' ? 0.07 : 0.02) * muffle);
   set('ciudad', indoor ? 0.04 : day ? 0.16 : 0.07);
   set('murmullo', indoor ? (amb.place === 'diner' ? 0.11 : 0.05) : amb.crowd ? 0.08 : 0);
+  // Dentro de un interior: la calle se apaga y suena el sitio
+  const i = interior;
+  const inside = i && i !== 'calle' && i !== 'mitin' && i !== 'hipodromo' && i !== 'feria';
+  if (inside) {
+    set('lluvia', (w === 'tormenta' ? 0.08 : w === 'lluvia' ? 0.05 : 0) * (i === 'fabrica' ? 1.5 : 1));
+    set('lluviaAlta', 0);
+    set('viento', 0);
+    set('ciudad', 0.015);
+    set('murmullo', 0);
+  }
+  const bedFor: Record<string, [number, number, number]> = {
+    // zumbido, agua, sala
+    casino: [0.03, 0, 0.16],
+    fabrica: [0.34, 0, 0.05],
+    taller: [0.05, 0, 0],
+    diner: [0.03, 0.02, 0.1],
+    cocina: [0.1, 0.14, 0.02],
+    despacho: [0.04, 0, 0.02],
+    prensa: [0.02, 0, 0.12],
+    calle: [0, 0, 0.04],
+    arcade: [0.06, 0, 0.08],
+    feria: [0, 0, 0.18],
+    hipodromo: [0, 0, 0.2],
+    mitin: [0, 0, 0.2],
+  };
+  const [z, a, sl] = i ? bedFor[i] : [0, 0, 0];
+  set('zumbido', z);
+  set('agua', a);
+  set('sala', sl);
+}
+
+/** Sonidos sueltos de cada interior (cada 250 ms). */
+function interiorTick(i: Interior, t: number, out: AudioNode) {
+  const k = interiorStep++;
+  switch (i) {
+    case 'casino':
+      // tragaperras, fichas, la bola de la ruleta y algún grito de alegría
+      if (chance(0.25)) [0, 4, 7, 12].forEach((s2, j) => tone(N(s2 + 12 + Math.floor(Math.random() * 5)), t + j * 0.07, 0.09, 'square', 0.012, undefined, out));
+      if (chance(0.5)) for (let j = 0; j < 2 + Math.random() * 3; j++) tone(3000 + Math.random() * 900, t + j * 0.04, 0.03, 'triangle', 0.02, undefined, out);
+      if (chance(0.06)) for (let j = 0; j < 12; j++) tone(2200, t + j * (0.05 + j * 0.01), 0.02, 'square', 0.01, undefined, out);
+      if (chance(0.02)) noise(t, 1.1, 0.07, 900, 0.5, out);
+      if (k % 16 === 0) tone(N(-24 + [0, 5, 7, 3][(k / 16) % 4]), t, 0.9, 'triangle', 0.03, undefined, out); // bajo del salón
+      break;
+    case 'fabrica':
+      // prensa hidráulica, cadena de montaje, soldadura, compresor y carretilla
+      if (k % 8 === 0) {
+        tone(70, t, 0.25, 'sine', 0.16, 38, out);
+        noise(t, 0.12, 0.12, 320, 0.8, out);
+      }
+      if (k % 2 === 0) noise(t, 0.04, 0.025, 1400, 2, out);
+      if (chance(0.5)) {
+        noise(t, 0.05, 0.05, 1800 + Math.random() * 1500, 3, out);
+        tone(500 + Math.random() * 400, t, 0.06, 'triangle', 0.015, undefined, out);
+      }
+      if (chance(0.25)) noise(t, 0.3 + Math.random() * 0.5, 0.05, 6500, 1.2, out);
+      if (chance(0.04)) noise(t, 0.9, 0.06, 2600, 0.6, out);
+      if (chance(0.03)) for (let j = 0; j < 3; j++) tone(1800, t + j * 0.5, 0.25, 'square', 0.015, undefined, out);
+      break;
+    case 'taller':
+      // reloj, soldador, destornillador y la radio bajita
+      if (k % 4 === 0) tone(k % 8 === 0 ? 2400 : 2000, t, 0.02, 'square', 0.012, undefined, out);
+      if (chance(0.06)) noise(t, 0.5, 0.03, 7000, 1, out);
+      if (chance(0.05)) for (let j = 0; j < 4; j++) noise(t + j * 0.08, 0.05, 0.02, 3500, 4, out);
+      if (k % 2 === 0) {
+        const melody = [0, 4, 7, 4, 5, 9, 7, 4, 2, 5, 9, 5, 4, 7, 12, 7];
+        tone(N(melody[(k / 2) % melody.length]), t, 0.4, 'sine', 0.012, undefined, out);
+      }
+      break;
+    case 'diner':
+      if (chance(0.35)) tone(2600 + Math.random() * 900, t, 0.12, 'triangle', 0.025, undefined, out);
+      if (chance(0.03)) [1568, 2093].forEach((f, j) => tone(f, t + j * 0.09, 0.4, 'sine', 0.03, undefined, out));
+      if (chance(0.15)) noise(t, 0.6, 0.03, 6000, 0.6, out); // la plancha
+      if (chance(0.015)) tone(2349, t, 0.8, 'sine', 0.04, undefined, out); // campanilla de la cocina
+      break;
+    case 'cocina':
+      if (chance(0.4)) tone(2200 + Math.random() * 1600, t, 0.1, 'triangle', 0.025, undefined, out);
+      if (chance(0.06)) noise(t, 0.5, 0.05, 5500, 0.6, out);
+      if (chance(0.03)) for (let j = 0; j < 3; j++) tone(900 + j * 150, t + j * 0.05, 0.08, 'square', 0.015, undefined, out);
+      break;
+    case 'despacho':
+      if (chance(0.12)) for (let j = 0; j < 4 + Math.random() * 6; j++) noise(t + j * 0.09, 0.03, 0.06, 3000, 2, out);
+      if (chance(0.015)) for (let j = 0; j < 2; j++) for (let m = 0; m < 8; m++) tone(m % 2 ? 1100 : 900, t + j * 0.6 + m * 0.04, 0.04, 'square', 0.012, undefined, out);
+      if (chance(0.08)) noise(t, 0.15, 0.03, 4500, 1.5, out);
+      if (k % 4 === 0) tone(1800, t, 0.02, 'square', 0.008, undefined, out);
+      break;
+    case 'prensa':
+      if (chance(0.4)) {
+        noise(t, 0.03, 0.06, 5000, 2, out);
+        noise(t + 0.05, 0.03, 0.05, 4000, 2, out);
+      }
+      if (chance(0.05)) tone(1500, t, 0.25, 'sine', 0.02, 3000, out); // flash cargando
+      break;
+    case 'calle':
+    case 'mitin':
+      if (chance(0.08)) horn(t, out);
+      if (chance(0.1)) noise(t, 0.9, 0.04, 400, 0.5, out);
+      if (i === 'mitin' && chance(0.05)) noise(t, 1.2, 0.08, 1000, 0.5, out);
+      break;
+    case 'arcade':
+      if (chance(0.6)) tone(400 + Math.random() * 1400, t, 0.06, 'square', 0.012, undefined, out);
+      if (chance(0.05)) [988, 1319].forEach((f, j) => tone(f, t + j * 0.07, 0.12, 'square', 0.02, undefined, out));
+      break;
+    case 'feria':
+      if (k % 3 === 0) tone(N([0, 4, 7, 12, 7, 4][(k / 3) % 6]), t, 0.3, 'triangle', 0.02, undefined, out); // organillo
+      if (chance(0.05)) noise(t, 1, 0.07, 900, 0.5, out);
+      break;
+    case 'hipodromo':
+      if (chance(0.06)) noise(t, 1.4, 0.08, 800, 0.5, out);
+      if (chance(0.1)) for (let j = 0; j < 4; j++) noise(t + j * 0.09, 0.05, 0.04, 260, 1.2, out);
+      break;
+  }
 }
 
 const chance = (perSecond: number) => Math.random() < perSecond / 4;
@@ -514,6 +643,10 @@ function ambientTick() {
   const wet = w === 'lluvia' || w === 'tormenta';
   const out = ambBus;
   const indoor = amb.place === 'diner' || amb.place === 'alcaldia';
+  if (interior) {
+    interiorTick(interior, t, out);
+    return;
+  }
   // Pájaros al amanecer (y algo por la mañana), si no llueve ni nieva
   if (!wet && w !== 'nieve' && !indoor && h >= 5 && h < 10 && chance(h < 8 ? 0.7 : 0.2)) bird(t, out);
   // Grillos de noche en verano, si no llueve

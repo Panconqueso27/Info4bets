@@ -14,6 +14,7 @@ import type { BarId, Bars, Character, GameState, LogEntry, LogKind, OtherCharact
 import { ACHIEVEMENT_UNLOCKS, COSMETIC_BY_ID, STREAK_REWARDS } from './cosmetics';
 import { NPC_EFFECTS, NPCS, rememberNpc } from './npcs';
 import { modelIncome } from './phonecore';
+import { carIncome } from './carcore';
 
 const LOG_LIMIT = 120;
 /** Si el jugador vuelve tras mucho tiempo, no simulamos más de un año de días perdidos. */
@@ -1322,11 +1323,23 @@ function passiveIncome(state: GameState, date: string, day: number, entry: (kind
   } else {
     const t = tourismFor(state, date);
     const civic = civicIncome(state);
-    const total = t.income + civic;
+    // coches de Pixelopolis Motors a la venta
+    let cars = 0;
+    const carParts: string[] = [];
+    for (const m of state.carLab?.models ?? []) {
+      if (m.retired) continue;
+      const inc = carIncome(m, day);
+      if (inc > 0) {
+        cars += inc;
+        m.earned += inc;
+        carParts.push(`${m.name} ${fmt(inc)}`);
+      } else if (day - m.launchedDay > 2) m.retired = true;
+    }
+    const total = t.income + civic + cars;
     if (!total) return;
     state.flags.turistasAyer = t.tourists;
     addStat(state, 'pasivos', total);
-    entry('bueno', 'Turismo e ingresos', `Día ${day}: ${t.tourists.toLocaleString('es')} turistas dejaron ${fmt(t.income)}${civic ? ` · obras públicas ${fmt(civic)}` : ''}.`, withCat('negocios', () => applyBars(state, { dinero: total })));
+    entry('bueno', 'Turismo e ingresos', `Día ${day}: ${t.tourists.toLocaleString('es')} turistas dejaron ${fmt(t.income)}${civic ? ` · obras públicas ${fmt(civic)}` : ''}${carParts.length ? ` · coches: ${carParts.join(', ')}` : ''}.`, withCat('negocios', () => applyBars(state, { dinero: total })));
   }
 }
 

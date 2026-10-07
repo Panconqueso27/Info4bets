@@ -30,6 +30,8 @@ export interface SceneModel {
   dest: string | null;
   /** Ánimo de los vecinos: 0 la ciudad va fatal, 1 de maravilla (lo que dicen al tocarlos). */
   mood: number;
+  /** Coches de la marca del alcalde que circulan por la ciudad (color y cuántos). */
+  brandCars: { color: string; n: number }[];
   now: () => number;
 }
 
@@ -55,7 +57,7 @@ export type TapTarget = PlaceId | `lot:${string}` | `block:${number},${number}` 
 
 type Listener = (m: SceneModel) => void;
 
-let model: SceneModel = { role: null, look: null, spot: 'home', vehicle: 'pie', weather: 'despejado', other: null, city: null, citySig: '', pet: null, vending: 0, markers: [], cheer: 0, dest: null, mood: 0.5, now: () => Date.now() };
+let model: SceneModel = { role: null, look: null, spot: 'home', vehicle: 'pie', weather: 'despejado', other: null, city: null, citySig: '', pet: null, vending: 0, markers: [], cheer: 0, dest: null, mood: 0.5, brandCars: [], now: () => Date.now() };
 let focusHandler: ((x: number, y: number) => void) | null = null;
 const viewListeners = new Set<(v: ViewInfo) => void>();
 let lastView: ViewInfo | null = null;

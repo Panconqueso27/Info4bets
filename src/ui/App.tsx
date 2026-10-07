@@ -90,6 +90,9 @@ const CONTEST_GAMES: Record<string, (p: MiniProps & { contest: ContestInfo }) =>
 import { Minimap } from './Minimap';
 import { Casino } from './casino/Casino';
 import { Workshop } from './workshop/Workshop';
+import { Factory } from './factory/Factory';
+import { brandCars, buyCarItem, launchCar, saveCarDraft } from '../core/cars';
+import { emptyCarLab } from '../core/carcore';
 import { buyPart, launchPhone, saveDraft } from '../core/phones';
 import { emptyLab } from '../core/phonecore';
 import type { Marker } from '../scene/bridge';
@@ -252,6 +255,30 @@ export function App() {
     });
   });
 
+  // Cada interior (minijuego, casino, taller, fábrica…) tiene su propio sonido.
+  useEffect(() => {
+    const MG: Record<string, audio.Interior> = {
+      dishes: 'cocina',
+      burgers: 'diner',
+      orders: 'diner',
+      coffee: 'diner',
+      mop: 'diner',
+      paperwork: 'despacho',
+      budget: 'despacho',
+      press: 'prensa',
+      traffic: 'calle',
+      handshake: 'mitin',
+      hotdogs: 'calle',
+      'contest:breakdance': 'calle',
+      'contest:perritos': 'feria',
+      'contest:simon': 'arcade',
+      'contest:maraton': 'calle',
+    };
+    const XT: Partial<Record<string, audio.Interior>> = { casino: 'casino', taller: 'taller', fabrica: 'fabrica', carreras: 'hipodromo' };
+    const i = minigame && minigame !== 'menu' ? MG[minigame] ?? null : extra ? XT[extra] ?? null : null;
+    audio.setInterior(screen.id === 'play' ? i : null);
+  }, [minigame, extra, screen.id]);
+
   // Tocar un lugar del mapa: la Bolsa abre la terminal, tu trabajo te lleva a trabajar.
   useEffect(() => {
     bridge.onTap((id) => {
@@ -345,6 +372,7 @@ export function App() {
         other: state.other ?? null,
         weather: ((devEnabled && devWeather()) || todayWeather(state)) as Weather,
         mood: cityMood(state, cityRef.current.look),
+        brandCars: brandCars(state),
       });
     else bridge.set({ role: null, look: null, spot: 'home', weather: 'despejado', other: null, pet: null, vending: 0, markers: [] });
   });
@@ -710,6 +738,20 @@ export function App() {
         onBuy={(id) => ask((s, t) => (buyPart(s, id, t), true)) === true}
         onSave={(d) => ask((s) => saveDraft(s, d))}
         onLaunch={(d, price, mkt, run) => ask((s, t) => launchPhone(s, d, price, t, mkt, run))}
+        onClose={() => setExtra(null)}
+      />
+    );
+  else if (extra === 'fabrica')
+    overlay = (
+      <Factory
+        lab={state.carLab ?? emptyCarLab()}
+        money={state.bars.dinero ?? 0}
+        day={dayNumber(state, now)}
+        seed={state.seed}
+        fmt={ROLES[state.character.role].formatMoney}
+        onBuy={(key) => ask((s, t) => (buyCarItem(s, key, t), true)) === true}
+        onSave={(d) => ask((s) => saveCarDraft(s, d))}
+        onLaunch={(d, price, mkt, run) => ask((s, t) => launchCar(s, d, price, t, mkt, run))}
         onClose={() => setExtra(null)}
       />
     );

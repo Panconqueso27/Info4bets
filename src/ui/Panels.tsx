@@ -143,6 +143,13 @@ export function NewsModal({ state, onClose }: { state: GameState; onClose: () =>
             </span>
           </div>
         ))}
+        {(state.carLab?.press ?? []).filter((x) => x.date === state.today.date || x.date === addDays(state.today.date, -1)).map((x) => (
+          <div key={x.title} class="paper-item tech">
+            <small>MOTOR</small>
+            <b>{x.title}</b>
+            <span>{x.text}</span>
+          </div>
+        ))}
         {(state.phoneLab?.press ?? []).filter((x) => x.date === state.today.date || x.date === addDays(state.today.date, -1)).map((x) => (
           <div key={x.title} class="paper-item tech">
             <small>TECNOLOGÍA</small>

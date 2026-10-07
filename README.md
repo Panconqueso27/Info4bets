@@ -2,7 +2,7 @@
 
 Juego narrativo de supervivencia tipo *life sim* en pixel art. Una ciudad estilo Nueva York de los 80, vivida desde dos papeles opuestos: **el inmigrante** o **el alcalde**.
 
-**Versión actual: 0.15.1**
+**Versión actual: 0.16.0**
 
 ## Probar la beta
 
@@ -21,6 +21,16 @@ npm run android    # build + APK (requiere Android SDK y JDK 21)
 ```
 
 Para iOS hace falta un Mac con Xcode: `npx cap add ios`, luego `npx cap open ios`.
+
+## Novedades 0.16.0
+
+- **Pixelopolis Motors** (alcalde, en Extras): una fábrica de coches con nave industrial animada (cadena de montaje, robots soldando con chispas, grúa, carretilla e ingenieros con casco que van y vienen) y una mesa de planos.
+  - Seis componentes con 5 de serie y 5 de pago: carrocería (de compacto a superdeportivo), motor (de 1.2 a V12 y eléctrico), cambio, ruedas y suspensión, interior y seguridad. Además pintura, hasta tres extras (techo solar, teléfono, faros escamoteables, coche que habla…), posición del motor y tracción.
+  - El plano técnico muestra el motor, la transmisión y los asientos; en «Pintura» se ve el coche terminado. Ficha técnica con caballos, 0-100, velocidad punta, consumo, estrellas de seguridad y emisiones.
+  - Pruebas animadas: circuito, choque contra el muro con el muñeco y banco de emisiones. La ley de emisiones se endurece con el tiempo.
+  - Cada semana hay una tendencia (crisis del petróleo, fiebre yuppie, de la velocidad, baby boom…) que cambia lo que compra la gente.
+  - Al lanzar: precio, campaña y tirada. El periódico explica el resultado con sus causas buenas y malas. Un éxito da popularidad, ingresos diarios y sus coches empiezan a circular por la ciudad con su color.
+- **Sonido propio en cada interior:** casino (tragaperras, fichas, ruleta, bajo del salón), fábrica (prensa, cadena, soldadura, compresor, carretilla), taller de móviles (reloj, soldador, radio), diner, cocina, despacho, sala de prensa, sala recreativa, feria, hipódromo y la calle. Al entrar se apagan los ruidos de fuera.
 
 ## Novedades 0.15.1
 
